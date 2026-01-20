@@ -74,6 +74,22 @@ docker-compose --profile mock up
 # View app at http://localhost:8080
 ```
 
+## Grafana Dashboards
+
+The project ships with a pre-provisioned Grafana dashboard. Below are example views from the example dashboard:
+
+**Job Metrics**
+
+![Job metrics dashboard](docs/grafana_job_metrics.png)
+
+**Node Metrics (overview)**
+
+![Node metrics dashboard overview](docs/grafana_node_metrics_01.png)
+
+**Node Metrics (detail)**
+
+![Node metrics dashboard detail](docs/grafana_node_metrics_02.png)
+
 ## API Endpoints
 
 All endpoints are versioned under `/v1`:
