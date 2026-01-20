@@ -3,7 +3,7 @@
 # Run: go generate ./...
 
 package: server
-output: internal/api/server/server.gen.go
+output: ../internal/api/server/server.gen.go
 generate:
   std-http-server: true
   models: true

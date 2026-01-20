@@ -154,57 +154,50 @@ hpc_job_state_total
 
 ```
 ├── cmd/
-│   ├── server/         # Main application
-│   └── mockserver/     # OpenAPI mock server
+│   ├── server/           # Main application
+│   └── mockserver/       # OpenAPI mock server
+├── config/               # Configuration files
+│   ├── openapi.yaml      # OpenAPI 3.0 specification
+│   ├── prometheus.yml    # Prometheus scrape config
+│   └── oapi-codegen-*.yaml
+├── docs/                 # Documentation
+│   ├── architecture.md   # System design
+│   ├── api-reference.md  # API documentation
+│   └── development.md    # Development guide
 ├── internal/
-│   ├── api/
-│   │   ├── types/      # Generated types from OpenAPI
-│   │   ├── server/     # Generated server interface
-│   │   ├── handler.go  # API handlers implementation
-│   │   └── handler_test.go
-│   ├── storage/        # Database layer (SQLite + PostgreSQL)
-│   ├── collector/      # Background metric collector
-│   └── metrics/        # Prometheus exporter
-├── openapi.yaml        # OpenAPI 3.0 specification
-├── docker-compose.yml  # Docker Compose configuration
-└── Dockerfile          # Multi-stage Docker build
+│   ├── api/              # HTTP handlers and generated code
+│   ├── storage/          # Database layer (SQLite + PostgreSQL)
+│   ├── collector/        # Background metric collector
+│   └── metrics/          # Prometheus exporter
+├── docker-compose.yml
+└── Dockerfile
 ```
 
 ### Generate API Code
 
 ```bash
-# Install oapi-codegen
-go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
-
-# Regenerate types and server stubs
 go generate ./...
 ```
 
 ### Running Tests
 
 ```bash
-# Run all tests
 go test ./...
-
-# Run with verbose output
-go test ./... -v
-
-# Run with coverage
 go test ./... -cover
 ```
 
 ### Mock Server
 
-The mock server returns example responses from the OpenAPI specification:
-
 ```bash
-# Build and run
 go build -o mockserver ./cmd/mockserver
 ./mockserver
-
-# Or with Docker Compose
-docker-compose --profile mock up mockserver
 ```
+
+## Documentation
+
+- [Architecture](docs/architecture.md) - System design and component overview
+- [API Reference](docs/api-reference.md) - Detailed endpoint documentation
+- [Development Guide](docs/development.md) - Setup and contribution guidelines
 
 ## License
 
