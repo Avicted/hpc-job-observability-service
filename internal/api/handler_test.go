@@ -179,7 +179,7 @@ func TestJobsEndpoints(t *testing.T) {
 	// Test List Jobs
 	t.Run("ListJobs", func(t *testing.T) {
 		// Create another job
-		store.CreateJob(context.Background(), &storage.Job{
+		_ = store.CreateJob(context.Background(), &storage.Job{
 			ID:    "api-test-job-002",
 			User:  "anotheruser",
 			Nodes: []string{"node-3"},
@@ -283,7 +283,7 @@ func TestMetricsEndpoints(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a test job first
-	store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(context.Background(), &storage.Job{
 		ID:        "metrics-test-job",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -344,7 +344,7 @@ func TestMetricsEndpoints(t *testing.T) {
 	t.Run("GetJobMetrics", func(t *testing.T) {
 		// Record a few more samples
 		for i := 0; i < 5; i++ {
-			store.RecordMetrics(context.Background(), &storage.MetricSample{
+			_ = store.RecordMetrics(context.Background(), &storage.MetricSample{
 				JobID:         "metrics-test-job",
 				Timestamp:     time.Now().Add(time.Duration(i) * time.Minute),
 				CPUUsage:      70.0 + float64(i),
@@ -532,7 +532,7 @@ func TestUpdateJob_InvalidJSON(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job first
-	store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(context.Background(), &storage.Job{
 		ID:    "update-invalid-json",
 		User:  "testuser",
 		Nodes: []string{"node-1"},
@@ -578,7 +578,7 @@ func TestUpdateJob_InvalidState(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job first
-	store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(context.Background(), &storage.Job{
 		ID:    "update-invalid-state",
 		User:  "testuser",
 		Nodes: []string{"node-1"},
@@ -607,7 +607,7 @@ func TestUpdateJob_AllFields(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job first
-	store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(context.Background(), &storage.Job{
 		ID:        "update-all-fields",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -638,7 +638,7 @@ func TestUpdateJob_AllFields(t *testing.T) {
 	}
 
 	var resp types.Job
-	json.NewDecoder(rec.Body).Decode(&resp)
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
 
 	if *resp.CpuUsage != 90.5 {
 		t.Errorf("Expected CPU usage 90.5, got %f", *resp.CpuUsage)
@@ -675,7 +675,7 @@ func TestListJobs_WithAllFilters(t *testing.T) {
 
 	// Create test jobs
 	for i := 0; i < 5; i++ {
-		store.CreateJob(context.Background(), &storage.Job{
+		_ = store.CreateJob(context.Background(), &storage.Job{
 			ID:    "filter-job-" + string(rune('0'+i)),
 			User:  "alice",
 			Nodes: []string{"node-01"},
@@ -693,7 +693,7 @@ func TestListJobs_WithAllFilters(t *testing.T) {
 	}
 
 	var resp types.JobListResponse
-	json.NewDecoder(rec.Body).Decode(&resp)
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
 
 	if resp.Limit != 3 {
 		t.Errorf("Expected limit 3, got %d", resp.Limit)
@@ -710,7 +710,7 @@ func TestRecordMetrics_InvalidJSON(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job first
-	store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(context.Background(), &storage.Job{
 		ID:        "metrics-invalid-json",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -736,7 +736,7 @@ func TestRecordMetrics_InvalidCPUUsage(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job first
-	store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(context.Background(), &storage.Job{
 		ID:        "metrics-invalid-cpu",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -783,7 +783,7 @@ func TestRecordMetrics_InvalidMemoryUsage(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job first
-	store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(context.Background(), &storage.Job{
 		ID:        "metrics-invalid-mem",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -815,7 +815,7 @@ func TestGetJobMetrics_WithTimeFilters(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job
-	store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(context.Background(), &storage.Job{
 		ID:        "metrics-time-filter",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -825,7 +825,7 @@ func TestGetJobMetrics_WithTimeFilters(t *testing.T) {
 
 	// Record some metrics
 	for i := 0; i < 10; i++ {
-		store.RecordMetrics(context.Background(), &storage.MetricSample{
+		_ = store.RecordMetrics(context.Background(), &storage.MetricSample{
 			JobID:         "metrics-time-filter",
 			Timestamp:     time.Now().Add(time.Duration(i) * time.Minute),
 			CPUUsage:      float64(50 + i),

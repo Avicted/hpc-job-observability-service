@@ -364,7 +364,7 @@ func (e *Exporter) Handler() http.Handler {
 
 	// Collect initial metrics
 	if err := e.Collect(context.Background()); err != nil {
-		// Log but continue
+		_ = err // Log but continue
 	}
 
 	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{

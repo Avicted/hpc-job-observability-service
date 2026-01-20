@@ -128,7 +128,7 @@ func TestSQLiteStorage(t *testing.T) {
 	// Test ListJobs
 	t.Run("ListJobs", func(t *testing.T) {
 		// Create another job
-		store.CreateJob(ctx, &Job{
+		_ = store.CreateJob(ctx, &Job{
 			ID:    "test-job-002",
 			User:  "testuser",
 			Nodes: []string{"node-3"},
@@ -182,7 +182,7 @@ func TestSQLiteStorage(t *testing.T) {
 	t.Run("GetJobMetrics", func(t *testing.T) {
 		// Record a few more samples
 		for i := 0; i < 5; i++ {
-			store.RecordMetrics(ctx, &MetricSample{
+			_ = store.RecordMetrics(ctx, &MetricSample{
 				JobID:         "test-job-002",
 				Timestamp:     time.Now().Add(time.Duration(i) * time.Minute),
 				CPUUsage:      70.0 + float64(i),
@@ -453,7 +453,7 @@ func TestSQLiteStorage_AdditionalFilters(t *testing.T) {
 		if i%2 == 0 {
 			state = JobStateCompleted
 		}
-		store.CreateJob(ctx, &Job{
+		_ = store.CreateJob(ctx, &Job{
 			ID:        fmt.Sprintf("filter-job-%02d", i),
 			User:      fmt.Sprintf("user-%d", i%3),
 			Nodes:     []string{fmt.Sprintf("node-%02d", i%5)},
@@ -566,7 +566,7 @@ func TestSQLiteStorage_MetricsFilters(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a job
-	store.CreateJob(ctx, &Job{
+	_ = store.CreateJob(ctx, &Job{
 		ID:        "metrics-filter-job",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -577,7 +577,7 @@ func TestSQLiteStorage_MetricsFilters(t *testing.T) {
 	// Record metrics at different timestamps
 	baseTime := time.Now().Add(-1 * time.Hour)
 	for i := 0; i < 20; i++ {
-		store.RecordMetrics(ctx, &MetricSample{
+		_ = store.RecordMetrics(ctx, &MetricSample{
 			JobID:         "metrics-filter-job",
 			Timestamp:     baseTime.Add(time.Duration(i) * 5 * time.Minute),
 			CPUUsage:      50.0 + float64(i),
@@ -622,7 +622,7 @@ func TestSQLiteStorage_MetricsFilters(t *testing.T) {
 
 	// Test GetLatestMetrics for job with no metrics
 	t.Run("GetLatestMetrics_NoMetrics", func(t *testing.T) {
-		store.CreateJob(ctx, &Job{
+		_ = store.CreateJob(ctx, &Job{
 			ID:        "empty-metrics-job",
 			User:      "testuser",
 			Nodes:     []string{"node-1"},
@@ -969,7 +969,7 @@ func TestSQLiteStorage_GetJobMetrics_LimitCap(t *testing.T) {
 	}
 
 	for i := 0; i < 5; i++ {
-		store.RecordMetrics(ctx, &MetricSample{JobID: "metric-limit-job", Timestamp: time.Now(), CPUUsage: 10, MemoryUsageMB: 128})
+		_ = store.RecordMetrics(ctx, &MetricSample{JobID: "metric-limit-job", Timestamp: time.Now(), CPUUsage: 10, MemoryUsageMB: 128})
 	}
 
 	_, _, err = store.GetJobMetrics(ctx, "metric-limit-job", MetricsFilter{Limit: 20000})

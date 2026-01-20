@@ -205,22 +205,18 @@ func (s *SQLiteStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Job,
 	// Build query with filters
 	whereClause := []string{}
 	args := []interface{}{}
-	argIndex := 1
 
 	if filter.State != nil {
-		whereClause = append(whereClause, fmt.Sprintf("state = ?"))
+		whereClause = append(whereClause, "state = ?")
 		args = append(args, *filter.State)
-		argIndex++
 	}
 	if filter.User != nil {
-		whereClause = append(whereClause, fmt.Sprintf("user_name = ?"))
+		whereClause = append(whereClause, "user_name = ?")
 		args = append(args, *filter.User)
-		argIndex++
 	}
 	if filter.Node != nil {
-		whereClause = append(whereClause, fmt.Sprintf("nodes LIKE ?"))
+		whereClause = append(whereClause, "nodes LIKE ?")
 		args = append(args, "%"+*filter.Node+"%")
-		argIndex++
 	}
 
 	where := ""

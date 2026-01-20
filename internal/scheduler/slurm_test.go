@@ -87,7 +87,7 @@ func TestSlurmJobSource_ListJobs(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -147,7 +147,7 @@ func TestSlurmJobSource_ListJobs_WithFilter(t *testing.T) {
 				{JobID: 3, UserName: "alice", JobState: "PENDING", Partition: "compute"},
 			},
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -197,7 +197,7 @@ func TestSlurmJobSource_ListJobs_Pagination(t *testing.T) {
 				{JobID: 5, UserName: "user", JobState: "RUNNING"},
 			},
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -234,7 +234,7 @@ func TestSlurmJobSource_ListJobs_Error(t *testing.T) {
 	// Test API error response
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal Server Error"))
+		_, _ = w.Write([]byte("Internal Server Error"))
 	}))
 	defer server.Close()
 
@@ -252,7 +252,7 @@ func TestSlurmJobSource_ListJobs_Error(t *testing.T) {
 
 func TestSlurmJobSource_ListJobs_InvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("invalid json"))
+		_, _ = w.Write([]byte("invalid json"))
 	}))
 	defer server.Close()
 
@@ -305,7 +305,7 @@ func TestSlurmJobSource_GetJob(t *testing.T) {
 				},
 			},
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -364,7 +364,7 @@ func TestSlurmJobSource_GetJob_NotFound(t *testing.T) {
 func TestSlurmJobSource_GetJob_EmptyResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := slurmJobsResponse{Jobs: []slurmJob{}}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -386,7 +386,7 @@ func TestSlurmJobSource_GetJob_EmptyResponse(t *testing.T) {
 func TestSlurmJobSource_GetJob_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Server Error"))
+		_, _ = w.Write([]byte("Server Error"))
 	}))
 	defer server.Close()
 
@@ -693,7 +693,7 @@ func TestSlurmJobSource_DoRequest_WithoutAuth(t *testing.T) {
 		if r.Header.Get("X-SLURM-USER-TOKEN") != "" {
 			t.Error("Auth token should not be set")
 		}
-		json.NewEncoder(w).Encode(slurmJobsResponse{Jobs: []slurmJob{}})
+		_ = json.NewEncoder(w).Encode(slurmJobsResponse{Jobs: []slurmJob{}})
 	}))
 	defer server.Close()
 

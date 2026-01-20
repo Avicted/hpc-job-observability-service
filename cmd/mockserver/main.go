@@ -168,7 +168,7 @@ func (s *MockServer) mockHandler(path, method, statusCode string) http.HandlerFu
 
 		status, _ := strconv.Atoi(statusCode)
 		w.WriteHeader(status)
-		json.NewEncoder(w).Encode(example)
+		_ = json.NewEncoder(w).Encode(example)
 	}
 }
 
@@ -233,7 +233,7 @@ func (s *MockServer) mockMetricsHandler() http.HandlerFunc {
 		b.WriteString("# TYPE hpc_exporter_last_collect_timestamp_seconds gauge\n")
 		b.WriteString(fmt.Sprintf("hpc_exporter_last_collect_timestamp_seconds %d\n", time.Now().Unix()))
 
-		w.Write([]byte(b.String()))
+		_, _ = w.Write([]byte(b.String()))
 	}
 }
 
@@ -287,7 +287,7 @@ func (s *MockServer) listJobsHandler() http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}
 }
 
@@ -297,7 +297,7 @@ func (s *MockServer) getJobHandler() http.HandlerFunc {
 		job, _ := s.jobSource.GetJob(r.Context(), jobID)
 		if job == nil {
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "not_found",
 				"message": fmt.Sprintf("Job with ID '%s' not found", jobID),
 			})
@@ -305,7 +305,7 @@ func (s *MockServer) getJobHandler() http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(job)
+		_ = json.NewEncoder(w).Encode(job)
 	}
 }
 
@@ -316,7 +316,7 @@ func (s *MockServer) getJobMetricsHandler() http.HandlerFunc {
 		job, _ := s.jobSource.GetJob(r.Context(), jobID)
 		if job == nil {
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "not_found",
 				"message": fmt.Sprintf("Job with ID '%s' not found", jobID),
 			})
@@ -365,7 +365,7 @@ func (s *MockServer) getJobMetricsHandler() http.HandlerFunc {
 			"total":   len(samples),
 		}
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}
 }
 

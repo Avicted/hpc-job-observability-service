@@ -2,6 +2,8 @@
 
 A microservice for tracking and monitoring HPC (High Performance Computing) job resource utilization with Prometheus metrics export.
 
+> This project is a proof of concept for building an observability service for HPC job schedulers like Slurm. It provides a RESTful API to manage jobs and record resource usage metrics (CPU, memory, GPU) over time. The service exports metrics in Prometheus format for easy integration with monitoring systems.
+
 ## Features
 
 - **Job Management**: Create, update, list, and delete HPC jobs
@@ -244,7 +246,7 @@ go test ./...
 ```
 
 The coverage script excludes non-testable packages (cmd/* and generated API server/types) from coverage totals.
-The current test coverage is 91.3%.
+The current test coverage is 91.2%.
 
 To run the concurrent job stress test:
 

@@ -475,7 +475,7 @@ func (s *Server) apiSchedulerToStorage(sched *types.SchedulerInfo) *storage.Sche
 func (s *Server) writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(data)
 }
 
 func (s *Server) writeError(w http.ResponseWriter, status int, errCode, message string) {
