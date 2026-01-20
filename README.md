@@ -40,6 +40,10 @@ A microservice for tracking and monitoring HPC (High Performance Computing) job 
 # Clone and build
 go build -o server ./cmd/server
 
+# Copy and configure environment variables
+cp .env.example .env
+# Edit .env with your settings
+
 # Run with SQLite (default)
 ./server
 
@@ -53,14 +57,18 @@ DATABASE_TYPE=postgres DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=
 ### Running with Docker Compose
 
 ```bash
-# Start all services (app + PostgreSQL + Prometheus)
+# Copy environment file (required for secrets)
+cp .env.example .env
+# Edit .env with your settings (especially passwords!)
+
+# Start all services (app + PostgreSQL + Prometheus + Grafana)
 docker-compose up
 
 # Start with mock server for testing
 docker-compose --profile mock up
 
 # View Prometheus at http://localhost:9090
-# View Grafana at http://localhost:3000 (admin/admin)
+# View Grafana at http://localhost:3000 (credentials from .env)
 # View app at http://localhost:8080
 ```
 
@@ -107,17 +115,42 @@ curl "http://localhost:8080/v1/jobs?state=running&limit=10"
 
 ## Configuration
 
-Environment variables:
+### Environment Variables
+
+The service uses environment variables for configuration. For local development, copy `.env.example` to `.env` and customize:
+
+```bash
+cp .env.example .env
+```
+
+> ⚠️ **Security Note**: Never commit `.env` files containing secrets to version control. The `.env` file is already in `.gitignore`.
+
+#### Server Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `8080` | Server port |
 | `HOST` | `0.0.0.0` | Server host |
-| `DATABASE_TYPE` | `sqlite` | Database type (`sqlite` or `postgres`) |
-| `DATABASE_URL` | `./hpc-jobs.db` | Database connection string |
-| `METRICS_RETENTION_DAYS` | `7` | Days to retain metrics before cleanup |
 
-Command-line flags:
+#### Database Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_TYPE` | `sqlite` | Database type (`sqlite` or `postgres`) |
+| `DATABASE_URL` | `file:hpc_jobs.db...` | Database connection string |
+| `POSTGRES_USER` | `hpc` | PostgreSQL username (Docker) |
+| `POSTGRES_PASSWORD` | - | PostgreSQL password (Docker) |
+| `POSTGRES_DB` | `hpc_jobs` | PostgreSQL database name (Docker) |
+
+#### Metrics & Grafana Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `METRICS_RETENTION_DAYS` | `7` | Days to retain metrics before cleanup |
+| `GF_SECURITY_ADMIN_USER` | `admin` | Grafana admin username |
+| `GF_SECURITY_ADMIN_PASSWORD` | - | Grafana admin password |
+
+### Command-line Flags
 
 | Flag | Description |
 |------|-------------|
@@ -211,6 +244,7 @@ go test ./...
 ```
 
 The coverage script excludes non-testable packages (cmd/* and generated API server/types) from coverage totals.
+The current test coverage is 91.3%.
 
 To run the concurrent job stress test:
 
@@ -233,4 +267,4 @@ go build -o mockserver ./cmd/mockserver
 
 ## License
 
-MIT License
+Apache 2.0 License. See [LICENSE](LICENSE) for details.
