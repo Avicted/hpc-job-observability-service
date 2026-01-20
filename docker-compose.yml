@@ -65,6 +65,26 @@ services:
     networks:
       - hpc-network
 
+  # Grafana for dashboards
+  grafana:
+    image: grafana/grafana:10.4.5
+    container_name: hpc-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docs/grafana-dashboard.json:/var/lib/grafana/dashboards/hpc-dashboard.json:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - hpc-network
+
   # Mock server (optional, for learning/testing)
   mockserver:
     build:
@@ -89,3 +109,4 @@ networks:
 volumes:
   postgres_data:
   prometheus_data:
+  grafana_data:

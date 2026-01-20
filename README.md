@@ -60,6 +60,7 @@ docker-compose up
 docker-compose --profile mock up
 
 # View Prometheus at http://localhost:9090
+# View Grafana at http://localhost:3000 (admin/admin)
 # View app at http://localhost:8080
 ```
 
