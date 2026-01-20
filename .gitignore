@@ -68,3 +68,5 @@ logs/
 # Build output
 dist/
 build/
+
+PROJECT_DESCRIPTION.md

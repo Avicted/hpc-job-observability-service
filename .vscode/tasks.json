@@ -1,99 +1,113 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "Build Server",
-      "type": "shell",
-      "command": "go build -o server ./cmd/server",
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "problemMatcher": ["$go"]
-    },
-    {
-      "label": "Build Mock Server",
-      "type": "shell",
-      "command": "go build -o mockserver ./cmd/mockserver",
-      "group": "build",
-      "problemMatcher": ["$go"]
-    },
-    {
-      "label": "Build All",
-      "type": "shell",
-      "command": "go build ./...",
-      "group": "build",
-      "problemMatcher": ["$go"]
-    },
-    {
-      "label": "Run Server",
-      "type": "shell",
-      "command": "go run ./cmd/server",
-      "group": "none",
-      "problemMatcher": [],
-      "isBackground": true
-    },
-    {
-      "label": "Run Server (with demo data)",
-      "type": "shell",
-      "command": "go run ./cmd/server --seed-demo",
-      "group": "none",
-      "problemMatcher": [],
-      "isBackground": true
-    },
-    {
-      "label": "Run Mock Server",
-      "type": "shell",
-      "command": "go run ./cmd/mockserver",
-      "group": "none",
-      "problemMatcher": [],
-      "isBackground": true
-    },
-    {
-      "label": "Test All",
-      "type": "shell",
-      "command": "go test ./... -v",
-      "group": {
-        "kind": "test",
-        "isDefault": true
-      },
-      "problemMatcher": ["$go"]
-    },
-    {
-      "label": "Test with Coverage",
-      "type": "shell",
-      "command": "go test ./... -cover -coverprofile=coverage.out",
-      "group": "test",
-      "problemMatcher": ["$go"]
-    },
-    {
-      "label": "Generate OpenAPI Code",
-      "type": "shell",
-      "command": "go generate ./...",
-      "group": "none",
-      "problemMatcher": ["$go"]
-    },
-    {
-      "label": "Docker Compose Up",
-      "type": "shell",
-      "command": "docker-compose up --build",
-      "group": "none",
-      "problemMatcher": [],
-      "isBackground": true
-    },
-    {
-      "label": "Docker Compose Down",
-      "type": "shell",
-      "command": "docker-compose down",
-      "group": "none",
-      "problemMatcher": []
-    },
-    {
-      "label": "Lint",
-      "type": "shell",
-      "command": "golangci-lint run",
-      "group": "none",
-      "problemMatcher": ["$go"]
-    }
-  ]
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Server",
+            "type": "shell",
+            "command": "go build -o server ./cmd/server",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$go"
+            ]
+        },
+        {
+            "label": "Build Mock Server",
+            "type": "shell",
+            "command": "go build -o mockserver ./cmd/mockserver",
+            "group": "build",
+            "problemMatcher": [
+                "$go"
+            ]
+        },
+        {
+            "label": "Build All",
+            "type": "shell",
+            "command": "go build ./...",
+            "group": "build",
+            "problemMatcher": [
+                "$go"
+            ]
+        },
+        {
+            "label": "Run Server",
+            "type": "shell",
+            "command": "go run ./cmd/server",
+            "group": "none",
+            "problemMatcher": [],
+            "isBackground": true
+        },
+        {
+            "label": "Run Server (with demo data)",
+            "type": "shell",
+            "command": "go run ./cmd/server --seed-demo",
+            "group": "none",
+            "problemMatcher": [],
+            "isBackground": true
+        },
+        {
+            "label": "Run Mock Server",
+            "type": "shell",
+            "command": "go run ./cmd/mockserver",
+            "group": "none",
+            "problemMatcher": [],
+            "isBackground": true
+        },
+        {
+            "label": "Test All",
+            "type": "shell",
+            "command": "go test ./... -v",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$go"
+            ]
+        },
+        {
+            "label": "Test with Coverage",
+            "type": "shell",
+            "command": "go test ./... -cover -coverprofile=coverage.out",
+            "group": "test",
+            "problemMatcher": [
+                "$go"
+            ]
+        },
+        {
+            "label": "Generate OpenAPI Code",
+            "type": "shell",
+            "command": "go generate ./...",
+            "group": "none",
+            "problemMatcher": [
+                "$go"
+            ]
+        },
+        {
+            "label": "Docker Compose Up",
+            "type": "shell",
+            "command": "docker-compose up --build",
+            "group": "none",
+            "problemMatcher": [],
+            "isBackground": true
+        },
+        {
+            "label": "Docker Compose Down",
+            "type": "shell",
+            "command": "docker-compose down",
+            "group": "none",
+            "problemMatcher": []
+        },
+        {
+            "label": "Lint",
+            "type": "shell",
+            "command": "golangci-lint run",
+            "group": "none",
+            "problemMatcher": [
+                "$go"
+            ]
+        }
+    ]
 }
