@@ -1,6 +1,8 @@
 # Binaries
 server
 mockserver
+!cmd/**/*
+
 *.exe
 *.exe~
 *.dll
