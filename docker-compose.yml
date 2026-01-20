@@ -29,7 +29,7 @@ services:
 
   # PostgreSQL database
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18.1-alpine
     container_name: hpc-postgres
     ports:
       - "5432:5432"
@@ -51,7 +51,7 @@ services:
 
   # Prometheus for metrics scraping
   prometheus:
-    image: prom/prometheus:v2.48.0
+    image: prom/prometheus:v3.9.1
     container_name: hpc-prometheus
     ports:
       - "9090:9090"
@@ -69,7 +69,7 @@ services:
 
   # Grafana for dashboards
   grafana:
-    image: grafana/grafana:10.4.5
+    image: grafana/grafana:12.4.0
     container_name: hpc-grafana
     ports:
       - "3000:3000"
