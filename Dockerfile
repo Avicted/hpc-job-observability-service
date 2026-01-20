@@ -13,6 +13,9 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Generate OpenAPI internal/api/server and internal/api/types code
+RUN go generate ./internal/api/...
+
 # Build the server binary
 RUN CGO_ENABLED=1 GOOS=linux go build -o /server ./cmd/server
 

@@ -2,6 +2,7 @@
 server
 mockserver
 !cmd/**/*
+!internal/api/server/
 
 *.exe
 *.exe~
