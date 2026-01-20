@@ -16,7 +16,7 @@ A microservice for tracking and monitoring HPC (High Performance Computing) job 
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   HPC Cluster   │───▶│  Observability  │───▶│   Prometheus    │
+│   HPC Cluster   │────▶│  Observability  │───▶│   Prometheus    │
 │   Schedulers    │     │    Service      │     │   + Grafana     │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
                                │
