@@ -1,0 +1,645 @@
+openapi: 3.0.3
+info:
+  title: HPC Job Observability Service API
+  description: |
+    A job-level monitoring and observability service for HPC environments.
+    This API provides access to job metadata, states, and resource usage metrics.
+  version: 1.0.0
+  contact:
+    name: HPC Observability Team
+  license:
+    name: MIT
+    identifier: MIT
+
+servers:
+  - url: http://localhost:8080/v1
+    description: Local development server
+
+tags:
+  - name: jobs
+    description: Job management and metadata
+  - name: metrics
+    description: Job metrics and resource usage
+  - name: health
+    description: Service health endpoints
+
+paths:
+  /health:
+    get:
+      tags:
+        - health
+      summary: Health check
+      description: Returns the health status of the service
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: healthy
+                timestamp: '2026-01-20T10:00:00Z'
+
+  /jobs:
+    get:
+      tags:
+        - jobs
+      summary: List all jobs
+      description: Returns a list of all known jobs with optional filtering
+      operationId: listJobs
+      parameters:
+        - name: state
+          in: query
+          description: Filter by job state
+          required: false
+          schema:
+            $ref: '#/components/schemas/JobState'
+        - name: user
+          in: query
+          description: Filter by user
+          required: false
+          schema:
+            type: string
+            example: user123
+        - name: node
+          in: query
+          description: Filter by node name
+          required: false
+          schema:
+            type: string
+            example: node-01
+        - name: limit
+          in: query
+          description: Maximum number of jobs to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: offset
+          in: query
+          description: Number of jobs to skip for pagination
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResponse'
+              example:
+                jobs:
+                  - id: job-001
+                    user: alice
+                    nodes:
+                      - node-01
+                      - node-02
+                    state: running
+                    start_time: '2026-01-20T08:00:00Z'
+                    cpu_usage: 85.5
+                    memory_usage_mb: 4096
+                    gpu_usage: 45.0
+                  - id: job-002
+                    user: bob
+                    nodes:
+                      - node-03
+                    state: completed
+                    start_time: '2026-01-19T14:00:00Z'
+                    end_time: '2026-01-19T18:30:00Z'
+                    runtime_seconds: 16200
+                    cpu_usage: 0
+                    memory_usage_mb: 0
+                total: 2
+                limit: 100
+                offset: 0
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - jobs
+      summary: Create a new job
+      description: Register a new job in the system
+      operationId: createJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJobRequest'
+            example:
+              id: job-003
+              user: charlie
+              nodes:
+                - node-04
+                - node-05
+      responses:
+        '201':
+          description: Job created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Job with this ID already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /jobs/{jobId}:
+    get:
+      tags:
+        - jobs
+      summary: Get job details
+      description: Returns metadata and current state for a specific job
+      operationId: getJob
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+              example:
+                id: job-001
+                user: alice
+                nodes:
+                  - node-01
+                  - node-02
+                state: running
+                start_time: '2026-01-20T08:00:00Z'
+                cpu_usage: 85.5
+                memory_usage_mb: 4096
+                gpu_usage: 45.0
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - jobs
+      summary: Update job
+      description: Update job state or metadata
+      operationId: updateJob
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateJobRequest'
+            example:
+              state: completed
+      responses:
+        '200':
+          description: Job updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - jobs
+      summary: Delete job
+      description: Remove a job from the system
+      operationId: deleteJob
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '204':
+          description: Job deleted successfully
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /jobs/{jobId}/metrics:
+    get:
+      tags:
+        - metrics
+      summary: Get job metrics history
+      description: Returns historical resource usage metrics for a specific job
+      operationId: getJobMetrics
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - name: start_time
+          in: query
+          description: Start of time range (RFC3339 format)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: end_time
+          in: query
+          description: End of time range (RFC3339 format)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          description: Maximum number of samples to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            default: 1000
+      responses:
+        '200':
+          description: Job metrics history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobMetricsResponse'
+              example:
+                job_id: job-001
+                samples:
+                  - timestamp: '2026-01-20T08:00:00Z'
+                    cpu_usage: 82.3
+                    memory_usage_mb: 3980
+                    gpu_usage: 42.0
+                  - timestamp: '2026-01-20T08:01:00Z'
+                    cpu_usage: 85.5
+                    memory_usage_mb: 4096
+                    gpu_usage: 45.0
+                total: 2
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - metrics
+      summary: Record job metrics
+      description: Submit a new metrics sample for a job
+      operationId: recordJobMetrics
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordMetricsRequest'
+            example:
+              cpu_usage: 88.2
+              memory_usage_mb: 4200
+              gpu_usage: 48.5
+      responses:
+        '201':
+          description: Metrics recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricSample'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  parameters:
+    JobId:
+      name: jobId
+      in: path
+      description: Unique job identifier
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+      example: job-001
+
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+          description: Current health status of the service
+        timestamp:
+          type: string
+          format: date-time
+          description: Time of health check
+        version:
+          type: string
+          description: Service version
+
+    JobState:
+      type: string
+      enum:
+        - pending
+        - running
+        - completed
+        - failed
+        - cancelled
+      description: Current state of the job
+
+    Job:
+      type: object
+      required:
+        - id
+        - user
+        - nodes
+        - state
+        - start_time
+      properties:
+        id:
+          type: string
+          description: Unique job identifier
+          example: job-001
+        user:
+          type: string
+          description: User who submitted the job
+          example: alice
+        nodes:
+          type: array
+          items:
+            type: string
+          description: List of node names allocated to the job
+          example:
+            - node-01
+            - node-02
+        state:
+          $ref: '#/components/schemas/JobState'
+        start_time:
+          type: string
+          format: date-time
+          description: Job start time
+        end_time:
+          type: string
+          format: date-time
+          description: Job end time (if completed or failed)
+        runtime_seconds:
+          type: number
+          format: double
+          description: Total runtime in seconds
+        cpu_usage:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          description: Current CPU usage percentage
+        memory_usage_mb:
+          type: integer
+          minimum: 0
+          description: Current memory usage in megabytes
+        gpu_usage:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          description: Current GPU usage percentage (optional)
+
+    CreateJobRequest:
+      type: object
+      required:
+        - id
+        - user
+        - nodes
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Unique job identifier
+        user:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: User who submitted the job
+        nodes:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: List of node names to allocate
+
+    UpdateJobRequest:
+      type: object
+      properties:
+        state:
+          $ref: '#/components/schemas/JobState'
+        cpu_usage:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        memory_usage_mb:
+          type: integer
+          minimum: 0
+        gpu_usage:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+
+    MetricSample:
+      type: object
+      required:
+        - timestamp
+        - cpu_usage
+        - memory_usage_mb
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: Time when the sample was recorded
+        cpu_usage:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          description: CPU usage percentage at this point in time
+        memory_usage_mb:
+          type: integer
+          minimum: 0
+          description: Memory usage in megabytes at this point in time
+        gpu_usage:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          description: GPU usage percentage at this point in time (optional)
+
+    RecordMetricsRequest:
+      type: object
+      required:
+        - cpu_usage
+        - memory_usage_mb
+      properties:
+        cpu_usage:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          description: CPU usage percentage
+        memory_usage_mb:
+          type: integer
+          minimum: 0
+          description: Memory usage in megabytes
+        gpu_usage:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          description: GPU usage percentage (optional)
+
+    JobListResponse:
+      type: object
+      required:
+        - jobs
+        - total
+        - limit
+        - offset
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Job'
+        total:
+          type: integer
+          description: Total number of jobs matching the filter
+        limit:
+          type: integer
+          description: Maximum number of jobs returned
+        offset:
+          type: integer
+          description: Number of jobs skipped
+
+    JobMetricsResponse:
+      type: object
+      required:
+        - job_id
+        - samples
+        - total
+      properties:
+        job_id:
+          type: string
+          description: Job identifier
+        samples:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricSample'
+        total:
+          type: integer
+          description: Total number of samples returned
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: not_found
+        message:
+          type: string
+          description: Human-readable error message
+          example: Job with ID 'job-999' not found
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error details

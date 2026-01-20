@@ -1,0 +1,269 @@
+// Package metrics provides Prometheus metrics export for HPC job monitoring.
+// Metrics follow Prometheus naming conventions and best practices.
+package metrics
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/avic/hpc-job-observability-service/internal/storage"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+// Exporter collects and exposes job metrics for Prometheus scraping.
+type Exporter struct {
+	store storage.Storage
+
+	// Job runtime gauge - shows current runtime of running jobs
+	// Labels: job_id, user, node (first node for multi-node jobs)
+	jobRuntimeSeconds *prometheus.GaugeVec
+
+	// CPU usage gauge - current CPU usage percentage per job
+	// Labels: job_id, user, node
+	jobCPUUsagePercent *prometheus.GaugeVec
+
+	// Memory usage gauge - current memory usage in bytes per job
+	// Labels: job_id, user, node
+	jobMemoryUsageBytes *prometheus.GaugeVec
+
+	// GPU usage gauge - current GPU usage percentage per job (optional)
+	// Labels: job_id, user, node
+	jobGPUUsagePercent *prometheus.GaugeVec
+
+	// Job state counter - counts jobs by state
+	// Labels: state
+	jobStateTotal *prometheus.GaugeVec
+
+	// Jobs total counter - total number of jobs seen
+	jobsTotal prometheus.Counter
+
+	// Metric collection timestamp
+	lastCollectTime prometheus.Gauge
+}
+
+// NewExporter creates a new metrics exporter.
+func NewExporter(store storage.Storage) *Exporter {
+	e := &Exporter{
+		store: store,
+
+		jobRuntimeSeconds: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "job",
+				Name:      "runtime_seconds",
+				Help:      "Current runtime of the job in seconds",
+			},
+			[]string{"job_id", "user", "node"},
+		),
+
+		jobCPUUsagePercent: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "job",
+				Name:      "cpu_usage_percent",
+				Help:      "Current CPU usage of the job as a percentage (0-100)",
+			},
+			[]string{"job_id", "user", "node"},
+		),
+
+		jobMemoryUsageBytes: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "job",
+				Name:      "memory_usage_bytes",
+				Help:      "Current memory usage of the job in bytes",
+			},
+			[]string{"job_id", "user", "node"},
+		),
+
+		jobGPUUsagePercent: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "job",
+				Name:      "gpu_usage_percent",
+				Help:      "Current GPU usage of the job as a percentage (0-100)",
+			},
+			[]string{"job_id", "user", "node"},
+		),
+
+		jobStateTotal: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "job",
+				Name:      "state_total",
+				Help:      "Number of jobs in each state",
+			},
+			[]string{"state"},
+		),
+
+		jobsTotal: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "hpc",
+				Subsystem: "job",
+				Name:      "total",
+				Help:      "Total number of jobs tracked by the system",
+			},
+		),
+
+		lastCollectTime: prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "exporter",
+				Name:      "last_collect_timestamp_seconds",
+				Help:      "Unix timestamp of the last successful metric collection",
+			},
+		),
+	}
+
+	return e
+}
+
+// Register registers all metrics with the provided registry.
+func (e *Exporter) Register(registry prometheus.Registerer) error {
+	collectors := []prometheus.Collector{
+		e.jobRuntimeSeconds,
+		e.jobCPUUsagePercent,
+		e.jobMemoryUsageBytes,
+		e.jobGPUUsagePercent,
+		e.jobStateTotal,
+		e.jobsTotal,
+		e.lastCollectTime,
+	}
+
+	for _, c := range collectors {
+		if err := registry.Register(c); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Collect gathers current job metrics from storage.
+func (e *Exporter) Collect(ctx context.Context) error {
+	jobs, err := e.store.GetAllJobs(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Reset gauges to avoid stale data for removed jobs
+	e.jobRuntimeSeconds.Reset()
+	e.jobCPUUsagePercent.Reset()
+	e.jobMemoryUsageBytes.Reset()
+	e.jobGPUUsagePercent.Reset()
+	e.jobStateTotal.Reset()
+
+	// Count jobs by state
+	stateCounts := map[storage.JobState]int{
+		storage.JobStatePending:   0,
+		storage.JobStateRunning:   0,
+		storage.JobStateCompleted: 0,
+		storage.JobStateFailed:    0,
+		storage.JobStateCancelled: 0,
+	}
+
+	now := time.Now()
+	for _, job := range jobs {
+		stateCounts[job.State]++
+
+		// Use first node as the node label (for multi-node jobs)
+		node := ""
+		if len(job.Nodes) > 0 {
+			node = job.Nodes[0]
+		}
+
+		labels := prometheus.Labels{
+			"job_id": job.ID,
+			"user":   job.User,
+			"node":   node,
+		}
+
+		// Calculate runtime for running jobs
+		var runtime float64
+		if job.State == storage.JobStateRunning {
+			runtime = now.Sub(job.StartTime).Seconds()
+		} else if job.RuntimeSeconds > 0 {
+			runtime = job.RuntimeSeconds
+		}
+
+		e.jobRuntimeSeconds.With(labels).Set(runtime)
+		e.jobCPUUsagePercent.With(labels).Set(job.CPUUsage)
+		// Convert MB to bytes
+		e.jobMemoryUsageBytes.With(labels).Set(float64(job.MemoryUsageMB) * 1024 * 1024)
+
+		if job.GPUUsage != nil {
+			e.jobGPUUsagePercent.With(labels).Set(*job.GPUUsage)
+		}
+	}
+
+	// Set state counters
+	for state, count := range stateCounts {
+		e.jobStateTotal.With(prometheus.Labels{"state": string(state)}).Set(float64(count))
+	}
+
+	// Update total jobs counter
+	e.jobsTotal.Add(0) // Just touch the counter to ensure it exists
+
+	e.lastCollectTime.Set(float64(now.Unix()))
+
+	return nil
+}
+
+// UpdateJobMetrics updates metrics for a specific job.
+func (e *Exporter) UpdateJobMetrics(job *storage.Job) {
+	node := ""
+	if len(job.Nodes) > 0 {
+		node = job.Nodes[0]
+	}
+
+	labels := prometheus.Labels{
+		"job_id": job.ID,
+		"user":   job.User,
+		"node":   node,
+	}
+
+	var runtime float64
+	if job.State == storage.JobStateRunning {
+		runtime = time.Since(job.StartTime).Seconds()
+	} else if job.RuntimeSeconds > 0 {
+		runtime = job.RuntimeSeconds
+	}
+
+	e.jobRuntimeSeconds.With(labels).Set(runtime)
+	e.jobCPUUsagePercent.With(labels).Set(job.CPUUsage)
+	e.jobMemoryUsageBytes.With(labels).Set(float64(job.MemoryUsageMB) * 1024 * 1024)
+
+	if job.GPUUsage != nil {
+		e.jobGPUUsagePercent.With(labels).Set(*job.GPUUsage)
+	}
+}
+
+// IncrementJobsTotal increments the total jobs counter.
+func (e *Exporter) IncrementJobsTotal() {
+	e.jobsTotal.Inc()
+}
+
+// Handler returns an HTTP handler for the /metrics endpoint.
+func (e *Exporter) Handler() http.Handler {
+	registry := prometheus.NewRegistry()
+	if err := e.Register(registry); err != nil {
+		// If registration fails, just log and continue with default registry
+		return promhttp.Handler()
+	}
+
+	// Collect initial metrics
+	if err := e.Collect(context.Background()); err != nil {
+		// Log but continue
+	}
+
+	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{
+		EnableOpenMetrics: true,
+	})
+}
+
+// DefaultHandler returns a handler that uses the default Prometheus registry.
+func DefaultHandler() http.Handler {
+	return promhttp.Handler()
+}

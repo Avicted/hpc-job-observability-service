@@ -1,0 +1,12 @@
+# oapi-codegen configuration for server stubs
+# This generates the server interface that handlers must implement
+# Run: go generate ./...
+
+package: server
+output: internal/api/server/server.gen.go
+generate:
+  std-http-server: true
+  models: true
+  embedded-spec: true
+output-options:
+  skip-prune: true

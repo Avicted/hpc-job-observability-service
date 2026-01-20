@@ -1,0 +1,9 @@
+# oapi-codegen configuration
+# This config file drives API-first development from openapi.yaml
+# Run: go generate ./...
+
+package: types
+output: internal/api/types/types.gen.go
+generate:
+  models: true
+  # Generate only models in this package

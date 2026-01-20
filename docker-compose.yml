@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  # Main HPC Job Observability Service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hpc-observability
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - HOST=0.0.0.0
+      - DATABASE_TYPE=postgres
+      - DATABASE_URL=postgres://hpc:hpc_password@postgres:5432/hpc_jobs?sslmode=disable
+      - METRICS_RETENTION_DAYS=7
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["/app/server", "-seed-demo"]
+    networks:
+      - hpc-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    container_name: hpc-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=hpc
+      - POSTGRES_PASSWORD=hpc_password
+      - POSTGRES_DB=hpc_jobs
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - hpc-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hpc -d hpc_jobs"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Prometheus for metrics scraping
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: hpc-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - app
+    networks:
+      - hpc-network
+
+  # Mock server (optional, for learning/testing)
+  mockserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hpc-mockserver
+    ports:
+      - "8081:8081"
+    environment:
+      - MOCK_PORT=8081
+      - MOCK_HOST=0.0.0.0
+    command: ["/app/mockserver"]
+    networks:
+      - hpc-network
+    profiles:
+      - mock
+
+networks:
+  hpc-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  prometheus_data:
