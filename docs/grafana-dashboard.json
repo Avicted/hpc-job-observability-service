@@ -131,7 +131,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "hpc_job_total"
+          "expr": "sum(hpc_job_state_total)"
         }
       ],
       "options": {
