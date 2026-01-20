@@ -1,294 +1,939 @@
 {
-  "uid": "hpc-jobs",
-  "title": "HPC Job Observability",
-  "schemaVersion": 38,
-  "version": 2,
-  "refresh": "10s",
-  "timezone": "browser",
-  "tags": ["hpc", "jobs", "prometheus", "nodes"],
-  "time": {
-    "from": "now-6h",
-    "to": "now"
-  },
-  "templating": {
+  "annotations": {
     "list": [
       {
-        "name": "job",
-        "label": "Job",
-        "type": "query",
-        "datasource": "Prometheus",
-        "refresh": 1,
-        "query": {
-          "query": "label_values(hpc_job_cpu_usage_percent, job_id)",
-          "refId": "jobVar"
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
         },
-        "includeAll": true,
-        "multi": true,
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
-        }
-      },
-      {
-        "name": "user",
-        "label": "User",
-        "type": "query",
-        "datasource": "Prometheus",
-        "refresh": 1,
-        "query": {
-          "query": "label_values(hpc_job_cpu_usage_percent, user)",
-          "refId": "userVar"
-        },
-        "includeAll": true,
-        "multi": true,
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
-        }
-      },
-      {
-        "name": "node",
-        "label": "Node",
-        "type": "query",
-        "datasource": "Prometheus",
-        "refresh": 1,
-        "query": {
-          "query": "label_values(hpc_node_cpu_usage_percent, node)",
-          "refId": "nodeVar"
-        },
-        "includeAll": true,
-        "multi": true,
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
-        }
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
       }
     ]
   },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 1,
+  "links": [],
   "panels": [
     {
-      "type": "row",
-      "title": "Job Metrics",
-      "collapsed": false,
-      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1}
-    },
-    {
-      "type": "timeseries",
-      "title": "CPU Usage (%) per Job",
       "datasource": "Prometheus",
-      "gridPos": {"x": 0, "y": 1, "w": 12, "h": 8},
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "hpc_job_cpu_usage_percent{job_id=~\"$job\", user=~\"$user\"}",
-          "legendFormat": "{{job_id}} ({{user}})"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Memory Usage (GB) per Job",
-      "datasource": "Prometheus",
-      "gridPos": {"x": 12, "y": 1, "w": 12, "h": 8},
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "hpc_job_memory_usage_bytes{job_id=~\"$job\", user=~\"$user\"} / 1024 / 1024 / 1024",
-          "legendFormat": "{{job_id}} ({{user}})"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "GPU Usage (%) per Job",
-      "datasource": "Prometheus",
-      "gridPos": {"x": 0, "y": 9, "w": 12, "h": 8},
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "hpc_job_gpu_usage_percent{job_id=~\"$job\", user=~\"$user\"}",
-          "legendFormat": "{{job_id}} ({{user}})"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Job Runtime (minutes)",
-      "datasource": "Prometheus",
-      "gridPos": {"x": 12, "y": 9, "w": 12, "h": 8},
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "hpc_job_runtime_seconds{job_id=~\"$job\", user=~\"$user\"} / 60",
-          "legendFormat": "{{job_id}} ({{user}})"
-        }
-      ]
-    },
-    {
-      "type": "stat",
-      "title": "Jobs by State",
-      "datasource": "Prometheus",
-      "gridPos": {"x": 0, "y": 17, "w": 12, "h": 6},
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "hpc_job_state_total",
-          "legendFormat": "{{state}}"
-        }
-      ],
-      "options": {
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": ""
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
         },
-        "orientation": "horizontal"
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Total Jobs",
-      "datasource": "Prometheus",
-      "gridPos": {"x": 12, "y": 17, "w": 12, "h": 6},
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(hpc_job_state_total)"
-        }
-      ],
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "id": 7,
       "options": {
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "horizontal"
-      }
-    },
-    {
-      "type": "row",
-      "title": "Node Metrics",
-      "collapsed": false,
-      "gridPos": {"x": 0, "y": 23, "w": 24, "h": 1}
-    },
-    {
-      "type": "timeseries",
-      "title": "Node CPU Usage (%) - Avg from Running Jobs",
-      "datasource": "Prometheus",
-      "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "hpc_node_cpu_usage_percent{node=~\"$node\"}",
-          "legendFormat": "{{node}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Node Memory Usage (GB) - Total from Running Jobs",
-      "datasource": "Prometheus",
-      "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "hpc_node_memory_usage_bytes{node=~\"$node\"} / 1024 / 1024 / 1024",
-          "legendFormat": "{{node}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decgbytes"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Node GPU Usage (%) - Avg from Running Jobs",
-      "datasource": "Prometheus",
-      "gridPos": {"x": 0, "y": 32, "w": 12, "h": 8},
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "hpc_node_gpu_usage_percent{node=~\"$node\"}",
-          "legendFormat": "{{node}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        }
-      }
-    },
-    {
-      "type": "bargauge",
-      "title": "Jobs per Node",
-      "datasource": "Prometheus",
-      "gridPos": {"x": 12, "y": 32, "w": 12, "h": 8},
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "hpc_node_job_count{node=~\"$node\"}",
-          "legendFormat": "{{node}}"
-        }
-      ],
-      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
         "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0-20648027705",
+      "targets": [
+        {
+          "expr": "sum(hpc_job_state_total)",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Jobs",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {},
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0-20648027705",
+      "targets": [
+        {
+          "expr": "hpc_job_state_total",
+          "legendFormat": "{{state}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Jobs by State",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
-          "min": 0
-        }
-      }
-    },
-    {
-      "type": "table",
-      "title": "Node Overview",
-      "datasource": "Prometheus",
-      "gridPos": {"x": 0, "y": 40, "w": 24, "h": 8},
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "id": 14,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": true,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0-20648027705",
       "targets": [
         {
-          "refId": "A",
-          "expr": "hpc_node_cpu_usage_percent",
-          "legendFormat": "{{node}}",
-          "format": "table",
-          "instant": true
-        },
-        {
-          "refId": "B",
-          "expr": "hpc_node_memory_usage_bytes / 1024 / 1024 / 1024",
-          "legendFormat": "{{node}}",
-          "format": "table",
-          "instant": true
-        },
-        {
-          "refId": "C",
-          "expr": "hpc_node_gpu_usage_percent",
-          "legendFormat": "{{node}}",
-          "format": "table",
-          "instant": true
-        },
-        {
-          "refId": "D",
-          "expr": "hpc_node_job_count",
-          "legendFormat": "{{node}}",
-          "format": "table",
-          "instant": true
+          "editorMode": "builder",
+          "expr": "sum by(__name__) (hpc_node_memory_usage_bytes)",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
         }
       ],
+      "title": "All Nodes RAM Usage",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "id": 1,
+      "panels": [],
+      "title": "Job Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 15,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0-20648027705",
+      "targets": [
+        {
+          "expr": "hpc_job_cpu_usage_percent{job_id=~\"$job\", user=~\"$user\"}",
+          "legendFormat": "{{job_id}} ({{user}})",
+          "refId": "A"
+        }
+      ],
+      "title": "CPU Usage (%) per Job",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 15,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0-20648027705",
+      "targets": [
+        {
+          "expr": "hpc_job_memory_usage_bytes{job_id=~\"$job\", user=~\"$user\"} / 1024 / 1024 / 1024",
+          "legendFormat": "{{job_id}} ({{user}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Memory Usage (GB) per Job",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 13,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0-20648027705",
+      "targets": [
+        {
+          "expr": "hpc_job_gpu_usage_percent{job_id=~\"$job\", user=~\"$user\"}",
+          "legendFormat": "{{job_id}} ({{user}})",
+          "refId": "A"
+        }
+      ],
+      "title": "GPU Usage (%) per Job",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 13,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0-20648027705",
+      "targets": [
+        {
+          "expr": "hpc_job_runtime_seconds{job_id=~\"$job\", user=~\"$user\"} / 60",
+          "legendFormat": "{{job_id}} ({{user}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Job Runtime (minutes)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "id": 8,
+      "panels": [],
+      "title": "Node Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 12,
+        "x": 0,
+        "y": 37
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0-20648027705",
+      "targets": [
+        {
+          "expr": "hpc_node_cpu_usage_percent{node=~\"$node\"}",
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Node CPU Usage (%) - Avg from Running Jobs",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 12,
+        "x": 12,
+        "y": 37
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0-20648027705",
+      "targets": [
+        {
+          "expr": "hpc_node_gpu_usage_percent{node=~\"$node\"}",
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Node GPU Usage (%) - Avg from Running Jobs",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "decgbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0-20648027705",
+      "targets": [
+        {
+          "expr": "hpc_node_memory_usage_bytes{node=~\"$node\"} / 1024 / 1024 / 1024",
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Node Memory Usage (GB) - Total from Running Jobs",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 20,
+        "w": 12,
+        "x": 0,
+        "y": 65
+      },
+      "id": 13,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.0-20648027705",
+      "targets": [
+        {
+          "expr": "hpc_node_cpu_usage_percent",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        },
+        {
+          "expr": "hpc_node_memory_usage_bytes / 1024 / 1024 / 1024",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{node}}",
+          "refId": "B"
+        },
+        {
+          "expr": "hpc_node_gpu_usage_percent",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{node}}",
+          "refId": "C"
+        },
+        {
+          "expr": "hpc_node_job_count",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{node}}",
+          "refId": "D"
+        }
+      ],
+      "title": "Node Overview",
       "transformations": [
         {
           "id": "merge"
@@ -296,21 +941,178 @@
         {
           "id": "organize",
           "options": {
-            "renameByName": {
-              "Value #A": "CPU %",
-              "Value #B": "Memory (GB)",
-              "Value #C": "GPU %",
-              "Value #D": "Running Jobs"
-            },
             "excludeByName": {
               "Time": true,
               "__name__": true,
               "instance": true,
               "job": true
+            },
+            "renameByName": {
+              "Value #A": "CPU %",
+              "Value #B": "Memory (GB)",
+              "Value #C": "GPU %",
+              "Value #D": "Running Jobs"
             }
           }
         }
-      ]
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "fieldMinMax": false,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 20,
+        "w": 12,
+        "x": 12,
+        "y": 65
+      },
+      "id": 12,
+      "options": {
+        "displayMode": "lcd",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "pluginVersion": "12.4.0-20648027705",
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "hpc_node_job_count{node=~\"$node\"}",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{node}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Jobs per Node",
+      "type": "bargauge"
     }
-  ]
+  ],
+  "preload": false,
+  "refresh": "10s",
+  "schemaVersion": 42,
+  "tags": [
+    "hpc",
+    "jobs",
+    "prometheus",
+    "nodes"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "includeAll": true,
+        "label": "Job",
+        "multi": true,
+        "name": "job",
+        "options": [],
+        "query": {
+          "query": "label_values(hpc_job_cpu_usage_percent, job_id)",
+          "refId": "jobVar"
+        },
+        "refresh": 1,
+        "regexApplyTo": "value",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "includeAll": true,
+        "label": "User",
+        "multi": true,
+        "name": "user",
+        "options": [],
+        "query": {
+          "query": "label_values(hpc_job_cpu_usage_percent, user)",
+          "refId": "userVar"
+        },
+        "refresh": 1,
+        "regexApplyTo": "value",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "includeAll": true,
+        "label": "Node",
+        "multi": true,
+        "name": "node",
+        "options": [],
+        "query": {
+          "query": "label_values(hpc_node_cpu_usage_percent, node)",
+          "refId": "nodeVar"
+        },
+        "refresh": 1,
+        "regexApplyTo": "value",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-5m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "HPC Job Observability",
+  "uid": "hpc-jobs",
+  "version": 1,
+  "weekStart": ""
 }
