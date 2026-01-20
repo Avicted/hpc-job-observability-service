@@ -216,6 +216,86 @@ All fields are optional. Only provided fields are updated.
 - `failed` - Job terminated with error
 - `cancelled` - Job cancelled by user
 
+---
+
+## Scheduler Integration
+
+The API is designed to support integration with external HPC workload managers like SLURM. Jobs can include optional scheduler metadata that preserves information from the source system.
+
+### Scheduler Info Object
+
+When creating or retrieving jobs, the `scheduler` field contains metadata from the external scheduler:
+
+```json
+{
+  "id": "job-001",
+  "user": "alice",
+  "nodes": ["node-01"],
+  "state": "running",
+  "start_time": "2026-01-20T10:00:00Z",
+  "scheduler": {
+    "type": "slurm",
+    "external_job_id": "12345",
+    "raw_state": "RUNNING",
+    "submit_time": "2026-01-20T09:55:00Z",
+    "partition": "gpu",
+    "account": "project_123",
+    "qos": "normal",
+    "priority": 100
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| type | string | Scheduler type: `mock` or `slurm` |
+| external_job_id | string | Original job ID in the scheduler |
+| raw_state | string | Original state string before normalization |
+| submit_time | string | Time job was submitted (ISO 8601) |
+| partition | string | Scheduler partition/queue name |
+| account | string | Account/project charged for the job |
+| qos | string | Quality of Service level |
+| priority | integer | Job priority in the scheduler queue |
+| exit_code | integer | Job exit code (after completion) |
+| extra | object | Additional scheduler-specific metadata |
+
+### SLURM State Mapping
+
+When integrating with SLURM, job states are normalized to the API's 5-state model:
+
+| Normalized State | SLURM States |
+|------------------|--------------|
+| `pending` | PENDING, CONFIGURING, REQUEUED, RESIZING, SUSPENDED |
+| `running` | RUNNING, COMPLETING, SIGNALING, STAGE_OUT |
+| `completed` | COMPLETED |
+| `failed` | FAILED, BOOT_FAIL, DEADLINE, NODE_FAIL, OUT_OF_MEMORY, TIMEOUT |
+| `cancelled` | CANCELLED, PREEMPTED, REVOKED |
+
+The original SLURM state is preserved in `scheduler.raw_state` for applications that need the detailed state information.
+
+### Creating Jobs with Scheduler Info
+
+When creating jobs from an external scheduler, include the scheduler metadata:
+
+```
+POST /v1/jobs
+```
+
+```json
+{
+  "id": "slurm-12345",
+  "user": "alice",
+  "nodes": ["node-01", "node-02"],
+  "scheduler": {
+    "type": "slurm",
+    "external_job_id": "12345",
+    "raw_state": "RUNNING",
+    "partition": "gpu",
+    "account": "project_a"
+  }
+}
+```
+
 **Response**
 
 Returns the updated job object.

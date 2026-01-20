@@ -167,6 +167,83 @@ This ensures:
 - Consistent validation
 - Easy client generation
 
+## Scheduler Integration
+
+The service is designed to integrate with external HPC workload managers like SLURM. A scheduler abstraction layer (`internal/scheduler`) provides:
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Scheduler Abstraction Layer                  │
+│                                                                 │
+│  ┌──────────────────────┐  ┌──────────────────────┐            │
+│  │   JobSource Interface │  │   StateMapping       │            │
+│  │                      │  │                      │            │
+│  │   - ListJobs()       │  │   - MapState()       │            │
+│  │   - GetJob()         │  │   - NormalizeState() │            │
+│  │   - GetJobMetrics()  │  │                      │            │
+│  └──────────────────────┘  └──────────────────────┘            │
+│             │                                                   │
+│      ┌──────┴───────┐                                          │
+│      ▼              ▼                                          │
+│  ┌───────────┐  ┌───────────┐                                  │
+│  │   Mock    │  │   SLURM   │                                  │
+│  │  Source   │  │   Source  │                                  │
+│  │           │  │           │                                  │
+│  │ (testing) │  │(slurmrestd)│                                  │
+│  └───────────┘  └───────────┘                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Job Model with Scheduler Metadata
+
+Jobs include optional `scheduler` metadata to preserve information from the source system:
+
+```go
+type Job struct {
+    ID             string
+    User           string
+    Nodes          []string
+    State          JobState       // Normalized: pending, running, completed, failed, cancelled
+    Scheduler      *SchedulerInfo // Optional external scheduler metadata
+    // ... other fields
+}
+
+type SchedulerInfo struct {
+    Type          SchedulerType // mock, slurm
+    ExternalJobID string        // Original job ID in scheduler
+    RawState      string        // Original state before normalization
+    Partition     string        // Queue/partition name
+    Account       string        // Project/account
+    Priority      *int          // Queue priority
+    // ... other fields
+}
+```
+
+### State Normalization
+
+External scheduler states are mapped to the API's 5-state model:
+
+| Normalized | SLURM States |
+|------------|--------------|
+| pending | PENDING, CONFIGURING, SUSPENDED |
+| running | RUNNING, COMPLETING |
+| completed | COMPLETED |
+| failed | FAILED, TIMEOUT, NODE_FAIL, OUT_OF_MEMORY |
+| cancelled | CANCELLED, PREEMPTED |
+
+The original state is preserved in `scheduler.raw_state` for detailed analysis.
+
+### Future Integration
+
+To integrate with a real SLURM cluster:
+
+1. Configure the SLURM REST API endpoint (slurmrestd)
+2. Implement periodic job sync using `SlurmJobSource`
+3. Jobs are automatically normalized to the API model
+4. Existing endpoints and Prometheus metrics work unchanged
+
 ## Configuration
 
 Configuration follows the 12-factor app methodology:

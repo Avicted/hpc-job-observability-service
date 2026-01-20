@@ -29,20 +29,43 @@ const (
 	JobStateCancelled JobState = "cancelled"
 )
 
+// SchedulerType identifies the type of scheduler backend.
+type SchedulerType string
+
+const (
+	SchedulerTypeMock  SchedulerType = "mock"
+	SchedulerTypeSlurm SchedulerType = "slurm"
+)
+
+// SchedulerInfo contains metadata from the external scheduler.
+type SchedulerInfo struct {
+	Type          SchedulerType          `json:"type"`
+	ExternalJobID string                 `json:"external_job_id,omitempty"`
+	RawState      string                 `json:"raw_state,omitempty"`
+	SubmitTime    *time.Time             `json:"submit_time,omitempty"`
+	Partition     string                 `json:"partition,omitempty"`
+	Account       string                 `json:"account,omitempty"`
+	QoS           string                 `json:"qos,omitempty"`
+	Priority      *int                   `json:"priority,omitempty"`
+	ExitCode      *int                   `json:"exit_code,omitempty"`
+	Extra         map[string]interface{} `json:"extra,omitempty"`
+}
+
 // Job represents a batch job with its metadata and current resource usage.
 type Job struct {
-	ID             string     `json:"id"`
-	User           string     `json:"user"`
-	Nodes          []string   `json:"nodes"`
-	State          JobState   `json:"state"`
-	StartTime      time.Time  `json:"start_time"`
-	EndTime        *time.Time `json:"end_time,omitempty"`
-	RuntimeSeconds float64    `json:"runtime_seconds,omitempty"`
-	CPUUsage       float64    `json:"cpu_usage"`
-	MemoryUsageMB  int64      `json:"memory_usage_mb"`
-	GPUUsage       *float64   `json:"gpu_usage,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID             string         `json:"id"`
+	User           string         `json:"user"`
+	Nodes          []string       `json:"nodes"`
+	State          JobState       `json:"state"`
+	StartTime      time.Time      `json:"start_time"`
+	EndTime        *time.Time     `json:"end_time,omitempty"`
+	RuntimeSeconds float64        `json:"runtime_seconds,omitempty"`
+	CPUUsage       float64        `json:"cpu_usage"`
+	MemoryUsageMB  int64          `json:"memory_usage_mb"`
+	GPUUsage       *float64       `json:"gpu_usage,omitempty"`
+	Scheduler      *SchedulerInfo `json:"scheduler,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
 }
 
 // MetricSample represents a single point-in-time resource usage measurement.

@@ -23,6 +23,12 @@ const (
 	Running   JobState = "running"
 )
 
+// Defines values for SchedulerInfoType.
+const (
+	Mock  SchedulerInfoType = "mock"
+	Slurm SchedulerInfoType = "slurm"
+)
+
 // CreateJobRequest defines model for CreateJobRequest.
 type CreateJobRequest struct {
 	// Id Unique job identifier
@@ -30,6 +36,10 @@ type CreateJobRequest struct {
 
 	// Nodes List of node names to allocate
 	Nodes []string `json:"nodes"`
+
+	// Scheduler Metadata from the external workload manager (e.g., SLURM).
+	// This information is populated when jobs are synced from an external scheduler.
+	Scheduler *SchedulerInfo `json:"scheduler,omitempty"`
 
 	// User User who submitted the job
 	User string `json:"user"`
@@ -84,6 +94,10 @@ type Job struct {
 
 	// RuntimeSeconds Total runtime in seconds
 	RuntimeSeconds *float64 `json:"runtime_seconds,omitempty"`
+
+	// Scheduler Metadata from the external workload manager (e.g., SLURM).
+	// This information is populated when jobs are synced from an external scheduler.
+	Scheduler *SchedulerInfo `json:"scheduler,omitempty"`
 
 	// StartTime Job start time
 	StartTime time.Time `json:"start_time"`
@@ -148,6 +162,44 @@ type RecordMetricsRequest struct {
 	// MemoryUsageMb Memory usage in megabytes
 	MemoryUsageMb int `json:"memory_usage_mb"`
 }
+
+// SchedulerInfo Metadata from the external workload manager (e.g., SLURM).
+// This information is populated when jobs are synced from an external scheduler.
+type SchedulerInfo struct {
+	// Account Account/project charged for the job
+	Account *string `json:"account,omitempty"`
+
+	// ExitCode Job exit code (available after completion)
+	ExitCode *int `json:"exit_code,omitempty"`
+
+	// ExternalJobId Job ID in the external scheduler (e.g., SLURM job_id)
+	ExternalJobId *string `json:"external_job_id,omitempty"`
+
+	// Extra Additional scheduler-specific metadata
+	Extra *map[string]interface{} `json:"extra,omitempty"`
+
+	// Partition Scheduler partition/queue name
+	Partition *string `json:"partition,omitempty"`
+
+	// Priority Job priority in the scheduler queue
+	Priority *int `json:"priority,omitempty"`
+
+	// Qos Quality of Service level
+	Qos *string `json:"qos,omitempty"`
+
+	// RawState Original state string from the scheduler before normalization.
+	// For SLURM: PENDING, RUNNING, COMPLETED, FAILED, CANCELLED, TIMEOUT, NODE_FAIL, etc.
+	RawState *string `json:"raw_state,omitempty"`
+
+	// SubmitTime Time when the job was submitted to the scheduler
+	SubmitTime *time.Time `json:"submit_time,omitempty"`
+
+	// Type Type of scheduler that manages this job
+	Type *SchedulerInfoType `json:"type,omitempty"`
+}
+
+// SchedulerInfoType Type of scheduler that manages this job
+type SchedulerInfoType string
 
 // UpdateJobRequest defines model for UpdateJobRequest.
 type UpdateJobRequest struct {

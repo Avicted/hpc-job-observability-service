@@ -490,6 +490,60 @@ components:
           minimum: 0
           maximum: 100
           description: Current GPU usage percentage (optional)
+        scheduler:
+          $ref: '#/components/schemas/SchedulerInfo'
+
+    SchedulerInfo:
+      type: object
+      description: |
+        Metadata from the external workload manager (e.g., SLURM).
+        This information is populated when jobs are synced from an external scheduler.
+      properties:
+        type:
+          type: string
+          enum:
+            - mock
+            - slurm
+          description: Type of scheduler that manages this job
+          example: slurm
+        external_job_id:
+          type: string
+          description: Job ID in the external scheduler (e.g., SLURM job_id)
+          example: "12345"
+        raw_state:
+          type: string
+          description: |
+            Original state string from the scheduler before normalization.
+            For SLURM: PENDING, RUNNING, COMPLETED, FAILED, CANCELLED, TIMEOUT, NODE_FAIL, etc.
+          example: COMPLETING
+        submit_time:
+          type: string
+          format: date-time
+          description: Time when the job was submitted to the scheduler
+        partition:
+          type: string
+          description: Scheduler partition/queue name
+          example: gpu
+        account:
+          type: string
+          description: Account/project charged for the job
+          example: project_123
+        qos:
+          type: string
+          description: Quality of Service level
+          example: normal
+        priority:
+          type: integer
+          description: Job priority in the scheduler queue
+          example: 100
+        exit_code:
+          type: integer
+          description: Job exit code (available after completion)
+          example: 0
+        extra:
+          type: object
+          additionalProperties: true
+          description: Additional scheduler-specific metadata
 
     CreateJobRequest:
       type: object
@@ -514,6 +568,8 @@ components:
             type: string
           minItems: 1
           description: List of node names to allocate
+        scheduler:
+          $ref: '#/components/schemas/SchedulerInfo'
 
     UpdateJobRequest:
       type: object

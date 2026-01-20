@@ -158,6 +158,7 @@ func (s *Server) CreateJob(w http.ResponseWriter, r *http.Request) {
 		Nodes:     req.Nodes,
 		State:     storage.JobStateRunning,
 		StartTime: time.Now(),
+		Scheduler: s.apiSchedulerToStorage(req.Scheduler),
 	}
 
 	if err := s.store.CreateJob(r.Context(), job); err != nil {
@@ -381,7 +382,94 @@ func (s *Server) storageJobToAPI(job *storage.Job) types.Job {
 		resp.RuntimeSeconds = &job.RuntimeSeconds
 	}
 
+	// Convert scheduler info if present
+	if job.Scheduler != nil {
+		resp.Scheduler = s.storageSchedulerToAPI(job.Scheduler)
+	}
+
 	return resp
+}
+
+func (s *Server) storageSchedulerToAPI(sched *storage.SchedulerInfo) *types.SchedulerInfo {
+	if sched == nil {
+		return nil
+	}
+
+	schedType := types.SchedulerInfoType(sched.Type)
+	result := &types.SchedulerInfo{
+		Type: &schedType,
+	}
+
+	if sched.ExternalJobID != "" {
+		result.ExternalJobId = &sched.ExternalJobID
+	}
+	if sched.RawState != "" {
+		result.RawState = &sched.RawState
+	}
+	if sched.SubmitTime != nil {
+		result.SubmitTime = sched.SubmitTime
+	}
+	if sched.Partition != "" {
+		result.Partition = &sched.Partition
+	}
+	if sched.Account != "" {
+		result.Account = &sched.Account
+	}
+	if sched.QoS != "" {
+		result.Qos = &sched.QoS
+	}
+	if sched.Priority != nil {
+		result.Priority = sched.Priority
+	}
+	if sched.ExitCode != nil {
+		result.ExitCode = sched.ExitCode
+	}
+	if len(sched.Extra) > 0 {
+		result.Extra = &sched.Extra
+	}
+
+	return result
+}
+
+func (s *Server) apiSchedulerToStorage(sched *types.SchedulerInfo) *storage.SchedulerInfo {
+	if sched == nil {
+		return nil
+	}
+
+	result := &storage.SchedulerInfo{}
+
+	if sched.Type != nil {
+		result.Type = storage.SchedulerType(*sched.Type)
+	}
+	if sched.ExternalJobId != nil {
+		result.ExternalJobID = *sched.ExternalJobId
+	}
+	if sched.RawState != nil {
+		result.RawState = *sched.RawState
+	}
+	if sched.SubmitTime != nil {
+		result.SubmitTime = sched.SubmitTime
+	}
+	if sched.Partition != nil {
+		result.Partition = *sched.Partition
+	}
+	if sched.Account != nil {
+		result.Account = *sched.Account
+	}
+	if sched.Qos != nil {
+		result.QoS = *sched.Qos
+	}
+	if sched.Priority != nil {
+		result.Priority = sched.Priority
+	}
+	if sched.ExitCode != nil {
+		result.ExitCode = sched.ExitCode
+	}
+	if sched.Extra != nil {
+		result.Extra = *sched.Extra
+	}
+
+	return result
 }
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, data interface{}) {
