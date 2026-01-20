@@ -21,7 +21,7 @@ The HPC Job Observability Service is a microservice designed to track and monito
 │  ┌────────────────────────────────────────────────────────────────────────┐  │
 │  │                           HTTP Server (net/http)                       │  │
 │  │                                                                        │  │
-│  │   /v1/health    /v1/jobs    /v1/jobs/{id}/metrics    /metrics         │  │
+│  │   /v1/health    /v1/jobs    /v1/jobs/{id}/metrics    /metrics          │  │
 │  └────────────────────────────────────────────────────────────────────────┘  │
 │                                      │                                       │
 │                                      ▼                                       │
@@ -34,21 +34,21 @@ The HPC Job Observability Service is a microservice designed to track and monito
 │  └────────────────────────────────────────────────────────────────────────┘  │
 │                    │                                    │                    │
 │                    ▼                                    ▼                    │
-│  ┌─────────────────────────────────┐  ┌─────────────────────────────────┐   │
-│  │         Storage Layer           │  │       Metrics Exporter          │   │
-│  │                                 │  │                                 │   │
-│  │   - Job CRUD operations         │  │   - Prometheus gauges/counters  │   │
-│  │   - Metrics recording           │  │   - Job state aggregation       │   │
-│  │   - Retention management        │  │   - Resource usage tracking     │   │
-│  └─────────────────────────────────┘  └─────────────────────────────────┘   │
+│  ┌─────────────────────────────────┐  ┌─────────────────────────────────┐    │
+│  │         Storage Layer           │  │       Metrics Exporter          │    │
+│  │                                 │  │                                 │    │
+│  │   - Job CRUD operations         │  │   - Prometheus gauges/counters  │    │
+│  │   - Metrics recording           │  │   - Job state aggregation       │    │
+│  │   - Retention management        │  │   - Resource usage tracking     │    │
+│  └─────────────────────────────────┘  └─────────────────────────────────┘    │
 │                    │                                                         │
 │                    ▼                                                         │
-│  ┌─────────────────────────────────┐  ┌─────────────────────────────────┐   │
-│  │          Collector              │  │                                 │   │
-│  │                                 │  │                                 │   │
-│  │   - Periodic metric sampling    │◀─│   Background Goroutine          │   │
-│  │   - Resource simulation (demo)  │  │                                 │   │
-│  └─────────────────────────────────┘  └─────────────────────────────────┘   │
+│  ┌─────────────────────────────────┐  ┌─────────────────────────────────┐    │
+│  │          Collector              │  │                                 │    │
+│  │                                 │  │                                 │    │
+│  │   - Periodic metric sampling    │◀─│   Background Goroutine         │    │
+│  │   - Resource simulation (demo)  │  │                                 │    │
+│  └─────────────────────────────────┘  └─────────────────────────────────┘    │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
                     │
