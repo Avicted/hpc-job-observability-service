@@ -1,6 +1,6 @@
 module github.com/avic/hpc-job-observability-service
 
-go 1.23.0
+go 1.25.5
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2

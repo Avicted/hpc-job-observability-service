@@ -33,7 +33,7 @@ A microservice for tracking and monitoring HPC (High Performance Computing) job 
 
 ### Prerequisites
 
-- Go 1.22+
+- Go 1.25+
 - Docker and Docker Compose (optional)
 
 ### Running Locally
@@ -261,11 +261,59 @@ go build -o mockserver ./cmd/mockserver
 ./mockserver
 ```
 
+## Scheduler Integration (SLURM)
+
+This service is designed to integrate with HPC workload managers like SLURM. The codebase includes:
+
+- **Scheduler Abstraction Layer** (`internal/scheduler/`) - Clean interface for job sources
+- **SLURM Client** (`internal/scheduler/slurm.go`) - Ready-to-use client for slurmrestd
+- **State Mapping** - Automatic normalization of SLURM states to the API model
+- **Scheduler Metadata** - Jobs preserve original SLURM metadata (partition, account, QoS, etc.)
+
+### How SLURM Integration Works
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   slurmrestd    │────▶│   SLURM Client  │────▶│  Observability  │
+│   (SLURM API)   │     │   (Go adapter)  │     │    Service      │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
+
+To integrate with a real SLURM cluster:
+
+1. **Configure slurmrestd** on your SLURM cluster (see [SLURM docs](https://slurm.schedmd.com/rest.html))
+2. **Set environment variables**:
+   ```bash
+   SLURM_REST_URL=http://your-slurm-head-node:6820
+   SLURM_AUTH_TOKEN=your-jwt-token
+   ```
+3. **Use the SLURM job source** in your sync logic (see `internal/scheduler/slurm.go`)
+
+### State Normalization
+
+SLURM states are automatically mapped to the API's 5-state model:
+
+| API State | SLURM States |
+|-----------|--------------|
+| `pending` | PENDING, CONFIGURING, REQUEUED, SUSPENDED |
+| `running` | RUNNING, COMPLETING |
+| `completed` | COMPLETED |
+| `failed` | FAILED, TIMEOUT, NODE_FAIL, OUT_OF_MEMORY |
+| `cancelled` | CANCELLED, PREEMPTED |
+
+The original SLURM state is preserved in the `scheduler.raw_state` field.
+
+For detailed integration documentation, see [Architecture - Scheduler Integration](docs/architecture.md#scheduler-integration).
+
 ## Documentation
 
 - [Architecture](docs/architecture.md) - System design and component overview
 - [API Reference](docs/api-reference.md) - Detailed endpoint documentation
 - [Development Guide](docs/development.md) - Setup and contribution guidelines
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 

@@ -63,7 +63,7 @@ The HPC Job Observability Service is a microservice designed to track and monito
 
 ### HTTP Layer
 
-The service uses Go's standard library `net/http` with the Go 1.22+ routing patterns. Routes are defined with method and path patterns like `GET /v1/jobs/{jobId}`.
+The service uses Go's standard library `net/http` with the Go 1.22+ enhanced routing patterns. Routes are defined with method and path patterns like `GET /v1/jobs/{jobId}`.
 
 The API follows REST conventions:
 - Versioned under `/v1` prefix

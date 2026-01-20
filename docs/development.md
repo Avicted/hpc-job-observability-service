@@ -4,7 +4,7 @@ This document covers development setup, workflows, and guidelines for contributi
 
 ## Prerequisites
 
-- Go 1.22 or later
+- Go 1.25 or later
 - Docker and Docker Compose (for integration testing)
 - oapi-codegen (for API code generation)
 
