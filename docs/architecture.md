@@ -46,7 +46,7 @@ The HPC Job Observability Service is a microservice designed to track and monito
 │  ┌─────────────────────────────────┐  ┌─────────────────────────────────┐    │
 │  │          Collector              │  │                                 │    │
 │  │                                 │  │                                 │    │
-│  │   - Periodic metric sampling    │◀─│   Background Goroutine         │    │
+│  │   - Periodic metric sampling    │◀─│   Background Goroutine          │    │
 │  │   - Resource simulation (demo)  │  │                                 │    │
 │  └─────────────────────────────────┘  └─────────────────────────────────┘    │
 │                                                                              │
