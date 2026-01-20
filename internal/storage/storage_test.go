@@ -282,8 +282,8 @@ func TestStressConcurrentJobs(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	jobCount := 500
-	workers := 10
+	jobCount := 5000
+	workers := 100
 	metricsSamplesPerJob := 3
 
 	jobsCh := make(chan int)
