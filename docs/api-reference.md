@@ -446,7 +446,7 @@ The service exposes Prometheus metrics at `/metrics`.
 GET /metrics
 ```
 
-**Available Metrics**
+### Job-Level Metrics
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
@@ -456,6 +456,17 @@ GET /metrics
 | hpc_job_gpu_usage_percent | gauge | job_id, user, node | GPU usage (0-100) |
 | hpc_job_state_total | gauge | state | Count of jobs by state |
 | hpc_job_total | counter | - | Total jobs created |
+
+### Node-Level Metrics
+
+Aggregated metrics from running jobs per node:
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| hpc_node_cpu_usage_percent | gauge | node | Avg CPU usage on node |
+| hpc_node_memory_usage_bytes | gauge | node | Total memory on node |
+| hpc_node_gpu_usage_percent | gauge | node | Avg GPU usage on node |
+| hpc_node_job_count | gauge | node | Running job count |
 
 **Example Output**
 
@@ -468,6 +479,16 @@ hpc_job_cpu_usage_percent{job_id="job-001",node="node-01",user="alice"} 75.5
 # TYPE hpc_job_state_total gauge
 hpc_job_state_total{state="running"} 2
 hpc_job_state_total{state="completed"} 5
+
+# HELP hpc_node_cpu_usage_percent Average CPU usage on the node
+# TYPE hpc_node_cpu_usage_percent gauge
+hpc_node_cpu_usage_percent{node="node-01"} 65.3
+hpc_node_cpu_usage_percent{node="node-02"} 82.1
+
+# HELP hpc_node_job_count Number of running jobs on the node
+# TYPE hpc_node_job_count gauge
+hpc_node_job_count{node="node-01"} 3
+hpc_node_job_count{node="node-02"} 2
 ```
 
 ---

@@ -63,6 +63,19 @@ func TestNewExporter(t *testing.T) {
 	if exporter.jobsTotal == nil {
 		t.Error("jobsTotal counter is nil")
 	}
+	// Node-level metrics
+	if exporter.nodeCPUUsagePercent == nil {
+		t.Error("nodeCPUUsagePercent gauge is nil")
+	}
+	if exporter.nodeMemoryUsageBytes == nil {
+		t.Error("nodeMemoryUsageBytes gauge is nil")
+	}
+	if exporter.nodeGPUUsagePercent == nil {
+		t.Error("nodeGPUUsagePercent gauge is nil")
+	}
+	if exporter.nodeJobCount == nil {
+		t.Error("nodeJobCount gauge is nil")
+	}
 }
 
 func TestExporter_Register(t *testing.T) {
@@ -300,4 +313,145 @@ func TestExporter_Register_DuplicateCollector(t *testing.T) {
 		// The error message varies, but registration should fail
 		t.Logf("Got expected error: %v", err)
 	}
+}
+
+func TestExporter_NodeMetrics(t *testing.T) {
+	store := testStore(t)
+	exporter := NewExporter(store)
+	ctx := context.Background()
+
+	// Create multiple running jobs on same and different nodes
+	gpuUsage1 := 60.0
+	gpuUsage2 := 80.0
+
+	jobs := []*storage.Job{
+		{
+			ID:            "node-test-001",
+			User:          "alice",
+			Nodes:         []string{"node-01", "node-02"},
+			State:         storage.JobStateRunning,
+			StartTime:     time.Now().Add(-1 * time.Hour),
+			CPUUsage:      70.0,
+			MemoryUsageMB: 4096,
+			GPUUsage:      &gpuUsage1,
+		},
+		{
+			ID:            "node-test-002",
+			User:          "bob",
+			Nodes:         []string{"node-01"}, // Same node as job 1
+			State:         storage.JobStateRunning,
+			StartTime:     time.Now().Add(-30 * time.Minute),
+			CPUUsage:      50.0,
+			MemoryUsageMB: 2048,
+			GPUUsage:      &gpuUsage2,
+		},
+		{
+			ID:            "node-test-003",
+			User:          "charlie",
+			Nodes:         []string{"node-03"},
+			State:         storage.JobStateRunning,
+			StartTime:     time.Now().Add(-15 * time.Minute),
+			CPUUsage:      90.0,
+			MemoryUsageMB: 8192,
+			GPUUsage:      nil, // No GPU
+		},
+		{
+			ID:             "node-test-004",
+			User:           "diana",
+			Nodes:          []string{"node-04"},
+			State:          storage.JobStateCompleted, // Not running - should not count in node metrics
+			StartTime:      time.Now().Add(-2 * time.Hour),
+			RuntimeSeconds: 3600,
+			CPUUsage:       80.0,
+			MemoryUsageMB:  4096,
+		},
+	}
+
+	for _, job := range jobs {
+		if err := store.CreateJob(ctx, job); err != nil {
+			t.Fatalf("Failed to create job %s: %v", job.ID, err)
+		}
+	}
+
+	// Collect metrics
+	if err := exporter.Collect(ctx); err != nil {
+		t.Fatalf("Collect failed: %v", err)
+	}
+
+	// Node metrics are aggregated from running jobs only
+	// node-01: 2 jobs (70 + 50 CPU = avg 60), (4096 + 2048 = 6144 MB memory), (60 + 80 GPU = avg 70)
+	// node-02: 1 job (70 CPU), (4096 MB), (60 GPU)
+	// node-03: 1 job (90 CPU), (8192 MB), no GPU
+	// node-04: 0 running jobs (completed job should not count)
+}
+
+func TestExporter_NodeMetrics_NoRunningJobs(t *testing.T) {
+	store := testStore(t)
+	exporter := NewExporter(store)
+	ctx := context.Background()
+
+	// Create only completed/pending jobs - no running jobs
+	endTime := time.Now()
+	jobs := []*storage.Job{
+		{
+			ID:             "completed-001",
+			User:           "alice",
+			Nodes:          []string{"node-01"},
+			State:          storage.JobStateCompleted,
+			StartTime:      time.Now().Add(-2 * time.Hour),
+			EndTime:        &endTime,
+			RuntimeSeconds: 3600,
+			CPUUsage:       0,
+			MemoryUsageMB:  0,
+		},
+		{
+			ID:            "pending-001",
+			User:          "bob",
+			Nodes:         []string{"node-02"},
+			State:         storage.JobStatePending,
+			StartTime:     time.Now(),
+			CPUUsage:      0,
+			MemoryUsageMB: 0,
+		},
+	}
+
+	for _, job := range jobs {
+		if err := store.CreateJob(ctx, job); err != nil {
+			t.Fatalf("Failed to create job %s: %v", job.ID, err)
+		}
+	}
+
+	// Collect should succeed even with no running jobs
+	if err := exporter.Collect(ctx); err != nil {
+		t.Fatalf("Collect failed: %v", err)
+	}
+}
+
+func TestExporter_NodeMetrics_MultiNodeJob(t *testing.T) {
+	store := testStore(t)
+	exporter := NewExporter(store)
+	ctx := context.Background()
+
+	// Create a multi-node job - metrics should be recorded for each node
+	gpuUsage := 75.0
+	job := &storage.Job{
+		ID:            "multinode-001",
+		User:          "alice",
+		Nodes:         []string{"node-01", "node-02", "node-03", "node-04"},
+		State:         storage.JobStateRunning,
+		StartTime:     time.Now().Add(-1 * time.Hour),
+		CPUUsage:      85.0,
+		MemoryUsageMB: 16384,
+		GPUUsage:      &gpuUsage,
+	}
+
+	if err := store.CreateJob(ctx, job); err != nil {
+		t.Fatalf("Failed to create job: %v", err)
+	}
+
+	if err := exporter.Collect(ctx); err != nil {
+		t.Fatalf("Collect failed: %v", err)
+	}
+
+	// All 4 nodes should have metrics recorded
 }

@@ -789,13 +789,23 @@ func TestSQLiteStorage_SeedDemoData(t *testing.T) {
 		t.Errorf("SeedDemoData failed: %v", err)
 	}
 
-	// Verify jobs were created
+	// Verify jobs were created - expect 100 demo jobs
 	jobs, err := store.GetAllJobs(ctx)
 	if err != nil {
 		t.Errorf("GetAllJobs failed: %v", err)
 	}
-	if len(jobs) == 0 {
-		t.Error("Expected demo jobs to be created")
+	if len(jobs) != 100 {
+		t.Errorf("Expected 100 demo jobs, got %d", len(jobs))
+	}
+
+	// Verify jobs have varied states
+	stateCounts := make(map[JobState]int)
+	for _, job := range jobs {
+		stateCounts[job.State]++
+	}
+	// Should have jobs in multiple states
+	if len(stateCounts) < 3 {
+		t.Errorf("Expected jobs in multiple states, got %d unique states", len(stateCounts))
 	}
 
 	// Run again to exercise duplicate handling

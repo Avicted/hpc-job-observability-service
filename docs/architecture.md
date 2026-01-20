@@ -103,6 +103,8 @@ Both implementations support:
 
 The Prometheus exporter maintains real-time metrics:
 
+#### Job-Level Metrics
+
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `hpc_job_runtime_seconds` | Gauge | job_id, user, node | Current runtime |
@@ -111,6 +113,22 @@ The Prometheus exporter maintains real-time metrics:
 | `hpc_job_gpu_usage_percent` | Gauge | job_id, user, node | GPU utilization |
 | `hpc_job_state_total` | Gauge | state | Jobs by state |
 | `hpc_job_total` | Counter | - | Total jobs created |
+
+#### Node-Level Metrics
+
+Node metrics are aggregated from running jobs only:
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `hpc_node_cpu_usage_percent` | Gauge | node | Avg CPU usage across running jobs |
+| `hpc_node_memory_usage_bytes` | Gauge | node | Total memory from running jobs |
+| `hpc_node_gpu_usage_percent` | Gauge | node | Avg GPU usage across GPU jobs |
+| `hpc_node_job_count` | Gauge | node | Count of running jobs on node |
+
+Node metrics enable cluster-wide visibility:
+- Identify hot spots (nodes with high resource usage)
+- Track job distribution across the cluster
+- Monitor capacity utilization per node
 
 ### Collector
 
