@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -140,4 +141,111 @@ func TestSimulateUsage(t *testing.T) {
 			}
 		}
 	})
+}
+
+type fakeStorage struct {
+	jobs        []*storage.Job
+	getAllErr   error
+	recordErr   error
+	updateErr   error
+	getAllCalls int
+	updateCalls int
+	recorded    []*storage.MetricSample
+}
+
+func (f *fakeStorage) CreateJob(ctx context.Context, job *storage.Job) error { return nil }
+func (f *fakeStorage) GetJob(ctx context.Context, id string) (*storage.Job, error) {
+	return nil, storage.ErrJobNotFound
+}
+func (f *fakeStorage) UpdateJob(ctx context.Context, job *storage.Job) error {
+	f.updateCalls++
+	return f.updateErr
+}
+func (f *fakeStorage) DeleteJob(ctx context.Context, id string) error { return nil }
+func (f *fakeStorage) ListJobs(ctx context.Context, filter storage.JobFilter) ([]*storage.Job, int, error) {
+	return nil, 0, nil
+}
+func (f *fakeStorage) GetAllJobs(ctx context.Context) ([]*storage.Job, error) {
+	f.getAllCalls++
+	if f.getAllErr != nil {
+		return nil, f.getAllErr
+	}
+	return f.jobs, nil
+}
+func (f *fakeStorage) RecordMetrics(ctx context.Context, sample *storage.MetricSample) error {
+	f.recorded = append(f.recorded, sample)
+	return f.recordErr
+}
+func (f *fakeStorage) GetJobMetrics(ctx context.Context, jobID string, filter storage.MetricsFilter) ([]*storage.MetricSample, int, error) {
+	return nil, 0, nil
+}
+func (f *fakeStorage) GetLatestMetrics(ctx context.Context, jobID string) (*storage.MetricSample, error) {
+	return nil, nil
+}
+func (f *fakeStorage) DeleteMetricsBefore(cutoff time.Time) error { return nil }
+func (f *fakeStorage) Migrate() error                             { return nil }
+func (f *fakeStorage) Close() error                               { return nil }
+func (f *fakeStorage) SeedDemoData() error                        { return nil }
+
+func TestCollector_CollectAll_GetAllJobsError(t *testing.T) {
+	store := &fakeStorage{getAllErr: errors.New("db error")}
+	exporter := metrics.NewExporter(store)
+	coll := NewWithInterval(store, exporter, 10*time.Millisecond)
+
+	coll.CollectOnce()
+
+	if store.getAllCalls != 1 {
+		t.Fatalf("expected 1 GetAllJobs call, got %d", store.getAllCalls)
+	}
+}
+
+func TestCollector_CollectJobMetrics_RecordError(t *testing.T) {
+	store := &fakeStorage{
+		jobs: []*storage.Job{{
+			ID:            "job-1",
+			User:          "alice",
+			Nodes:         []string{"node-1"},
+			State:         storage.JobStateRunning,
+			StartTime:     time.Now().Add(-time.Minute),
+			CPUUsage:      50,
+			MemoryUsageMB: 1024,
+		}},
+		recordErr: errors.New("record failed"),
+	}
+	exporter := metrics.NewExporter(store)
+	coll := NewWithInterval(store, exporter, 10*time.Millisecond)
+
+	coll.CollectOnce()
+
+	if store.updateCalls != 0 {
+		t.Fatalf("expected UpdateJob not to be called, got %d", store.updateCalls)
+	}
+}
+
+func TestCollector_CollectJobMetrics_UpdateErrorAndGPU(t *testing.T) {
+	gpu := 45.0
+	store := &fakeStorage{
+		jobs: []*storage.Job{{
+			ID:            "job-gpu",
+			User:          "alice",
+			Nodes:         []string{"node-1"},
+			State:         storage.JobStateRunning,
+			StartTime:     time.Now().Add(-time.Minute),
+			CPUUsage:      50,
+			MemoryUsageMB: 1024,
+			GPUUsage:      &gpu,
+		}},
+		updateErr: errors.New("update failed"),
+	}
+	exporter := metrics.NewExporter(store)
+	coll := NewWithInterval(store, exporter, 10*time.Millisecond)
+
+	coll.CollectOnce()
+
+	if store.updateCalls != 1 {
+		t.Fatalf("expected UpdateJob to be called once, got %d", store.updateCalls)
+	}
+	if len(store.recorded) == 0 || store.recorded[0].GPUUsage == nil {
+		t.Fatal("expected GPUUsage to be recorded")
+	}
 }

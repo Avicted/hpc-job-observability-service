@@ -183,7 +183,15 @@ go generate ./...
 
 ```bash
 go test ./...
-go test ./... -cover
+./scripts/coverage.sh
+```
+
+The coverage script excludes non-testable packages (cmd/* and generated API server/types) from coverage totals.
+
+To run the concurrent job stress test:
+
+```bash
+STRESS_TEST=1 go test ./internal/storage -run TestStressConcurrentJobs
 ```
 
 ### Mock Server

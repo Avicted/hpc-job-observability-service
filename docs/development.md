@@ -143,10 +143,12 @@ go test ./...
 go test ./... -v
 
 # Run with coverage
-go test ./... -cover -coverprofile=coverage.out
+./scripts/coverage.sh
 
 # View coverage report
 go tool cover -html=coverage.out
+
+The coverage script excludes cmd/* and generated API server/types packages from totals.
 ```
 
 ### Linting

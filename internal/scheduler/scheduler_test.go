@@ -187,3 +187,218 @@ func TestMockJobSourceGenerateDemoJobs(t *testing.T) {
 		}
 	}
 }
+
+func TestMockJobSource_ListJobsWithUserFilter(t *testing.T) {
+	ctx := context.Background()
+	source := NewMockJobSource()
+
+	// Add jobs with different users
+	source.AddJob(&Job{ID: "job-1", User: "alice", State: JobStateRunning})
+	source.AddJob(&Job{ID: "job-2", User: "bob", State: JobStateRunning})
+	source.AddJob(&Job{ID: "job-3", User: "alice", State: JobStatePending})
+
+	user := "alice"
+	jobs, err := source.ListJobs(ctx, JobFilter{User: &user})
+	if err != nil {
+		t.Fatalf("ListJobs() error = %v", err)
+	}
+	if len(jobs) != 2 {
+		t.Errorf("ListJobs(user=alice) returned %d jobs, want 2", len(jobs))
+	}
+	for _, job := range jobs {
+		if job.User != "alice" {
+			t.Errorf("Job %s has User = %s, want alice", job.ID, job.User)
+		}
+	}
+}
+
+func TestMockJobSource_GetJobMetrics_NotFound(t *testing.T) {
+	ctx := context.Background()
+	source := NewMockJobSource()
+
+	metrics, err := source.GetJobMetrics(ctx, "nonexistent")
+	if err != nil {
+		t.Fatalf("GetJobMetrics() error = %v", err)
+	}
+	if len(metrics) != 0 {
+		t.Errorf("GetJobMetrics(nonexistent) returned %d samples, want 0", len(metrics))
+	}
+}
+
+func TestJobState_AllStates(t *testing.T) {
+	states := []JobState{
+		JobStatePending,
+		JobStateRunning,
+		JobStateCompleted,
+		JobStateFailed,
+		JobStateCancelled,
+	}
+
+	expectedStrings := []string{
+		"pending",
+		"running",
+		"completed",
+		"failed",
+		"cancelled",
+	}
+
+	for i, state := range states {
+		if string(state) != expectedStrings[i] {
+			t.Errorf("JobState %v = %s, want %s", state, string(state), expectedStrings[i])
+		}
+	}
+}
+
+func TestSchedulerType_AllTypes(t *testing.T) {
+	types := []SchedulerType{
+		SchedulerTypeMock,
+		SchedulerTypeSlurm,
+	}
+
+	expectedStrings := []string{
+		"mock",
+		"slurm",
+	}
+
+	for i, stype := range types {
+		if string(stype) != expectedStrings[i] {
+			t.Errorf("SchedulerType %v = %s, want %s", stype, string(stype), expectedStrings[i])
+		}
+	}
+}
+
+func TestStateMapping_AllSlurmStates(t *testing.T) {
+	mapper := NewSlurmStateMapping()
+
+	// Complete list of SLURM states
+	slurmStates := map[string]JobState{
+		"PENDING":       JobStatePending,
+		"CONFIGURING":   JobStatePending,
+		"SUSPENDED":     JobStatePending,
+		"REQUEUED":      JobStatePending,
+		"RESV_DEL_HOLD": JobStatePending,
+		"SPECIAL_EXIT":  JobStatePending,
+		"RUNNING":       JobStateRunning,
+		"COMPLETING":    JobStateRunning,
+		"COMPLETED":     JobStateCompleted,
+		"FAILED":        JobStateFailed,
+		"NODE_FAIL":     JobStateFailed,
+		"OUT_OF_MEMORY": JobStateFailed,
+		"TIMEOUT":       JobStateFailed,
+		"BOOT_FAIL":     JobStateFailed,
+		"CANCELLED":     JobStateCancelled,
+		"PREEMPTED":     JobStateCancelled,
+		"REVOKED":       JobStateCancelled,
+		"DEADLINE":      JobStateFailed,
+	}
+
+	for slurm, expected := range slurmStates {
+		got, found := mapper.MapState(slurm)
+		if !found {
+			t.Errorf("MapState(%s) not found, expected mapping to %s", slurm, expected)
+		}
+		if got != expected {
+			t.Errorf("MapState(%s) = %s, want %s", slurm, got, expected)
+		}
+	}
+}
+
+func TestMockJobSource_MultipleJobs(t *testing.T) {
+	ctx := context.Background()
+	source := NewMockJobSource()
+
+	// Add various jobs
+	source.AddJob(&Job{ID: "job-pending", User: "user1", State: JobStatePending, Nodes: []string{"node-01"}})
+	source.AddJob(&Job{ID: "job-running", User: "user2", State: JobStateRunning, Nodes: []string{"node-02"}})
+	source.AddJob(&Job{ID: "job-completed", User: "user1", State: JobStateCompleted, Nodes: []string{"node-01"}})
+	source.AddJob(&Job{ID: "job-failed", User: "user3", State: JobStateFailed, Nodes: []string{"node-03"}})
+	source.AddJob(&Job{ID: "job-cancelled", User: "user2", State: JobStateCancelled, Nodes: []string{"node-02"}})
+
+	// Test listing all
+	jobs, _ := source.ListJobs(ctx, JobFilter{})
+	if len(jobs) != 5 {
+		t.Errorf("ListJobs() returned %d jobs, want 5", len(jobs))
+	}
+
+	// Test each state filter
+	stateCounts := map[JobState]int{
+		JobStatePending:   1,
+		JobStateRunning:   1,
+		JobStateCompleted: 1,
+		JobStateFailed:    1,
+		JobStateCancelled: 1,
+	}
+
+	for state, expectedCount := range stateCounts {
+		s := state
+		jobs, _ := source.ListJobs(ctx, JobFilter{State: &s})
+		if len(jobs) != expectedCount {
+			t.Errorf("ListJobs(state=%s) returned %d jobs, want %d", state, len(jobs), expectedCount)
+		}
+	}
+}
+
+func TestMockJobSource_SchedulerInfoFields(t *testing.T) {
+	ctx := context.Background()
+	source := NewMockJobSource()
+
+	priority := 100
+	exitCode := 0
+	job := &Job{
+		ID:    "detailed-job",
+		User:  "testuser",
+		State: JobStateRunning,
+		Nodes: []string{"node-01"},
+		Scheduler: &SchedulerInfo{
+			Type:          SchedulerTypeMock,
+			ExternalJobID: "ext-123",
+			RawState:      "MOCK_RUNNING",
+			Partition:     "gpu",
+			Account:       "account1",
+			QoS:           "high",
+			Priority:      &priority,
+			ExitCode:      &exitCode,
+			Extra:         map[string]interface{}{"key": "value"},
+		},
+	}
+	source.AddJob(job)
+
+	retrieved, _ := source.GetJob(ctx, "detailed-job")
+	if retrieved.Scheduler.ExternalJobID != "ext-123" {
+		t.Errorf("ExternalJobID = %s, want ext-123", retrieved.Scheduler.ExternalJobID)
+	}
+	if retrieved.Scheduler.Partition != "gpu" {
+		t.Errorf("Partition = %s, want gpu", retrieved.Scheduler.Partition)
+	}
+	if retrieved.Scheduler.Account != "account1" {
+		t.Errorf("Account = %s, want account1", retrieved.Scheduler.Account)
+	}
+	if *retrieved.Scheduler.Priority != 100 {
+		t.Errorf("Priority = %d, want 100", *retrieved.Scheduler.Priority)
+	}
+}
+
+func TestJobFilter_CombinedFilters(t *testing.T) {
+	ctx := context.Background()
+	source := NewMockJobSource()
+
+	// Add jobs with various combinations
+	source.AddJob(&Job{ID: "job-1", User: "alice", State: JobStateRunning})
+	source.AddJob(&Job{ID: "job-2", User: "alice", State: JobStatePending})
+	source.AddJob(&Job{ID: "job-3", User: "bob", State: JobStateRunning})
+	source.AddJob(&Job{ID: "job-4", User: "bob", State: JobStatePending})
+
+	// Filter by user and state
+	user := "alice"
+	state := JobStateRunning
+	jobs, err := source.ListJobs(ctx, JobFilter{User: &user, State: &state})
+	if err != nil {
+		t.Fatalf("ListJobs() error = %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Errorf("ListJobs(user=alice, state=running) returned %d jobs, want 1", len(jobs))
+	}
+	if len(jobs) == 1 && jobs[0].ID != "job-1" {
+		t.Errorf("Expected job-1, got %s", jobs[0].ID)
+	}
+}

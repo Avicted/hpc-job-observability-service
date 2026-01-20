@@ -70,7 +70,7 @@
         {
             "label": "Test with Coverage",
             "type": "shell",
-            "command": "go test ./... -cover -coverprofile=coverage.out",
+            "command": "./scripts/coverage.sh",
             "group": "test",
             "problemMatcher": [
                 "$go"

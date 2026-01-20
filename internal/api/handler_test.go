@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -405,5 +406,544 @@ func TestPrometheusMetricsEndpoint(t *testing.T) {
 	body := rec.Body.String()
 	if len(body) == 0 {
 		t.Error("Expected non-empty metrics response")
+	}
+}
+
+func TestCreateJob_InvalidJSON(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader([]byte("invalid json")))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestCreateJob_MissingUser(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	reqBody := types.CreateJobRequest{
+		Id:    "job-missing-user",
+		Nodes: []string{"node-1"},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestCreateJob_MissingNodes(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	reqBody := types.CreateJobRequest{
+		Id:   "job-missing-nodes",
+		User: "testuser",
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestCreateJob_WithSchedulerInfo(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	schedType := types.Slurm
+	extJobID := "12345"
+	rawState := "RUNNING"
+	partition := "gpu"
+	account := "project_a"
+	qos := "normal"
+	priority := 100
+
+	reqBody := types.CreateJobRequest{
+		Id:    "job-with-scheduler",
+		User:  "testuser",
+		Nodes: []string{"node-1"},
+		Scheduler: &types.SchedulerInfo{
+			Type:          &schedType,
+			ExternalJobId: &extJobID,
+			RawState:      &rawState,
+			Partition:     &partition,
+			Account:       &account,
+			Qos:           &qos,
+			Priority:      &priority,
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("Expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp types.Job
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if resp.Scheduler == nil {
+		t.Error("Expected scheduler info in response")
+	}
+	if resp.Scheduler != nil && *resp.Scheduler.Type != types.Slurm {
+		t.Errorf("Expected scheduler type 'slurm', got '%v'", *resp.Scheduler.Type)
+	}
+}
+
+func TestUpdateJob_InvalidJSON(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	// Create a job first
+	store.CreateJob(context.Background(), &storage.Job{
+		ID:    "update-invalid-json",
+		User:  "testuser",
+		Nodes: []string{"node-1"},
+		State: storage.JobStateRunning,
+	})
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/update-invalid-json", bytes.NewReader([]byte("invalid")))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestUpdateJob_NotFound(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	state := types.Completed
+	reqBody := types.UpdateJobRequest{State: &state}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/nonexistent", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", rec.Code)
+	}
+}
+
+func TestUpdateJob_InvalidState(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	// Create a job first
+	store.CreateJob(context.Background(), &storage.Job{
+		ID:    "update-invalid-state",
+		User:  "testuser",
+		Nodes: []string{"node-1"},
+		State: storage.JobStateRunning,
+	})
+
+	invalidState := types.JobState("invalid")
+	reqBody := types.UpdateJobRequest{State: &invalidState}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/update-invalid-state", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestUpdateJob_AllFields(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	// Create a job first
+	store.CreateJob(context.Background(), &storage.Job{
+		ID:        "update-all-fields",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	})
+
+	state := types.Completed
+	cpuUsage := 90.5
+	memUsage := 8192
+	gpuUsage := 75.0
+	reqBody := types.UpdateJobRequest{
+		State:         &state,
+		CpuUsage:      &cpuUsage,
+		MemoryUsageMb: &memUsage,
+		GpuUsage:      &gpuUsage,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/update-all-fields", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp types.Job
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if *resp.CpuUsage != 90.5 {
+		t.Errorf("Expected CPU usage 90.5, got %f", *resp.CpuUsage)
+	}
+	if *resp.MemoryUsageMb != 8192 {
+		t.Errorf("Expected memory 8192, got %d", *resp.MemoryUsageMb)
+	}
+	if *resp.GpuUsage != 75.0 {
+		t.Errorf("Expected GPU usage 75.0, got %f", *resp.GpuUsage)
+	}
+}
+
+func TestDeleteJob_NotFound(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	req := httptest.NewRequest(http.MethodDelete, "/v1/jobs/nonexistent", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", rec.Code)
+	}
+}
+
+func TestListJobs_WithAllFilters(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	// Create test jobs
+	for i := 0; i < 5; i++ {
+		store.CreateJob(context.Background(), &storage.Job{
+			ID:    "filter-job-" + string(rune('0'+i)),
+			User:  "alice",
+			Nodes: []string{"node-01"},
+			State: storage.JobStateRunning,
+		})
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs?state=running&user=alice&node=node-01&limit=3&offset=1", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", rec.Code)
+	}
+
+	var resp types.JobListResponse
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if resp.Limit != 3 {
+		t.Errorf("Expected limit 3, got %d", resp.Limit)
+	}
+	if resp.Offset != 1 {
+		t.Errorf("Expected offset 1, got %d", resp.Offset)
+	}
+}
+
+func TestRecordMetrics_InvalidJSON(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	// Create a job first
+	store.CreateJob(context.Background(), &storage.Job{
+		ID:        "metrics-invalid-json",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/metrics-invalid-json/metrics", bytes.NewReader([]byte("invalid")))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestRecordMetrics_InvalidCPUUsage(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	// Create a job first
+	store.CreateJob(context.Background(), &storage.Job{
+		ID:        "metrics-invalid-cpu",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	})
+
+	// CPU usage > 100
+	reqBody := types.RecordMetricsRequest{
+		CpuUsage:      150.0,
+		MemoryUsageMb: 1024,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/metrics-invalid-cpu/metrics", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", rec.Code)
+	}
+
+	// CPU usage < 0
+	reqBody.CpuUsage = -10.0
+	body, _ = json.Marshal(reqBody)
+
+	req = httptest.NewRequest(http.MethodPost, "/v1/jobs/metrics-invalid-cpu/metrics", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400 for negative CPU, got %d", rec.Code)
+	}
+}
+
+func TestRecordMetrics_InvalidMemoryUsage(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	// Create a job first
+	store.CreateJob(context.Background(), &storage.Job{
+		ID:        "metrics-invalid-mem",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	})
+
+	reqBody := types.RecordMetricsRequest{
+		CpuUsage:      50.0,
+		MemoryUsageMb: -100,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/metrics-invalid-mem/metrics", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestGetJobMetrics_WithTimeFilters(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+	handler := srv.Routes()
+
+	// Create a job
+	store.CreateJob(context.Background(), &storage.Job{
+		ID:        "metrics-time-filter",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	})
+
+	// Record some metrics
+	for i := 0; i < 10; i++ {
+		store.RecordMetrics(context.Background(), &storage.MetricSample{
+			JobID:         "metrics-time-filter",
+			Timestamp:     time.Now().Add(time.Duration(i) * time.Minute),
+			CPUUsage:      float64(50 + i),
+			MemoryUsageMB: 1024,
+		})
+	}
+
+	now := time.Now().UTC()
+	startTime := url.QueryEscape(now.Add(-5 * time.Minute).Format(time.RFC3339))
+	endTime := url.QueryEscape(now.Add(5 * time.Minute).Format(time.RFC3339))
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/metrics-time-filter/metrics?start_time="+startTime+"&end_time="+endTime+"&limit=5", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestStorageJobToAPI_AllFields(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+
+	gpuUsage := 50.0
+	endTime := time.Now()
+	priority := 100
+	exitCode := 0
+	extra := map[string]interface{}{"key": "value"}
+	submitTime := time.Now().Add(-1 * time.Hour)
+
+	job := &storage.Job{
+		ID:             "full-job",
+		User:           "testuser",
+		Nodes:          []string{"node-1", "node-2"},
+		State:          storage.JobStateCompleted,
+		StartTime:      time.Now().Add(-2 * time.Hour),
+		EndTime:        &endTime,
+		RuntimeSeconds: 3600,
+		CPUUsage:       75.0,
+		MemoryUsageMB:  4096,
+		GPUUsage:       &gpuUsage,
+		Scheduler: &storage.SchedulerInfo{
+			Type:          storage.SchedulerTypeSlurm,
+			ExternalJobID: "12345",
+			RawState:      "COMPLETED",
+			SubmitTime:    &submitTime,
+			Partition:     "gpu",
+			Account:       "project_a",
+			QoS:           "normal",
+			Priority:      &priority,
+			ExitCode:      &exitCode,
+			Extra:         extra,
+		},
+	}
+
+	apiJob := srv.storageJobToAPI(job)
+
+	if apiJob.Id != "full-job" {
+		t.Errorf("Expected ID 'full-job', got '%s'", apiJob.Id)
+	}
+	if apiJob.EndTime == nil {
+		t.Error("Expected EndTime to be set")
+	}
+	if apiJob.RuntimeSeconds == nil || *apiJob.RuntimeSeconds != 3600 {
+		t.Error("Expected RuntimeSeconds to be 3600")
+	}
+	if apiJob.Scheduler == nil {
+		t.Fatal("Expected Scheduler info")
+	}
+	if *apiJob.Scheduler.Type != types.Slurm {
+		t.Errorf("Expected scheduler type slurm")
+	}
+	if apiJob.Scheduler.Extra == nil {
+		t.Error("Expected Extra to be set")
+	}
+}
+
+func TestAPISchedulerToStorage_NilInput(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+
+	result := srv.apiSchedulerToStorage(nil)
+	if result != nil {
+		t.Error("Expected nil result for nil input")
+	}
+}
+
+func TestStorageSchedulerToAPI_NilInput(t *testing.T) {
+	store := testStore(t)
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+
+	result := srv.storageSchedulerToAPI(nil)
+	if result != nil {
+		t.Error("Expected nil result for nil input")
+	}
+}
+
+func TestIsValidState(t *testing.T) {
+	validStates := []storage.JobState{
+		storage.JobStatePending,
+		storage.JobStateRunning,
+		storage.JobStateCompleted,
+		storage.JobStateFailed,
+		storage.JobStateCancelled,
+	}
+
+	for _, state := range validStates {
+		if !isValidState(state) {
+			t.Errorf("Expected state '%s' to be valid", state)
+		}
+	}
+
+	if isValidState(storage.JobState("invalid")) {
+		t.Error("Expected 'invalid' state to be invalid")
 	}
 }
