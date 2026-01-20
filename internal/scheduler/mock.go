@@ -3,6 +3,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -109,103 +110,84 @@ func (m *MockJobSource) AddMetrics(jobID string, samples []*MetricSample) {
 func (m *MockJobSource) GenerateDemoJobs() {
 	now := time.Now()
 
-	demoJobs := []*Job{
-		{
-			ID:            "mock-job-001",
-			User:          "alice",
-			Nodes:         []string{"node-01", "node-02"},
-			State:         JobStateRunning,
-			StartTime:     now.Add(-2 * time.Hour),
-			CPUUsage:      78.5,
-			MemoryUsageMB: 8192,
-			GPUUsage:      floatPtr(45.0),
-			Scheduler: &SchedulerInfo{
-				Type:          SchedulerTypeMock,
-				ExternalJobID: "mock-job-001",
-				RawState:      "RUNNING",
-				SubmitTime:    timePtr(now.Add(-3 * time.Hour)),
-				Partition:     "gpu",
-				Account:       "project_a",
-				Priority:      intPtr(100),
-			},
-		},
-		{
-			ID:            "mock-job-002",
-			User:          "bob",
-			Nodes:         []string{"node-03"},
-			State:         JobStateRunning,
-			StartTime:     now.Add(-30 * time.Minute),
-			CPUUsage:      92.3,
-			MemoryUsageMB: 16384,
-			GPUUsage:      floatPtr(88.0),
-			Scheduler: &SchedulerInfo{
-				Type:          SchedulerTypeMock,
-				ExternalJobID: "mock-job-002",
-				RawState:      "RUNNING",
-				SubmitTime:    timePtr(now.Add(-45 * time.Minute)),
-				Partition:     "compute",
-				Account:       "project_b",
-				Priority:      intPtr(50),
-			},
-		},
-		{
-			ID:             "mock-job-003",
-			User:           "charlie",
-			Nodes:          []string{"node-04", "node-05", "node-06"},
-			State:          JobStateCompleted,
-			StartTime:      now.Add(-5 * time.Hour),
-			EndTime:        timePtr(now.Add(-1 * time.Hour)),
-			RuntimeSeconds: 14400,
-			Scheduler: &SchedulerInfo{
-				Type:          SchedulerTypeMock,
-				ExternalJobID: "mock-job-003",
-				RawState:      "COMPLETED",
-				SubmitTime:    timePtr(now.Add(-6 * time.Hour)),
-				Partition:     "batch",
-				Account:       "project_a",
-				ExitCode:      intPtr(0),
-			},
-		},
-		{
-			ID:             "mock-job-004",
-			User:           "alice",
-			Nodes:          []string{"node-07"},
-			State:          JobStateFailed,
-			StartTime:      now.Add(-3 * time.Hour),
-			EndTime:        timePtr(now.Add(-2*time.Hour - 30*time.Minute)),
-			RuntimeSeconds: 1800,
-			Scheduler: &SchedulerInfo{
-				Type:          SchedulerTypeMock,
-				ExternalJobID: "mock-job-004",
-				RawState:      "OUT_OF_MEMORY",
-				SubmitTime:    timePtr(now.Add(-4 * time.Hour)),
-				Partition:     "gpu",
-				Account:       "project_a",
-				ExitCode:      intPtr(137),
-			},
-		},
-		{
-			ID:        "mock-job-005",
-			User:      "diana",
-			Nodes:     []string{"node-08", "node-09"},
-			State:     JobStatePending,
-			StartTime: now,
-			Scheduler: &SchedulerInfo{
-				Type:          SchedulerTypeMock,
-				ExternalJobID: "mock-job-005",
-				RawState:      "PENDING",
-				SubmitTime:    timePtr(now.Add(-10 * time.Minute)),
-				Partition:     "debug",
-				Account:       "project_c",
-				Priority:      intPtr(200),
-			},
-		},
+	users := []string{"Alice", "Bob", "Liam", "Sofia", "Noah", "Olivia", "Ethan", "Mia", "Lucas", "Ava", "Leo", "Isabella", "Jack", "Amelia", "Oliver", "Charlotte", "Henry", "Ella", "Benjamin", "Grace", "Daniel", "Lily", "Samuel", "Hannah", "Matthew", "Nora", "James", "Zoe", "William", "Chloe", "Michael", "Aria", "David", "Ruby", "Joseph", "Lucy", "Andrew", "Violet", "Thomas", "Emily", "Christopher", "Freya", "Joshua", "Clara", "Nathan", "Iris", "Ryan", "Stella", "Jonathan", "Alice", "Aaron", "Eliza", "Caleb", "Naomi", "Isaac", "Maya", "Sebastian", "Eva", "Nicholas", "Rose", "Julian", "Aurora", "Owen", "Hazel", "Dylan", "Willow", "Zachary", "Penelope", "Carter", "Margot", "Eli", "June", "Finn", "Scarlett", "Adrian", "Thea", "Miles", "Florence", "Simon", "Beatrice", "Victor", "Helena", "Max", "Astrid", "Patrick", "Ingrid", "Rowan", "Sienna", "Theo", "Elin", "Hugo", "Linnea", "Marcus", "Josephine", "Paul", "Matilda", "Oscar", "Agnes", "Tobias", "Edith"}
+
+	partitions := []string{"gpu", "compute", "batch", "debug"}
+
+	accounts := make([]string, 0, 26)
+	for ch := 'a'; ch <= 'z'; ch++ {
+		accounts = append(accounts, fmt.Sprintf("project_%c", ch))
 	}
 
-	for _, job := range demoJobs {
+	qosLevels := []string{"normal", "high", "low", "preempt"}
+
+	states := []JobState{JobStateRunning, JobStateCompleted, JobStateFailed, JobStateCancelled, JobStatePending}
+
+	jobCount := 100
+	for i := 1; i <= jobCount; i++ {
+		user := users[i%len(users)]
+		partition := partitions[i%len(partitions)]
+		account := accounts[i%len(accounts)]
+		qos := qosLevels[i%len(qosLevels)]
+		state := states[i%len(states)]
+
+		jobID := fmt.Sprintf("mock-job-%03d", i)
+
+		nodeCount := 1 + (i % 32)
+		nodes := make([]string, 0, nodeCount)
+		for n := 0; n < nodeCount; n++ {
+			nodes = append(nodes, fmt.Sprintf("node-%02d", (i+n)%50+1))
+		}
+
+		submitTime := now.Add(-time.Duration(10+i) * time.Minute)
+		startTime := now.Add(-time.Duration(5*i) * time.Minute)
+		if startTime.Before(submitTime) {
+			startTime = submitTime.Add(5 * time.Minute)
+		}
+
+		job := &Job{
+			ID:            jobID,
+			User:          user,
+			Nodes:         nodes,
+			State:         state,
+			StartTime:     startTime,
+			CPUUsage:      25 + float64(i%75),
+			MemoryUsageMB: int64(1024 * (1 + i%16)),
+			Scheduler: &SchedulerInfo{
+				Type:          SchedulerTypeMock,
+				ExternalJobID: jobID,
+				RawState:      string(state),
+				SubmitTime:    timePtr(submitTime),
+				Partition:     partition,
+				Account:       account,
+				QoS:           qos,
+				Priority:      intPtr(10 + (i % 200)),
+			},
+		}
+
+		if partition == "gpu" {
+			job.GPUUsage = floatPtr(30 + float64(i%70))
+		}
+
+		switch state {
+		case JobStateCompleted:
+			end := startTime.Add(time.Duration(30+i) * time.Minute)
+			job.EndTime = &end
+			job.RuntimeSeconds = end.Sub(startTime).Seconds()
+			job.Scheduler.ExitCode = intPtr(0)
+		case JobStateFailed:
+			end := startTime.Add(time.Duration(10+i) * time.Minute)
+			job.EndTime = &end
+			job.RuntimeSeconds = end.Sub(startTime).Seconds()
+			job.Scheduler.ExitCode = intPtr(137)
+		case JobStateCancelled:
+			end := startTime.Add(time.Duration(5+i) * time.Minute)
+			job.EndTime = &end
+			job.RuntimeSeconds = end.Sub(startTime).Seconds()
+		}
+
 		m.AddJob(job)
 
-		// Generate metrics for running and completed jobs
 		if job.State == JobStateRunning || job.State == JobStateCompleted {
 			m.generateJobMetrics(job, now)
 		}

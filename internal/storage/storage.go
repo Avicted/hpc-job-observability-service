@@ -142,59 +142,75 @@ func (s *baseStorage) SeedDemoData() error {
 	ctx := context.Background()
 	now := time.Now()
 
-	// Demo jobs representing various HPC workloads
-	demoJobs := []*Job{
-		{
-			ID:            "demo-job-001",
-			User:          "alice",
-			Nodes:         []string{"node-01", "node-02"},
-			State:         JobStateRunning,
-			StartTime:     now.Add(-2 * time.Hour),
-			CPUUsage:      78.5,
-			MemoryUsageMB: 8192,
-			GPUUsage:      floatPtr(45.0),
-		},
-		{
-			ID:            "demo-job-002",
-			User:          "bob",
-			Nodes:         []string{"node-03"},
-			State:         JobStateRunning,
-			StartTime:     now.Add(-30 * time.Minute),
-			CPUUsage:      92.3,
-			MemoryUsageMB: 16384,
-			GPUUsage:      floatPtr(88.0),
-		},
-		{
-			ID:             "demo-job-003",
-			User:           "charlie",
-			Nodes:          []string{"node-04", "node-05", "node-06"},
-			State:          JobStateCompleted,
-			StartTime:      now.Add(-5 * time.Hour),
-			EndTime:        timePtr(now.Add(-1 * time.Hour)),
-			RuntimeSeconds: 14400,
-			CPUUsage:       0,
-			MemoryUsageMB:  0,
-		},
-		{
-			ID:             "demo-job-004",
-			User:           "alice",
-			Nodes:          []string{"node-07"},
-			State:          JobStateFailed,
-			StartTime:      now.Add(-3 * time.Hour),
-			EndTime:        timePtr(now.Add(-2*time.Hour - 30*time.Minute)),
-			RuntimeSeconds: 1800,
-			CPUUsage:       0,
-			MemoryUsageMB:  0,
-		},
-		{
-			ID:            "demo-job-005",
-			User:          "diana",
-			Nodes:         []string{"node-08", "node-09"},
-			State:         JobStatePending,
-			StartTime:     now,
-			CPUUsage:      0,
-			MemoryUsageMB: 0,
-		},
+	// User names for demo jobs
+	users := []string{"Alice", "Bob", "Liam", "Sofia", "Noah", "Olivia", "Ethan", "Mia", "Lucas", "Ava",
+		"Leo", "Isabella", "Jack", "Amelia", "Oliver", "Charlotte", "Henry", "Ella", "Benjamin", "Grace",
+		"Daniel", "Lily", "Samuel", "Hannah", "Matthew", "Nora", "James", "Zoe", "William", "Chloe",
+		"Michael", "Aria", "David", "Ruby", "Joseph", "Lucy", "Andrew", "Violet", "Thomas", "Emily",
+		"Christopher", "Freya", "Joshua", "Clara", "Nathan", "Iris", "Ryan", "Stella", "Jonathan", "Eliza",
+		"Aaron", "Naomi", "Caleb", "Maya", "Isaac", "Eva", "Sebastian", "Rose", "Nicholas", "Aurora",
+		"Julian", "Hazel", "Owen", "Willow", "Dylan", "Penelope", "Carter", "Margot", "Eli", "June",
+		"Finn", "Scarlett", "Adrian", "Thea", "Miles", "Florence", "Simon", "Beatrice", "Victor", "Helena",
+		"Max", "Astrid", "Patrick", "Ingrid", "Rowan", "Sienna", "Theo", "Elin", "Hugo", "Linnea",
+		"Marcus", "Josephine", "Paul", "Matilda", "Oscar", "Agnes", "Tobias", "Edith", "Emma", "Diana"}
+
+	partitions := []string{"gpu", "compute", "batch", "debug"}
+	states := []JobState{JobStateRunning, JobStateCompleted, JobStateFailed, JobStateCancelled, JobStatePending}
+
+	jobCount := 100
+	demoJobs := make([]*Job, 0, jobCount)
+
+	for i := 1; i <= jobCount; i++ {
+		user := users[i%len(users)]
+		partition := partitions[i%len(partitions)]
+		state := states[i%len(states)]
+
+		jobID := fmt.Sprintf("demo-job-%03d", i)
+
+		nodeCount := 1 + (i % 32)
+		nodes := make([]string, 0, nodeCount)
+		for n := 0; n < nodeCount; n++ {
+			nodes = append(nodes, fmt.Sprintf("node-%02d", (i+n)%50+1))
+		}
+
+		submitTime := now.Add(-time.Duration(10+i) * time.Minute)
+		startTime := now.Add(-time.Duration(5*i) * time.Minute)
+		if startTime.Before(submitTime) {
+			startTime = submitTime.Add(5 * time.Minute)
+		}
+
+		job := &Job{
+			ID:            jobID,
+			User:          user,
+			Nodes:         nodes,
+			State:         state,
+			StartTime:     startTime,
+			CPUUsage:      25 + float64(i%75),
+			MemoryUsageMB: int64(1024 * (1 + i%16)),
+		}
+
+		// Add GPU usage for GPU partition jobs
+		if partition == "gpu" {
+			job.GPUUsage = floatPtr(30 + float64(i%70))
+		}
+
+		// Set end time and runtime for completed/failed/cancelled jobs
+		switch state {
+		case JobStateCompleted:
+			end := startTime.Add(time.Duration(30+i) * time.Minute)
+			job.EndTime = &end
+			job.RuntimeSeconds = end.Sub(startTime).Seconds()
+		case JobStateFailed:
+			end := startTime.Add(time.Duration(10+i) * time.Minute)
+			job.EndTime = &end
+			job.RuntimeSeconds = end.Sub(startTime).Seconds()
+		case JobStateCancelled:
+			end := startTime.Add(time.Duration(5+i) * time.Minute)
+			job.EndTime = &end
+			job.RuntimeSeconds = end.Sub(startTime).Seconds()
+		}
+
+		demoJobs = append(demoJobs, job)
 	}
 
 	for _, job := range demoJobs {

@@ -41,6 +41,23 @@ type Exporter struct {
 
 	// Metric collection timestamp
 	lastCollectTime prometheus.Gauge
+
+	// Node-level metrics
+	// CPU usage gauge per node - aggregated from running jobs
+	// Labels: node
+	nodeCPUUsagePercent *prometheus.GaugeVec
+
+	// Memory usage gauge per node - aggregated from running jobs
+	// Labels: node
+	nodeMemoryUsageBytes *prometheus.GaugeVec
+
+	// GPU usage gauge per node - aggregated from running jobs
+	// Labels: node
+	nodeGPUUsagePercent *prometheus.GaugeVec
+
+	// Number of jobs running on each node
+	// Labels: node
+	nodeJobCount *prometheus.GaugeVec
 }
 
 // NewExporter creates a new metrics exporter.
@@ -115,6 +132,47 @@ func NewExporter(store storage.Storage) *Exporter {
 				Help:      "Unix timestamp of the last successful metric collection",
 			},
 		),
+
+		// Node-level metrics
+		nodeCPUUsagePercent: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "node",
+				Name:      "cpu_usage_percent",
+				Help:      "Average CPU usage on the node from running jobs (0-100)",
+			},
+			[]string{"node"},
+		),
+
+		nodeMemoryUsageBytes: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "node",
+				Name:      "memory_usage_bytes",
+				Help:      "Total memory usage on the node from running jobs in bytes",
+			},
+			[]string{"node"},
+		),
+
+		nodeGPUUsagePercent: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "node",
+				Name:      "gpu_usage_percent",
+				Help:      "Average GPU usage on the node from running jobs (0-100)",
+			},
+			[]string{"node"},
+		),
+
+		nodeJobCount: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "node",
+				Name:      "job_count",
+				Help:      "Number of running jobs on the node",
+			},
+			[]string{"node"},
+		),
 	}
 
 	return e
@@ -130,6 +188,10 @@ func (e *Exporter) Register(registry prometheus.Registerer) error {
 		e.jobStateTotal,
 		e.jobsTotal,
 		e.lastCollectTime,
+		e.nodeCPUUsagePercent,
+		e.nodeMemoryUsageBytes,
+		e.nodeGPUUsagePercent,
+		e.nodeJobCount,
 	}
 
 	for _, c := range collectors {
@@ -154,6 +216,10 @@ func (e *Exporter) Collect(ctx context.Context) error {
 	e.jobMemoryUsageBytes.Reset()
 	e.jobGPUUsagePercent.Reset()
 	e.jobStateTotal.Reset()
+	e.nodeCPUUsagePercent.Reset()
+	e.nodeMemoryUsageBytes.Reset()
+	e.nodeGPUUsagePercent.Reset()
+	e.nodeJobCount.Reset()
 
 	// Count jobs by state
 	stateCounts := map[storage.JobState]int{
@@ -163,6 +229,16 @@ func (e *Exporter) Collect(ctx context.Context) error {
 		storage.JobStateFailed:    0,
 		storage.JobStateCancelled: 0,
 	}
+
+	// Node-level aggregation structures
+	type nodeStats struct {
+		cpuTotal    float64
+		memoryTotal int64
+		gpuTotal    float64
+		gpuCount    int
+		jobCount    int
+	}
+	nodeMetrics := make(map[string]*nodeStats)
 
 	now := time.Now()
 	for _, job := range jobs {
@@ -195,6 +271,39 @@ func (e *Exporter) Collect(ctx context.Context) error {
 
 		if job.GPUUsage != nil {
 			e.jobGPUUsagePercent.With(labels).Set(*job.GPUUsage)
+		}
+
+		// Aggregate metrics per node for running jobs only
+		if job.State == storage.JobStateRunning {
+			for _, nodeName := range job.Nodes {
+				if _, exists := nodeMetrics[nodeName]; !exists {
+					nodeMetrics[nodeName] = &nodeStats{}
+				}
+				ns := nodeMetrics[nodeName]
+				ns.cpuTotal += job.CPUUsage
+				ns.memoryTotal += job.MemoryUsageMB
+				ns.jobCount++
+				if job.GPUUsage != nil {
+					ns.gpuTotal += *job.GPUUsage
+					ns.gpuCount++
+				}
+			}
+		}
+	}
+
+	// Set node-level metrics
+	for nodeName, stats := range nodeMetrics {
+		nodeLabel := prometheus.Labels{"node": nodeName}
+		e.nodeJobCount.With(nodeLabel).Set(float64(stats.jobCount))
+		// Average CPU across jobs on this node
+		if stats.jobCount > 0 {
+			e.nodeCPUUsagePercent.With(nodeLabel).Set(stats.cpuTotal / float64(stats.jobCount))
+		}
+		// Total memory used on this node
+		e.nodeMemoryUsageBytes.With(nodeLabel).Set(float64(stats.memoryTotal) * 1024 * 1024)
+		// Average GPU if any GPU jobs
+		if stats.gpuCount > 0 {
+			e.nodeGPUUsagePercent.With(nodeLabel).Set(stats.gpuTotal / float64(stats.gpuCount))
 		}
 	}
 
