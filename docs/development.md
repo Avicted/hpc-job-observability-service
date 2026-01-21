@@ -108,8 +108,8 @@ docker-compose --profile mock up
 # Note: demo seeding is ignored when SCHEDULER_BACKEND=slurm
 SEED_DEMO=true SCHEDULER_BACKEND=mock docker-compose up --build
 
-# Stop and clean up
-docker-compose down -v
+# Stop
+docker-compose down
 ```
 
 #### Troubleshooting: demo data persists
@@ -131,7 +131,7 @@ If you see an error like “failed to set up container networking: network … n
 Fix by recreating the stack and its network:
 
 ```bash
-docker-compose down -v
+docker-compose down
 docker network rm <project>_hpc-network  # only if it still exists
 docker-compose --profile slurm up --build
 ```
@@ -184,11 +184,9 @@ This single-container setup is intended for local testing only and may change.
 
 ### Quick Start
 
-```bash
-# Start the full stack with Slurm integration
-docker-compose --profile slurm up --build
+Use the commands in “Run with Docker Compose” above. For Slurm-only testing, you can start just the Slurm container:
 
-# Or start only the Slurm container (for testing scheduler module)
+```bash
 docker-compose --profile slurm up slurm
 ```
 

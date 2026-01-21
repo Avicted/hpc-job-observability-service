@@ -104,7 +104,7 @@ If you see an error like “failed to set up container networking: network … n
 Fix by recreating the stack and its network:
 
 ```bash
-docker-compose down -v
+docker-compose down
 docker network rm <project>_hpc-network  # only if it still exists
 docker-compose --profile slurm up --build --force-recreate
 ```
