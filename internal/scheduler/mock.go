@@ -82,6 +82,71 @@ func (m *MockJobSource) SupportsMetrics() bool {
 	return true
 }
 
+// ListNodes returns simulated compute nodes for the mock cluster.
+func (m *MockJobSource) ListNodes(ctx context.Context) ([]*Node, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// Generate 50 mock nodes to match the demo jobs
+	nodes := make([]*Node, 50)
+	for i := 0; i < 50; i++ {
+		nodeName := fmt.Sprintf("node-%02d", i+1)
+
+		// Calculate load based on running jobs on this node
+		runningJobs := 0
+		allocCPUs := 0
+		allocMemMB := int64(0)
+		for _, job := range m.jobs {
+			if job.State == JobStateRunning {
+				for _, n := range job.Nodes {
+					if n == nodeName {
+						runningJobs++
+						allocCPUs += 4 // Assume 4 CPUs per job
+						allocMemMB += job.MemoryUsageMB / int64(len(job.Nodes))
+						break
+					}
+				}
+			}
+		}
+
+		// Simulate realistic node states
+		state := NodeStateIdle
+		if runningJobs > 0 {
+			state = NodeStateAllocated
+		}
+
+		// Vary node specs slightly for realism
+		cpus := 32 + (i%3)*16                       // 32, 48, or 64 CPUs
+		memoryMB := int64(128*1024 + (i%4)*64*1024) // 128GB to 320GB
+
+		// CPU load based on allocated CPUs (with some variance)
+		cpuLoad := float64(allocCPUs) / float64(cpus) * 100
+		if cpuLoad > 0 {
+			cpuLoad += (rand.Float64() - 0.5) * 10 // Add some variance
+			if cpuLoad < 0 {
+				cpuLoad = 0
+			}
+		}
+
+		nodes[i] = &Node{
+			Name:           nodeName,
+			Hostname:       nodeName,
+			State:          state,
+			CPUs:           cpus,
+			Cores:          cpus / 2,
+			Sockets:        2,
+			RealMemoryMB:   memoryMB,
+			FreeMemoryMB:   memoryMB - allocMemMB,
+			CPULoad:        cpuLoad,
+			AllocatedCPUs:  allocCPUs,
+			AllocatedMemMB: allocMemMB,
+			RunningJobs:    runningJobs,
+		}
+	}
+
+	return nodes, nil
+}
+
 // AddJob adds a job to the mock source.
 func (m *MockJobSource) AddJob(job *Job) {
 	m.mu.Lock()

@@ -182,6 +182,48 @@ func (s *SQLiteStorage) UpdateJob(ctx context.Context, job *Job) error {
 	return nil
 }
 
+// UpsertJob creates a job if it doesn't exist, or updates it if it does.
+func (s *SQLiteStorage) UpsertJob(ctx context.Context, job *Job) error {
+	now := time.Now()
+	if job.CreatedAt.IsZero() {
+		job.CreatedAt = now
+	}
+	job.UpdatedAt = now
+	if job.StartTime.IsZero() {
+		job.StartTime = now
+	}
+	if job.State == "" {
+		job.State = JobStatePending
+	}
+
+	// Calculate runtime if job is completing
+	if job.State == JobStateCompleted || job.State == JobStateFailed || job.State == JobStateCancelled {
+		if job.EndTime != nil && !job.EndTime.IsZero() {
+			job.RuntimeSeconds = job.EndTime.Sub(job.StartTime).Seconds()
+		}
+	}
+
+	nodesStr := strings.Join(job.Nodes, ",")
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO jobs (id, user_name, nodes, state, start_time, end_time, runtime_seconds,
+		                  cpu_usage, memory_usage_mb, gpu_usage, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (id) DO UPDATE SET
+			user_name = excluded.user_name,
+			nodes = excluded.nodes,
+			state = excluded.state,
+			start_time = excluded.start_time,
+			end_time = excluded.end_time,
+			runtime_seconds = excluded.runtime_seconds,
+			cpu_usage = excluded.cpu_usage,
+			memory_usage_mb = excluded.memory_usage_mb,
+			gpu_usage = excluded.gpu_usage,
+			updated_at = excluded.updated_at
+	`, job.ID, job.User, nodesStr, job.State, job.StartTime, job.EndTime, job.RuntimeSeconds,
+		job.CPUUsage, job.MemoryUsageMB, job.GPUUsage, job.CreatedAt, job.UpdatedAt)
+	return err
+}
+
 // DeleteJob removes a job and its metrics from the database.
 func (s *SQLiteStorage) DeleteJob(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx, "DELETE FROM jobs WHERE id = ?", id)

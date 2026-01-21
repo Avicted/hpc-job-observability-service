@@ -739,3 +739,119 @@ func stringPtr(s string) *string {
 func jobStatePtr(s JobState) *JobState {
 	return &s
 }
+
+func TestParseMemoryFromTRES(t *testing.T) {
+	tests := []struct {
+		name     string
+		tresStr  string
+		expected int64
+	}{
+		{
+			name:     "empty string",
+			tresStr:  "",
+			expected: 0,
+		},
+		{
+			name:     "memory in MB",
+			tresStr:  "cpu=1,mem=31995M,node=1,billing=1",
+			expected: 31995,
+		},
+		{
+			name:     "memory in GB",
+			tresStr:  "cpu=4,mem=32G,node=1",
+			expected: 32768,
+		},
+		{
+			name:     "memory in KB",
+			tresStr:  "mem=1048576K,cpu=2",
+			expected: 1024,
+		},
+		{
+			name:     "memory at start",
+			tresStr:  "mem=2048M,cpu=1",
+			expected: 2048,
+		},
+		{
+			name:     "memory at end",
+			tresStr:  "cpu=1,node=1,mem=4096M",
+			expected: 4096,
+		},
+		{
+			name:     "no memory field",
+			tresStr:  "cpu=1,node=1,billing=1",
+			expected: 0,
+		},
+		{
+			name:     "lowercase suffix",
+			tresStr:  "mem=1024m",
+			expected: 1024,
+		},
+		{
+			name:     "memory in TB",
+			tresStr:  "mem=1T",
+			expected: 1024 * 1024,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseMemoryFromTRES(tt.tresStr)
+			if result != tt.expected {
+				t.Errorf("parseMemoryFromTRES(%q) = %d, want %d", tt.tresStr, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestParseMemoryValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		memStr   string
+		expected int64
+	}{
+		{
+			name:     "empty",
+			memStr:   "",
+			expected: 0,
+		},
+		{
+			name:     "MB",
+			memStr:   "1024M",
+			expected: 1024,
+		},
+		{
+			name:     "GB",
+			memStr:   "4G",
+			expected: 4096,
+		},
+		{
+			name:     "KB",
+			memStr:   "2048K",
+			expected: 2,
+		},
+		{
+			name:     "TB",
+			memStr:   "1T",
+			expected: 1048576,
+		},
+		{
+			name:     "lowercase m",
+			memStr:   "512m",
+			expected: 512,
+		},
+		{
+			name:     "lowercase g",
+			memStr:   "8g",
+			expected: 8192,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseMemoryValue(tt.memStr)
+			if result != tt.expected {
+				t.Errorf("parseMemoryValue(%q) = %d, want %d", tt.memStr, result, tt.expected)
+			}
+		})
+	}
+}

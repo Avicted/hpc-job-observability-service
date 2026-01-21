@@ -15,6 +15,12 @@ services:
       - DATABASE_TYPE=postgres
       - DATABASE_URL=postgres://${POSTGRES_USER:-hpc}:${POSTGRES_PASSWORD:-hpc_password}@postgres:5432/${POSTGRES_DB:-hpc_jobs}?sslmode=disable
       - METRICS_RETENTION_DAYS=${METRICS_RETENTION_DAYS:-7}
+      - SCHEDULER_BACKEND=${SCHEDULER_BACKEND:-mock}
+      # Use Docker container name for Slurm when running in Docker
+      # Override SLURM_BASE_URL from .env to use container networking
+      - SLURM_BASE_URL=http://slurm:6820
+      - SLURM_API_VERSION=${SLURM_API_VERSION:-v0.0.36}
+      - SLURM_AUTH_TOKEN=${SLURM_AUTH_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,6 +113,36 @@ services:
       - hpc-network
     profiles:
       - mock
+
+  # =============================================================================
+  # Slurm Integration Testing Services (optional, use --profile slurm)
+  # =============================================================================
+
+  # Single-node Slurm cluster with slurmrestd for integration testing
+  # This provides a complete Slurm environment in one container, including:
+  # - slurmctld (controller)
+  # - slurmd (compute daemon)
+  # - slurmdbd (database daemon)  
+  # - slurmrestd (REST API on port 6820)
+  slurm:
+    build:
+      context: ./config/slurm
+      dockerfile: Dockerfile
+    container_name: hpc-slurm
+    hostname: slurm
+    ports:
+      - "6820:6820"
+    privileged: true  # Required for slurmd cgroup management
+    networks:
+      - hpc-network
+    profiles:
+      - slurm
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:6820/openapi/v3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
 
 networks:
   hpc-network:

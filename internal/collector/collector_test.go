@@ -161,6 +161,9 @@ func (f *fakeStorage) UpdateJob(ctx context.Context, job *storage.Job) error {
 	f.updateCalls++
 	return f.updateErr
 }
+func (f *fakeStorage) UpsertJob(ctx context.Context, job *storage.Job) error {
+	return nil
+}
 func (f *fakeStorage) DeleteJob(ctx context.Context, id string) error { return nil }
 func (f *fakeStorage) ListJobs(ctx context.Context, filter storage.JobFilter) ([]*storage.Job, int, error) {
 	return nil, 0, nil

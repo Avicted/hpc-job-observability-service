@@ -262,7 +262,7 @@ go test ./...
 ```
 
 The coverage script excludes non-testable packages (cmd/* and generated API server/types) from coverage totals.
-The current test coverage is 91.2%.
+The current test coverage is 80.3%.
 
 To run the concurrent job stress test:
 
