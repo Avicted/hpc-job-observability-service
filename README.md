@@ -63,8 +63,11 @@ DATABASE_TYPE=postgres DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=
 cp .env.example .env
 # Edit .env with your settings (especially passwords!)
 
-# Start all services (app + PostgreSQL + Prometheus + Grafana)
-docker-compose up
+# Start the full stack with Slurm integration
+docker-compose --profile slurm up --build
+
+# Or start only the Slurm container (for testing scheduler module)
+docker-compose --profile slurm up slurm
 
 # Start with mock server for testing
 docker-compose --profile mock up
