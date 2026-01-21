@@ -533,6 +533,16 @@ func (s *PostgresStorage) UpdateJob(ctx context.Context, job *Job) (err error) {
 		}
 	}()
 
+	// Check if the existing job is already in a terminal state; if so, skip the update.
+	existingJob, err := s.getJobByIDTx(ctx, tx, job.ID)
+	if err != nil {
+		return err
+	}
+	if existingJob.State.IsTerminal() {
+		// Job is frozen; commit empty transaction and return nil (skip update).
+		return tx.Commit()
+	}
+
 	job.UpdatedAt = time.Now()
 
 	// Calculate runtime if job is completing
@@ -621,6 +631,15 @@ func (s *PostgresStorage) UpsertJob(ctx context.Context, job *Job) (err error) {
 			_ = tx.Rollback()
 		}
 	}()
+
+	// Check if the existing job is already in a terminal state; if so, skip the upsert.
+	existingJob, err := s.getJobByIDTx(ctx, tx, job.ID)
+	if err == nil && existingJob.State.IsTerminal() {
+		// Job exists and is frozen; commit empty transaction and return nil (skip upsert).
+		return tx.Commit()
+	}
+	// If ErrJobNotFound, we proceed with insert (new job).
+	// If any other error, it's unexpected, but we'll proceed and let the insert/update handle it.
 
 	now := time.Now()
 	if job.CreatedAt.IsZero() {

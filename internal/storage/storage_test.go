@@ -1078,3 +1078,189 @@ func TestBaseStorage_SeedJobMetrics_ExecError(t *testing.T) {
 		t.Fatalf("unmet expectations: %v", err)
 	}
 }
+
+// TestTerminalStateFreezeLogic verifies that jobs in terminal states (completed/failed/cancelled)
+// can no longer be updated via UpdateJob or UpsertJob. Option B: allow one final update when
+// transitioning to terminal state, then freeze subsequent updates.
+func TestTerminalStateFreezeLogic(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test-terminal-freeze-*.db")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Close()
+
+	store, err := NewSQLiteStorage("file:" + tmpFile.Name() + "?cache=shared&mode=rwc&_busy_timeout=5000")
+	if err != nil {
+		t.Fatalf("Failed to create SQLite storage: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.Migrate(); err != nil {
+		t.Fatalf("Failed to run migrations: %v", err)
+	}
+
+	ctx := WithAuditInfo(context.Background(), NewAuditInfo("test", "terminal-freeze-test"))
+
+	t.Run("UpdateJob_FirstTerminalTransitionAllowed", func(t *testing.T) {
+		// Create a running job
+		job := &Job{
+			ID:        "freeze-test-001",
+			User:      "testuser",
+			Nodes:     []string{"node-1"},
+			State:     JobStateRunning,
+			StartTime: time.Now().Add(-time.Hour),
+		}
+		if err := store.CreateJob(ctx, job); err != nil {
+			t.Fatalf("CreateJob failed: %v", err)
+		}
+
+		// Update to completed state (first terminal transition should succeed)
+		job.State = JobStateCompleted
+		job.CPUUsage = 90.0
+		if err := store.UpdateJob(ctx, job); err != nil {
+			t.Fatalf("UpdateJob to terminal state should succeed: %v", err)
+		}
+
+		// Verify the update was applied
+		updated, err := store.GetJob(ctx, "freeze-test-001")
+		if err != nil {
+			t.Fatalf("GetJob failed: %v", err)
+		}
+		if updated.State != JobStateCompleted {
+			t.Errorf("Expected state 'completed', got '%s'", updated.State)
+		}
+		if updated.CPUUsage != 90.0 {
+			t.Errorf("Expected CPUUsage 90.0, got %f", updated.CPUUsage)
+		}
+	})
+
+	t.Run("UpdateJob_SubsequentUpdatesFrozen", func(t *testing.T) {
+		// Try to update the already-completed job
+		job, _ := store.GetJob(ctx, "freeze-test-001")
+		originalCPU := job.CPUUsage
+
+		job.CPUUsage = 99.9         // Try to change CPU
+		job.State = JobStateRunning // Try to revert state
+		err := store.UpdateJob(ctx, job)
+		if err != nil {
+			t.Fatalf("UpdateJob on frozen job should return nil (skip), got: %v", err)
+		}
+
+		// Verify the job was NOT updated
+		afterUpdate, _ := store.GetJob(ctx, "freeze-test-001")
+		if afterUpdate.State != JobStateCompleted {
+			t.Errorf("State should remain 'completed', got '%s'", afterUpdate.State)
+		}
+		if afterUpdate.CPUUsage != originalCPU {
+			t.Errorf("CPUUsage should remain %f, got %f", originalCPU, afterUpdate.CPUUsage)
+		}
+	})
+
+	t.Run("UpsertJob_FirstTerminalTransitionAllowed", func(t *testing.T) {
+		// Create a running job via upsert
+		job := &Job{
+			ID:        "freeze-test-002",
+			User:      "testuser",
+			Nodes:     []string{"node-2"},
+			State:     JobStateRunning,
+			StartTime: time.Now().Add(-time.Hour),
+		}
+		if err := store.UpsertJob(ctx, job); err != nil {
+			t.Fatalf("UpsertJob (create) failed: %v", err)
+		}
+
+		// Upsert to failed state
+		job.State = JobStateFailed
+		job.MemoryUsageMB = 8192
+		if err := store.UpsertJob(ctx, job); err != nil {
+			t.Fatalf("UpsertJob to terminal state should succeed: %v", err)
+		}
+
+		// Verify the update was applied
+		updated, _ := store.GetJob(ctx, "freeze-test-002")
+		if updated.State != JobStateFailed {
+			t.Errorf("Expected state 'failed', got '%s'", updated.State)
+		}
+		if updated.MemoryUsageMB != 8192 {
+			t.Errorf("Expected MemoryUsageMB 8192, got %d", updated.MemoryUsageMB)
+		}
+	})
+
+	t.Run("UpsertJob_SubsequentUpsertsFrozen", func(t *testing.T) {
+		// Try to upsert the already-failed job
+		job, _ := store.GetJob(ctx, "freeze-test-002")
+		originalMem := job.MemoryUsageMB
+
+		job.MemoryUsageMB = 16384
+		job.State = JobStatePending
+		err := store.UpsertJob(ctx, job)
+		if err != nil {
+			t.Fatalf("UpsertJob on frozen job should return nil (skip), got: %v", err)
+		}
+
+		// Verify the job was NOT updated
+		afterUpsert, _ := store.GetJob(ctx, "freeze-test-002")
+		if afterUpsert.State != JobStateFailed {
+			t.Errorf("State should remain 'failed', got '%s'", afterUpsert.State)
+		}
+		if afterUpsert.MemoryUsageMB != originalMem {
+			t.Errorf("MemoryUsageMB should remain %d, got %d", originalMem, afterUpsert.MemoryUsageMB)
+		}
+	})
+
+	t.Run("AllTerminalStatesAreFrozen", func(t *testing.T) {
+		terminalStates := []JobState{JobStateCompleted, JobStateFailed, JobStateCancelled}
+
+		for i, terminalState := range terminalStates {
+			jobID := fmt.Sprintf("freeze-test-terminal-%d", i)
+
+			// Create job directly in terminal state via CreateJob (simulating initial sync)
+			job := &Job{
+				ID:        jobID,
+				User:      "testuser",
+				Nodes:     []string{"node-x"},
+				State:     terminalState,
+				StartTime: time.Now().Add(-time.Hour),
+			}
+			if err := store.CreateJob(ctx, job); err != nil {
+				t.Fatalf("CreateJob failed for %s: %v", terminalState, err)
+			}
+
+			// Try to update - should be skipped
+			job.CPUUsage = 50.0
+			if err := store.UpdateJob(ctx, job); err != nil {
+				t.Fatalf("UpdateJob should skip, not error for %s: %v", terminalState, err)
+			}
+
+			// Verify no change
+			final, _ := store.GetJob(ctx, jobID)
+			if final.CPUUsage != 0 {
+				t.Errorf("CPUUsage should remain 0 for frozen %s job, got %f", terminalState, final.CPUUsage)
+			}
+		}
+	})
+}
+
+// TestJobStateIsTerminal verifies the IsTerminal() helper method.
+func TestJobStateIsTerminal(t *testing.T) {
+	tests := []struct {
+		state      JobState
+		isTerminal bool
+	}{
+		{JobStatePending, false},
+		{JobStateRunning, false},
+		{JobStateCompleted, true},
+		{JobStateFailed, true},
+		{JobStateCancelled, true},
+		{JobState("unknown"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.state), func(t *testing.T) {
+			if got := tt.state.IsTerminal(); got != tt.isTerminal {
+				t.Errorf("JobState(%q).IsTerminal() = %v, want %v", tt.state, got, tt.isTerminal)
+			}
+		})
+	}
+}

@@ -211,8 +211,10 @@ func TestPostgresStorage_UpdateJob_NotFound(t *testing.T) {
 	job := &Job{ID: "job-4", User: "bob", Nodes: []string{"node-1"}, State: JobStateCompleted, StartTime: time.Now().Add(-time.Hour)}
 
 	mock.ExpectBegin()
-	mock.ExpectExec("UPDATE jobs SET").
-		WillReturnResult(sqlmock.NewResult(0, 0))
+	// UpdateJob now calls getJobByIDTx first to check terminal state
+	mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
+		WithArgs("job-4").
+		WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
 
 	err = store.UpdateJob(testAuditContext(), job)
@@ -234,9 +236,14 @@ func TestPostgresStorage_UpdateJob_ExecError(t *testing.T) {
 
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 
-	job := &Job{ID: "job-5", User: "bob", Nodes: []string{"node-1"}, State: JobStateRunning, StartTime: time.Now()}
+	startTime := time.Now()
+	job := &Job{ID: "job-5", User: "bob", Nodes: []string{"node-1"}, State: JobStateRunning, StartTime: startTime}
 
 	mock.ExpectBegin()
+	// UpdateJob now calls getJobByIDTx first to check terminal state; return a running job
+	mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
+		WithArgs("job-5").
+		WillReturnRows(sqlmock.NewRows(jobRowColumns()).AddRow(jobRowValues("job-5", JobStateRunning, startTime, nil)...))
 	mock.ExpectExec("UPDATE jobs SET").
 		WillReturnError(errors.New("update failed"))
 	mock.ExpectRollback()

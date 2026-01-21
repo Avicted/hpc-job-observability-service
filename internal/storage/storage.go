@@ -16,10 +16,11 @@ import (
 
 // Common errors returned by storage operations.
 var (
-	ErrJobNotFound      = errors.New("job not found")
-	ErrJobAlreadyExists = errors.New("job already exists")
-	ErrInvalidJobState  = errors.New("invalid job state")
-	ErrMissingAuditInfo = errors.New("missing audit info")
+	ErrJobNotFound       = errors.New("job not found")
+	ErrJobAlreadyExists  = errors.New("job already exists")
+	ErrInvalidJobState   = errors.New("invalid job state")
+	ErrMissingAuditInfo  = errors.New("missing audit info")
+	ErrJobTerminalFrozen = errors.New("job is in terminal state and cannot be updated")
 )
 
 // JobState represents the current state of a job.
@@ -32,6 +33,11 @@ const (
 	JobStateFailed    JobState = "failed"
 	JobStateCancelled JobState = "cancelled"
 )
+
+// IsTerminalState returns true if the job state is a final state (completed, failed, or cancelled).
+func (s JobState) IsTerminal() bool {
+	return s == JobStateCompleted || s == JobStateFailed || s == JobStateCancelled
+}
 
 // SchedulerType identifies the type of scheduler backend.
 type SchedulerType string

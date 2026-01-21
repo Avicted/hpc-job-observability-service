@@ -433,6 +433,7 @@ This provides type-safe access to slurmrestd endpoints.
 - `config/openapi/slurm/oapi-codegen-slurm-client.yaml` - oapi-codegen configuration
 - `internal/slurmclient/client.gen.go` - Generated client code
 - `scripts/filter-slurm-openapi.py` - Script to filter spec to a single API version
+- `scripts/fix-slurm-openapi-types.py` - Script to fix type issues in the spec
 
 **To update the Slurm OpenAPI spec:**
 
