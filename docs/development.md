@@ -146,6 +146,17 @@ Notes:
 
 The project includes a complete Slurm cluster setup for integration testing. This allows you to test the `SlurmJobSource` against real Slurm services without installing Slurm on your host system.
 
+### Slurm Readiness Check
+
+When `SCHEDULER_BACKEND=slurm`, the service now waits (up to 60 seconds) for `slurmrestd` to become reachable before starting. If it cannot reach `SLURM_BASE_URL`, the service exits with a clear error message indicating that the Slurm container is not ready.
+
+If you see this error, ensure you started Docker Compose with the `slurm` profile and wait for the slurm container to be healthy:
+
+```bash
+docker-compose --profile slurm up --build
+docker-compose --profile slurm ps
+```
+
 ### Job Synchronization
 
 When using the `slurm` backend, the service automatically syncs jobs from the Slurm scheduler to the database:

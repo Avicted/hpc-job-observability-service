@@ -86,9 +86,9 @@
             ]
         },
         {
-            "label": "Docker Compose Up",
+            "label": "Docker Compose Up (With Slurm)",
             "type": "shell",
-            "command": "docker-compose up --build",
+            "command": "docker-compose --profile slurm up --build --force-recreate",
             "group": "none",
             "problemMatcher": [],
             "isBackground": true

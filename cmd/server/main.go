@@ -6,10 +6,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -55,6 +58,13 @@ func main() {
 	cfg, err := loadConfig()
 	if err != nil {
 		log.Fatalf("Configuration error: %v", err)
+	}
+
+	// If using slurm backend, wait for slurmrestd to become reachable
+	if cfg.SchedulerBackend == "slurm" {
+		if err := waitForSlurmReady(cfg.SlurmBaseURL, 60*time.Second); err != nil {
+			log.Fatalf("Slurm not ready: %v", err)
+		}
 	}
 
 	// Initialize scheduler source
@@ -218,6 +228,40 @@ func initScheduler(cfg *Config) (scheduler.JobSource, error) {
 	default:
 		return nil, fmt.Errorf("unknown scheduler backend: %s", cfg.SchedulerBackend)
 	}
+}
+
+func waitForSlurmReady(baseURL string, timeout time.Duration) error {
+	parsed, err := url.Parse(baseURL)
+	if err != nil || parsed.Hostname() == "" {
+		return fmt.Errorf("invalid SLURM_BASE_URL: %s", baseURL)
+	}
+
+	deadline := time.Now().Add(timeout)
+	healthURL := strings.TrimRight(baseURL, "/") + "/openapi/v3"
+	host := parsed.Hostname()
+
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		_, err := net.DefaultResolver.LookupHost(ctx, host)
+		cancel()
+		if err != nil {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		client := &http.Client{Timeout: 3 * time.Second}
+		resp, err := client.Get(healthURL)
+		if resp != nil {
+			resp.Body.Close()
+		}
+		if err == nil {
+			return nil
+		}
+
+		time.Sleep(2 * time.Second)
+	}
+
+	return fmt.Errorf("slurmrestd not reachable at %s. If using Docker Compose, run with --profile slurm and wait for the slurm container to be healthy", baseURL)
 }
 
 // runRetentionCleanup periodically removes old metric samples based on retention policy.
