@@ -95,10 +95,13 @@ DATABASE_TYPE=postgres DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=
 ### Run with Docker Compose
 
 ```bash
-# Start full stack (app + PostgreSQL + Prometheus)
-docker-compose up --build
+# Start the full stack with Slurm integration
+docker-compose --profile slurm up --build
 
-# Start with mock server
+# Or start only the Slurm container (for testing scheduler module)
+docker-compose --profile slurm up slurm
+
+# Start with mock server for testing
 docker-compose --profile mock up
 
 # Stop and clean up
