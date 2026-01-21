@@ -125,6 +125,7 @@ func (c *Collector) collectJobMetrics(ctx context.Context, job *storage.Job) {
 	job.CPUUsage = sample.CPUUsage
 	job.MemoryUsageMB = sample.MemoryUsageMB
 	job.GPUUsage = sample.GPUUsage
+	job.Audit = storage.NewAuditInfo("collector", "metrics")
 
 	if err := c.store.UpdateJob(ctx, job); err != nil {
 		log.Printf("Failed to update job %s metrics: %v", job.ID, err)

@@ -74,6 +74,24 @@ type HealthResponseStatus string
 
 // Job defines model for Job.
 type Job struct {
+	// AllocatedCpus CPUs allocated to the job
+	AllocatedCpus *int `json:"allocated_cpus,omitempty"`
+
+	// AllocatedGpus GPUs allocated to the job
+	AllocatedGpus *int `json:"allocated_gpus,omitempty"`
+
+	// AllocatedMemoryMb Memory allocated to the job (MB)
+	AllocatedMemoryMb *int `json:"allocated_memory_mb,omitempty"`
+
+	// AvgCpuUsage Average CPU usage across samples
+	AvgCpuUsage *float64 `json:"avg_cpu_usage,omitempty"`
+
+	// AvgGpuUsage Average GPU usage across samples
+	AvgGpuUsage *float64 `json:"avg_gpu_usage,omitempty"`
+
+	// ClusterName Cluster identifier for multi-cluster deployments
+	ClusterName *string `json:"cluster_name,omitempty"`
+
 	// CpuUsage Current CPU usage percentage
 	CpuUsage *float64 `json:"cpu_usage,omitempty"`
 
@@ -86,18 +104,51 @@ type Job struct {
 	// Id Unique job identifier
 	Id string `json:"id"`
 
+	// IngestVersion Ingestion pipeline version
+	IngestVersion *string `json:"ingest_version,omitempty"`
+
+	// LastSampleAt Timestamp of the latest metrics sample
+	LastSampleAt *time.Time `json:"last_sample_at,omitempty"`
+
+	// MaxCpuUsage Maximum CPU usage across samples
+	MaxCpuUsage *float64 `json:"max_cpu_usage,omitempty"`
+
+	// MaxGpuUsage Maximum GPU usage across samples
+	MaxGpuUsage *float64 `json:"max_gpu_usage,omitempty"`
+
+	// MaxMemoryUsageMb Maximum memory usage across samples (MB)
+	MaxMemoryUsageMb *int `json:"max_memory_usage_mb,omitempty"`
+
 	// MemoryUsageMb Current memory usage in megabytes
 	MemoryUsageMb *int `json:"memory_usage_mb,omitempty"`
+
+	// NodeCount Number of nodes allocated to the job
+	NodeCount *int `json:"node_count,omitempty"`
 
 	// Nodes List of node names allocated to the job
 	Nodes []string `json:"nodes"`
 
+	// RequestedCpus CPUs requested by the job
+	RequestedCpus *int `json:"requested_cpus,omitempty"`
+
+	// RequestedGpus GPUs requested by the job
+	RequestedGpus *int `json:"requested_gpus,omitempty"`
+
+	// RequestedMemoryMb Memory requested by the job (MB)
+	RequestedMemoryMb *int `json:"requested_memory_mb,omitempty"`
+
 	// RuntimeSeconds Total runtime in seconds
 	RuntimeSeconds *float64 `json:"runtime_seconds,omitempty"`
+
+	// SampleCount Total number of metrics samples recorded for the job
+	SampleCount *int `json:"sample_count,omitempty"`
 
 	// Scheduler Metadata from the external workload manager (e.g., SLURM).
 	// This information is populated when jobs are synced from an external scheduler.
 	Scheduler *SchedulerInfo `json:"scheduler,omitempty"`
+
+	// SchedulerInstance Scheduler instance identifier
+	SchedulerInstance *string `json:"scheduler_instance,omitempty"`
 
 	// StartTime Job start time
 	StartTime time.Time `json:"start_time"`
@@ -181,8 +232,8 @@ type SchedulerInfo struct {
 	// Partition Scheduler partition/queue name
 	Partition *string `json:"partition,omitempty"`
 
-	// Priority Job priority in the scheduler queue
-	Priority *int `json:"priority,omitempty"`
+	// Priority Job priority in the scheduler queue (Slurm uses uint32 which may exceed int32)
+	Priority *int64 `json:"priority,omitempty"`
 
 	// Qos Quality of Service level
 	Qos *string `json:"qos,omitempty"`
@@ -191,8 +242,14 @@ type SchedulerInfo struct {
 	// For SLURM: PENDING, RUNNING, COMPLETED, FAILED, CANCELLED, TIMEOUT, NODE_FAIL, etc.
 	RawState *string `json:"raw_state,omitempty"`
 
+	// StateReason Scheduler-provided reason for state transitions
+	StateReason *string `json:"state_reason,omitempty"`
+
 	// SubmitTime Time when the job was submitted to the scheduler
 	SubmitTime *time.Time `json:"submit_time,omitempty"`
+
+	// TimeLimitMinutes Time limit in minutes
+	TimeLimitMinutes *int `json:"time_limit_minutes,omitempty"`
 
 	// Type Type of scheduler that manages this job
 	Type *SchedulerInfoType `json:"type,omitempty"`
@@ -211,8 +268,17 @@ type UpdateJobRequest struct {
 	State *JobState `json:"state,omitempty"`
 }
 
+// ChangedByHeader defines model for ChangedByHeader.
+type ChangedByHeader = string
+
+// CorrelationIdHeader defines model for CorrelationIdHeader.
+type CorrelationIdHeader = string
+
 // JobId defines model for JobId.
 type JobId = string
+
+// SourceHeader defines model for SourceHeader.
+type SourceHeader = string
 
 // ListJobsParams defines parameters for ListJobs.
 type ListJobsParams struct {
@@ -230,6 +296,42 @@ type ListJobsParams struct {
 
 	// Offset Number of jobs to skip for pagination
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// CreateJobParams defines parameters for CreateJob.
+type CreateJobParams struct {
+	// XChangedBy Identifier of the actor/system performing the change
+	XChangedBy ChangedByHeader `json:"X-Changed-By"`
+
+	// XSource Source system initiating the change (api, syncer, scheduler)
+	XSource SourceHeader `json:"X-Source"`
+
+	// XCorrelationId Correlation ID for tracing multi-step updates
+	XCorrelationId *CorrelationIdHeader `json:"X-Correlation-Id,omitempty"`
+}
+
+// DeleteJobParams defines parameters for DeleteJob.
+type DeleteJobParams struct {
+	// XChangedBy Identifier of the actor/system performing the change
+	XChangedBy ChangedByHeader `json:"X-Changed-By"`
+
+	// XSource Source system initiating the change (api, syncer, scheduler)
+	XSource SourceHeader `json:"X-Source"`
+
+	// XCorrelationId Correlation ID for tracing multi-step updates
+	XCorrelationId *CorrelationIdHeader `json:"X-Correlation-Id,omitempty"`
+}
+
+// UpdateJobParams defines parameters for UpdateJob.
+type UpdateJobParams struct {
+	// XChangedBy Identifier of the actor/system performing the change
+	XChangedBy ChangedByHeader `json:"X-Changed-By"`
+
+	// XSource Source system initiating the change (api, syncer, scheduler)
+	XSource SourceHeader `json:"X-Source"`
+
+	// XCorrelationId Correlation ID for tracing multi-step updates
+	XCorrelationId *CorrelationIdHeader `json:"X-Correlation-Id,omitempty"`
 }
 
 // GetJobMetricsParams defines parameters for GetJobMetrics.

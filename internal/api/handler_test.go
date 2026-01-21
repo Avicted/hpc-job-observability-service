@@ -40,6 +40,16 @@ func testStore(t *testing.T) storage.Storage {
 	return store
 }
 
+func auditContext() context.Context {
+	return storage.WithAuditInfo(context.Background(), storage.NewAuditInfo("test", "api-test"))
+}
+
+func setAuditHeaders(req *http.Request) {
+	req.Header.Set("X-Changed-By", "tester")
+	req.Header.Set("X-Source", "api-test")
+	req.Header.Set("X-Correlation-Id", "test-correlation-id")
+}
+
 func TestHealthEndpoint(t *testing.T) {
 	store := testStore(t)
 	exporter := metrics.NewExporter(store)
@@ -81,6 +91,7 @@ func TestJobsEndpoints(t *testing.T) {
 		body, _ := json.Marshal(reqBody)
 
 		req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+		setAuditHeaders(req)
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
@@ -113,6 +124,7 @@ func TestJobsEndpoints(t *testing.T) {
 		body, _ := json.Marshal(reqBody)
 
 		req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+		setAuditHeaders(req)
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
@@ -133,6 +145,7 @@ func TestJobsEndpoints(t *testing.T) {
 		body, _ := json.Marshal(reqBody)
 
 		req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+		setAuditHeaders(req)
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
@@ -179,7 +192,7 @@ func TestJobsEndpoints(t *testing.T) {
 	// Test List Jobs
 	t.Run("ListJobs", func(t *testing.T) {
 		// Create another job
-		_ = store.CreateJob(context.Background(), &storage.Job{
+		_ = store.CreateJob(auditContext(), &storage.Job{
 			ID:    "api-test-job-002",
 			User:  "anotheruser",
 			Nodes: []string{"node-3"},
@@ -235,6 +248,7 @@ func TestJobsEndpoints(t *testing.T) {
 		body, _ := json.Marshal(reqBody)
 
 		req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/api-test-job-001", bytes.NewReader(body))
+		setAuditHeaders(req)
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
@@ -257,6 +271,7 @@ func TestJobsEndpoints(t *testing.T) {
 	// Test Delete Job
 	t.Run("DeleteJob", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodDelete, "/v1/jobs/api-test-job-002", nil)
+		setAuditHeaders(req)
 		rec := httptest.NewRecorder()
 
 		handler.ServeHTTP(rec, req)
@@ -283,7 +298,7 @@ func TestMetricsEndpoints(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a test job first
-	_ = store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(auditContext(), &storage.Job{
 		ID:        "metrics-test-job",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -302,6 +317,7 @@ func TestMetricsEndpoints(t *testing.T) {
 		body, _ := json.Marshal(reqBody)
 
 		req := httptest.NewRequest(http.MethodPost, "/v1/jobs/metrics-test-job/metrics", bytes.NewReader(body))
+		setAuditHeaders(req)
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
@@ -330,6 +346,7 @@ func TestMetricsEndpoints(t *testing.T) {
 		body, _ := json.Marshal(reqBody)
 
 		req := httptest.NewRequest(http.MethodPost, "/v1/jobs/nonexistent/metrics", bytes.NewReader(body))
+		setAuditHeaders(req)
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
@@ -416,6 +433,7 @@ func TestCreateJob_InvalidJSON(t *testing.T) {
 	handler := srv.Routes()
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader([]byte("invalid json")))
+	setAuditHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -439,6 +457,7 @@ func TestCreateJob_MissingUser(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	setAuditHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -462,6 +481,7 @@ func TestCreateJob_MissingNodes(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	setAuditHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -484,7 +504,7 @@ func TestCreateJob_WithSchedulerInfo(t *testing.T) {
 	partition := "gpu"
 	account := "project_a"
 	qos := "normal"
-	priority := 100
+	priority := int64(100)
 
 	reqBody := types.CreateJobRequest{
 		Id:    "job-with-scheduler",
@@ -503,6 +523,7 @@ func TestCreateJob_WithSchedulerInfo(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	setAuditHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -532,7 +553,7 @@ func TestUpdateJob_InvalidJSON(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job first
-	_ = store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(auditContext(), &storage.Job{
 		ID:    "update-invalid-json",
 		User:  "testuser",
 		Nodes: []string{"node-1"},
@@ -540,6 +561,7 @@ func TestUpdateJob_InvalidJSON(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/update-invalid-json", bytes.NewReader([]byte("invalid")))
+	setAuditHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -561,6 +583,7 @@ func TestUpdateJob_NotFound(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 
 	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/nonexistent", bytes.NewReader(body))
+	setAuditHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -578,7 +601,7 @@ func TestUpdateJob_InvalidState(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job first
-	_ = store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(auditContext(), &storage.Job{
 		ID:    "update-invalid-state",
 		User:  "testuser",
 		Nodes: []string{"node-1"},
@@ -590,6 +613,7 @@ func TestUpdateJob_InvalidState(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 
 	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/update-invalid-state", bytes.NewReader(body))
+	setAuditHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -607,7 +631,7 @@ func TestUpdateJob_AllFields(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job first
-	_ = store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(auditContext(), &storage.Job{
 		ID:        "update-all-fields",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -628,6 +652,7 @@ func TestUpdateJob_AllFields(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 
 	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/update-all-fields", bytes.NewReader(body))
+	setAuditHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -658,6 +683,7 @@ func TestDeleteJob_NotFound(t *testing.T) {
 	handler := srv.Routes()
 
 	req := httptest.NewRequest(http.MethodDelete, "/v1/jobs/nonexistent", nil)
+	setAuditHeaders(req)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -675,7 +701,7 @@ func TestListJobs_WithAllFilters(t *testing.T) {
 
 	// Create test jobs
 	for i := 0; i < 5; i++ {
-		_ = store.CreateJob(context.Background(), &storage.Job{
+		_ = store.CreateJob(auditContext(), &storage.Job{
 			ID:    "filter-job-" + string(rune('0'+i)),
 			User:  "alice",
 			Nodes: []string{"node-01"},
@@ -710,7 +736,7 @@ func TestRecordMetrics_InvalidJSON(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job first
-	_ = store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(auditContext(), &storage.Job{
 		ID:        "metrics-invalid-json",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -719,6 +745,7 @@ func TestRecordMetrics_InvalidJSON(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/metrics-invalid-json/metrics", bytes.NewReader([]byte("invalid")))
+	setAuditHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -736,7 +763,7 @@ func TestRecordMetrics_InvalidCPUUsage(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job first
-	_ = store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(auditContext(), &storage.Job{
 		ID:        "metrics-invalid-cpu",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -752,6 +779,7 @@ func TestRecordMetrics_InvalidCPUUsage(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/metrics-invalid-cpu/metrics", bytes.NewReader(body))
+	setAuditHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -766,6 +794,7 @@ func TestRecordMetrics_InvalidCPUUsage(t *testing.T) {
 	body, _ = json.Marshal(reqBody)
 
 	req = httptest.NewRequest(http.MethodPost, "/v1/jobs/metrics-invalid-cpu/metrics", bytes.NewReader(body))
+	setAuditHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 
@@ -783,7 +812,7 @@ func TestRecordMetrics_InvalidMemoryUsage(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job first
-	_ = store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(auditContext(), &storage.Job{
 		ID:        "metrics-invalid-mem",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -798,6 +827,7 @@ func TestRecordMetrics_InvalidMemoryUsage(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/metrics-invalid-mem/metrics", bytes.NewReader(body))
+	setAuditHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -815,7 +845,7 @@ func TestGetJobMetrics_WithTimeFilters(t *testing.T) {
 	handler := srv.Routes()
 
 	// Create a job
-	_ = store.CreateJob(context.Background(), &storage.Job{
+	_ = store.CreateJob(auditContext(), &storage.Job{
 		ID:        "metrics-time-filter",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
@@ -854,7 +884,7 @@ func TestStorageJobToAPI_AllFields(t *testing.T) {
 
 	gpuUsage := 50.0
 	endTime := time.Now()
-	priority := 100
+	priority := int64(100)
 	exitCode := 0
 	extra := map[string]interface{}{"key": "value"}
 	submitTime := time.Now().Add(-1 * time.Hour)

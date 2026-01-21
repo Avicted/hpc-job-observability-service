@@ -87,6 +87,24 @@ type HealthResponseStatus string
 
 // Job defines model for Job.
 type Job struct {
+	// AllocatedCpus CPUs allocated to the job
+	AllocatedCpus *int `json:"allocated_cpus,omitempty"`
+
+	// AllocatedGpus GPUs allocated to the job
+	AllocatedGpus *int `json:"allocated_gpus,omitempty"`
+
+	// AllocatedMemoryMb Memory allocated to the job (MB)
+	AllocatedMemoryMb *int `json:"allocated_memory_mb,omitempty"`
+
+	// AvgCpuUsage Average CPU usage across samples
+	AvgCpuUsage *float64 `json:"avg_cpu_usage,omitempty"`
+
+	// AvgGpuUsage Average GPU usage across samples
+	AvgGpuUsage *float64 `json:"avg_gpu_usage,omitempty"`
+
+	// ClusterName Cluster identifier for multi-cluster deployments
+	ClusterName *string `json:"cluster_name,omitempty"`
+
 	// CpuUsage Current CPU usage percentage
 	CpuUsage *float64 `json:"cpu_usage,omitempty"`
 
@@ -99,18 +117,51 @@ type Job struct {
 	// Id Unique job identifier
 	Id string `json:"id"`
 
+	// IngestVersion Ingestion pipeline version
+	IngestVersion *string `json:"ingest_version,omitempty"`
+
+	// LastSampleAt Timestamp of the latest metrics sample
+	LastSampleAt *time.Time `json:"last_sample_at,omitempty"`
+
+	// MaxCpuUsage Maximum CPU usage across samples
+	MaxCpuUsage *float64 `json:"max_cpu_usage,omitempty"`
+
+	// MaxGpuUsage Maximum GPU usage across samples
+	MaxGpuUsage *float64 `json:"max_gpu_usage,omitempty"`
+
+	// MaxMemoryUsageMb Maximum memory usage across samples (MB)
+	MaxMemoryUsageMb *int `json:"max_memory_usage_mb,omitempty"`
+
 	// MemoryUsageMb Current memory usage in megabytes
 	MemoryUsageMb *int `json:"memory_usage_mb,omitempty"`
+
+	// NodeCount Number of nodes allocated to the job
+	NodeCount *int `json:"node_count,omitempty"`
 
 	// Nodes List of node names allocated to the job
 	Nodes []string `json:"nodes"`
 
+	// RequestedCpus CPUs requested by the job
+	RequestedCpus *int `json:"requested_cpus,omitempty"`
+
+	// RequestedGpus GPUs requested by the job
+	RequestedGpus *int `json:"requested_gpus,omitempty"`
+
+	// RequestedMemoryMb Memory requested by the job (MB)
+	RequestedMemoryMb *int `json:"requested_memory_mb,omitempty"`
+
 	// RuntimeSeconds Total runtime in seconds
 	RuntimeSeconds *float64 `json:"runtime_seconds,omitempty"`
+
+	// SampleCount Total number of metrics samples recorded for the job
+	SampleCount *int `json:"sample_count,omitempty"`
 
 	// Scheduler Metadata from the external workload manager (e.g., SLURM).
 	// This information is populated when jobs are synced from an external scheduler.
 	Scheduler *SchedulerInfo `json:"scheduler,omitempty"`
+
+	// SchedulerInstance Scheduler instance identifier
+	SchedulerInstance *string `json:"scheduler_instance,omitempty"`
 
 	// StartTime Job start time
 	StartTime time.Time `json:"start_time"`
@@ -194,8 +245,8 @@ type SchedulerInfo struct {
 	// Partition Scheduler partition/queue name
 	Partition *string `json:"partition,omitempty"`
 
-	// Priority Job priority in the scheduler queue
-	Priority *int `json:"priority,omitempty"`
+	// Priority Job priority in the scheduler queue (Slurm uses uint32 which may exceed int32)
+	Priority *int64 `json:"priority,omitempty"`
 
 	// Qos Quality of Service level
 	Qos *string `json:"qos,omitempty"`
@@ -204,8 +255,14 @@ type SchedulerInfo struct {
 	// For SLURM: PENDING, RUNNING, COMPLETED, FAILED, CANCELLED, TIMEOUT, NODE_FAIL, etc.
 	RawState *string `json:"raw_state,omitempty"`
 
+	// StateReason Scheduler-provided reason for state transitions
+	StateReason *string `json:"state_reason,omitempty"`
+
 	// SubmitTime Time when the job was submitted to the scheduler
 	SubmitTime *time.Time `json:"submit_time,omitempty"`
+
+	// TimeLimitMinutes Time limit in minutes
+	TimeLimitMinutes *int `json:"time_limit_minutes,omitempty"`
 
 	// Type Type of scheduler that manages this job
 	Type *SchedulerInfoType `json:"type,omitempty"`
@@ -224,8 +281,17 @@ type UpdateJobRequest struct {
 	State *JobState `json:"state,omitempty"`
 }
 
+// ChangedByHeader defines model for ChangedByHeader.
+type ChangedByHeader = string
+
+// CorrelationIdHeader defines model for CorrelationIdHeader.
+type CorrelationIdHeader = string
+
 // JobId defines model for JobId.
 type JobId = string
+
+// SourceHeader defines model for SourceHeader.
+type SourceHeader = string
 
 // ListJobsParams defines parameters for ListJobs.
 type ListJobsParams struct {
@@ -243,6 +309,42 @@ type ListJobsParams struct {
 
 	// Offset Number of jobs to skip for pagination
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// CreateJobParams defines parameters for CreateJob.
+type CreateJobParams struct {
+	// XChangedBy Identifier of the actor/system performing the change
+	XChangedBy ChangedByHeader `json:"X-Changed-By"`
+
+	// XSource Source system initiating the change (api, syncer, scheduler)
+	XSource SourceHeader `json:"X-Source"`
+
+	// XCorrelationId Correlation ID for tracing multi-step updates
+	XCorrelationId *CorrelationIdHeader `json:"X-Correlation-Id,omitempty"`
+}
+
+// DeleteJobParams defines parameters for DeleteJob.
+type DeleteJobParams struct {
+	// XChangedBy Identifier of the actor/system performing the change
+	XChangedBy ChangedByHeader `json:"X-Changed-By"`
+
+	// XSource Source system initiating the change (api, syncer, scheduler)
+	XSource SourceHeader `json:"X-Source"`
+
+	// XCorrelationId Correlation ID for tracing multi-step updates
+	XCorrelationId *CorrelationIdHeader `json:"X-Correlation-Id,omitempty"`
+}
+
+// UpdateJobParams defines parameters for UpdateJob.
+type UpdateJobParams struct {
+	// XChangedBy Identifier of the actor/system performing the change
+	XChangedBy ChangedByHeader `json:"X-Changed-By"`
+
+	// XSource Source system initiating the change (api, syncer, scheduler)
+	XSource SourceHeader `json:"X-Source"`
+
+	// XCorrelationId Correlation ID for tracing multi-step updates
+	XCorrelationId *CorrelationIdHeader `json:"X-Correlation-Id,omitempty"`
 }
 
 // GetJobMetricsParams defines parameters for GetJobMetrics.
@@ -276,16 +378,16 @@ type ServerInterface interface {
 	ListJobs(w http.ResponseWriter, r *http.Request, params ListJobsParams)
 	// Create a new job
 	// (POST /jobs)
-	CreateJob(w http.ResponseWriter, r *http.Request)
+	CreateJob(w http.ResponseWriter, r *http.Request, params CreateJobParams)
 	// Delete job
 	// (DELETE /jobs/{jobId})
-	DeleteJob(w http.ResponseWriter, r *http.Request, jobId JobId)
+	DeleteJob(w http.ResponseWriter, r *http.Request, jobId JobId, params DeleteJobParams)
 	// Get job details
 	// (GET /jobs/{jobId})
 	GetJob(w http.ResponseWriter, r *http.Request, jobId JobId)
 	// Update job
 	// (PATCH /jobs/{jobId})
-	UpdateJob(w http.ResponseWriter, r *http.Request, jobId JobId)
+	UpdateJob(w http.ResponseWriter, r *http.Request, jobId JobId, params UpdateJobParams)
 	// Get job metrics history
 	// (GET /jobs/{jobId}/metrics)
 	GetJobMetrics(w http.ResponseWriter, r *http.Request, jobId JobId, params GetJobMetricsParams)
@@ -379,8 +481,80 @@ func (siw *ServerInterfaceWrapper) ListJobs(w http.ResponseWriter, r *http.Reque
 // CreateJob operation middleware
 func (siw *ServerInterfaceWrapper) CreateJob(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateJobParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Changed-By" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Changed-By")]; found {
+		var XChangedBy ChangedByHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Changed-By", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Changed-By", valueList[0], &XChangedBy, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Changed-By", Err: err})
+			return
+		}
+
+		params.XChangedBy = XChangedBy
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Changed-By is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Changed-By", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-Source" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Source")]; found {
+		var XSource SourceHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Source", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Source", valueList[0], &XSource, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Source", Err: err})
+			return
+		}
+
+		params.XSource = XSource
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Source is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Source", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-Correlation-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Correlation-Id")]; found {
+		var XCorrelationId CorrelationIdHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Correlation-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Correlation-Id", valueList[0], &XCorrelationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Correlation-Id", Err: err})
+			return
+		}
+
+		params.XCorrelationId = &XCorrelationId
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateJob(w, r)
+		siw.Handler.CreateJob(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -404,8 +578,78 @@ func (siw *ServerInterfaceWrapper) DeleteJob(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteJobParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Changed-By" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Changed-By")]; found {
+		var XChangedBy ChangedByHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Changed-By", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Changed-By", valueList[0], &XChangedBy, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Changed-By", Err: err})
+			return
+		}
+
+		params.XChangedBy = XChangedBy
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Changed-By is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Changed-By", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-Source" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Source")]; found {
+		var XSource SourceHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Source", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Source", valueList[0], &XSource, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Source", Err: err})
+			return
+		}
+
+		params.XSource = XSource
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Source is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Source", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-Correlation-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Correlation-Id")]; found {
+		var XCorrelationId CorrelationIdHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Correlation-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Correlation-Id", valueList[0], &XCorrelationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Correlation-Id", Err: err})
+			return
+		}
+
+		params.XCorrelationId = &XCorrelationId
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteJob(w, r, jobId)
+		siw.Handler.DeleteJob(w, r, jobId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -454,8 +698,78 @@ func (siw *ServerInterfaceWrapper) UpdateJob(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateJobParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Changed-By" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Changed-By")]; found {
+		var XChangedBy ChangedByHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Changed-By", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Changed-By", valueList[0], &XChangedBy, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Changed-By", Err: err})
+			return
+		}
+
+		params.XChangedBy = XChangedBy
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Changed-By is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Changed-By", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-Source" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Source")]; found {
+		var XSource SourceHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Source", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Source", valueList[0], &XSource, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Source", Err: err})
+			return
+		}
+
+		params.XSource = XSource
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Source is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Source", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-Correlation-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Correlation-Id")]; found {
+		var XCorrelationId CorrelationIdHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Correlation-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Correlation-Id", valueList[0], &XCorrelationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Correlation-Id", Err: err})
+			return
+		}
+
+		params.XCorrelationId = &XCorrelationId
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateJob(w, r, jobId)
+		siw.Handler.UpdateJob(w, r, jobId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -677,54 +991,63 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"xLuvqnw3OwhefVn9JwAA//++5J6lHkIAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

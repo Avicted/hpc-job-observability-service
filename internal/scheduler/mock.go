@@ -226,7 +226,7 @@ func (m *MockJobSource) GenerateDemoJobs() {
 				Partition:     partition,
 				Account:       account,
 				QoS:           qos,
-				Priority:      intPtr(10 + (i % 200)),
+				Priority:      int64Ptr(int64(10 + (i % 200))),
 			},
 		}
 
@@ -318,6 +318,10 @@ func timePtr(t time.Time) *time.Time {
 }
 
 func intPtr(i int) *int {
+	return &i
+}
+
+func int64Ptr(i int64) *int64 {
 	return &i
 }
 

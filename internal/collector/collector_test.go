@@ -34,12 +34,16 @@ func testStore(t *testing.T) storage.Storage {
 	return store
 }
 
+func auditContext() context.Context {
+	return storage.WithAuditInfo(context.Background(), storage.NewAuditInfo("test", "collector-test"))
+}
+
 func TestCollector(t *testing.T) {
 	store := testStore(t)
 	exporter := metrics.NewExporter(store)
 
 	// Create a running job
-	ctx := context.Background()
+	ctx := auditContext()
 	job := &storage.Job{
 		ID:            "collector-test-job",
 		User:          "testuser",

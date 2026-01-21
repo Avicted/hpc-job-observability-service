@@ -64,7 +64,7 @@ cp .env.example .env
 # Edit .env with your settings (especially passwords!)
 
 # Start the full stack with Slurm integration
-docker-compose --profile slurm up --build --force-recreate
+docker-compose --profile slurm up --build
 
 # (Optional) Seed demo data when using mock backend
 # Note: demo seeding is ignored when SCHEDULER_BACKEND=slurm

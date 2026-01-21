@@ -21,6 +21,10 @@ type SlurmConfig struct {
 	APIVersion string
 	// AuthToken is the JWT or other auth token for slurmrestd
 	AuthToken string
+	// ClusterName identifies the Slurm cluster for multi-cluster setups.
+	ClusterName string
+	// SchedulerInstance identifies the scheduler instance (e.g., "slurmrestd-1").
+	SchedulerInstance string
 	// HTTPClient is an optional custom HTTP client
 	HTTPClient *http.Client
 }
@@ -186,11 +190,38 @@ func (s *SlurmJobSource) convertSlurmJob(sj *slurmJob) *Job {
 		State: s.stateMapper.NormalizeState(sj.JobState),
 	}
 
-	// Set allocated resources (Slurm doesn't provide real-time usage)
-	// We use allocated values as initial estimates
+	if sj.NodeCount > 0 {
+		job.NodeCount = int(sj.NodeCount)
+	} else if len(job.Nodes) > 0 {
+		job.NodeCount = len(job.Nodes)
+	}
+
+	// Set allocated and requested resources (Slurm doesn't provide real-time usage)
 	if sj.Cpus > 0 {
-		// Store allocated CPUs as a percentage placeholder (will be updated by collector)
-		job.CPUUsage = 0 // Actual usage unknown, collector will update for running jobs
+		job.AllocatedCPUs = int64(sj.Cpus)
+	}
+	if reqCPU := parseTRESValue(sj.TresReqStr, "cpu"); reqCPU > 0 {
+		job.RequestedCPUs = reqCPU
+	} else if job.AllocatedCPUs > 0 {
+		job.RequestedCPUs = job.AllocatedCPUs
+	}
+
+	if allocMem := parseMemoryFromTRES(sj.TresAllocStr); allocMem > 0 {
+		job.AllocatedMemMB = allocMem
+	}
+	if reqMem := parseMemoryFromTRES(sj.TresReqStr); reqMem > 0 {
+		job.RequestedMemMB = reqMem
+	} else if job.AllocatedMemMB > 0 {
+		job.RequestedMemMB = job.AllocatedMemMB
+	}
+
+	if allocGPU := parseTRESValue(sj.TresAllocStr, "gres/gpu"); allocGPU > 0 {
+		job.AllocatedGPUs = allocGPU
+	}
+	if reqGPU := parseTRESValue(sj.TresReqStr, "gres/gpu"); reqGPU > 0 {
+		job.RequestedGPUs = reqGPU
+	} else if job.AllocatedGPUs > 0 {
+		job.RequestedGPUs = job.AllocatedGPUs
 	}
 
 	// Try to get memory from various sources (in order of preference)
@@ -214,13 +245,17 @@ func (s *SlurmJobSource) convertSlurmJob(sj *slurmJob) *Job {
 
 	if sj.EndTime > 0 && sj.EndTime != 0 {
 		t := time.Unix(int64(sj.EndTime), 0)
-		job.EndTime = &t
+		if job.State == JobStateCompleted || job.State == JobStateFailed || job.State == JobStateCancelled {
+			job.EndTime = &t
+		} else if !t.After(time.Now()) {
+			job.EndTime = &t
+		}
 	}
 
 	// Calculate runtime
-	if job.EndTime != nil {
+	if job.EndTime != nil && (job.State == JobStateCompleted || job.State == JobStateFailed || job.State == JobStateCancelled) {
 		job.RuntimeSeconds = job.EndTime.Sub(job.StartTime).Seconds()
-	} else if job.State == JobStateRunning {
+	} else if job.State == JobStateRunning && !job.StartTime.IsZero() {
 		job.RuntimeSeconds = time.Since(job.StartTime).Seconds()
 	}
 
@@ -232,6 +267,7 @@ func (s *SlurmJobSource) convertSlurmJob(sj *slurmJob) *Job {
 		Partition:     sj.Partition,
 		Account:       sj.Account,
 		QoS:           sj.QoS,
+		StateReason:   sj.StateReason,
 	}
 
 	if sj.SubmitTime > 0 {
@@ -240,13 +276,18 @@ func (s *SlurmJobSource) convertSlurmJob(sj *slurmJob) *Job {
 	}
 
 	if sj.Priority > 0 {
-		priority := int(sj.Priority)
+		priority := int64(sj.Priority)
 		job.Scheduler.Priority = &priority
 	}
 
 	if sj.ExitCode != 0 {
 		exitCode := int(sj.ExitCode)
 		job.Scheduler.ExitCode = &exitCode
+	}
+
+	if sj.TimeLimit > 0 {
+		limit := int(sj.TimeLimit)
+		job.Scheduler.TimeLimitMins = &limit
 	}
 
 	// Store extra SLURM-specific fields

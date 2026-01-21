@@ -150,6 +150,10 @@ paths:
               nodes:
                 - node-04
                 - node-05
+      parameters:
+        - $ref: '#/components/parameters/ChangedByHeader'
+        - $ref: '#/components/parameters/SourceHeader'
+        - $ref: '#/components/parameters/CorrelationIdHeader'
       responses:
         '201':
           description: Job created successfully
@@ -224,6 +228,9 @@ paths:
       operationId: updateJob
       parameters:
         - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/ChangedByHeader'
+        - $ref: '#/components/parameters/SourceHeader'
+        - $ref: '#/components/parameters/CorrelationIdHeader'
       requestBody:
         required: true
         content:
@@ -266,6 +273,9 @@ paths:
       operationId: deleteJob
       parameters:
         - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/ChangedByHeader'
+        - $ref: '#/components/parameters/SourceHeader'
+        - $ref: '#/components/parameters/CorrelationIdHeader'
       responses:
         '204':
           description: Job deleted successfully
@@ -402,6 +412,29 @@ components:
         minLength: 1
         maxLength: 255
       example: job-001
+    ChangedByHeader:
+      name: X-Changed-By
+      in: header
+      description: Identifier of the actor/system performing the change
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    SourceHeader:
+      name: X-Source
+      in: header
+      description: Source system initiating the change (api, syncer, scheduler)
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    CorrelationIdHeader:
+      name: X-Correlation-Id
+      in: header
+      description: Correlation ID for tracing multi-step updates
+      required: false
+      schema:
+        type: string
 
   schemas:
     HealthResponse:
@@ -460,6 +493,10 @@ components:
           example:
             - node-01
             - node-02
+        node_count:
+          type: integer
+          minimum: 0
+          description: Number of nodes allocated to the job
         state:
           $ref: '#/components/schemas/JobState'
         start_time:
@@ -490,6 +527,67 @@ components:
           minimum: 0
           maximum: 100
           description: Current GPU usage percentage (optional)
+        requested_cpus:
+          type: integer
+          minimum: 0
+          description: CPUs requested by the job
+        allocated_cpus:
+          type: integer
+          minimum: 0
+          description: CPUs allocated to the job
+        requested_memory_mb:
+          type: integer
+          minimum: 0
+          description: Memory requested by the job (MB)
+        allocated_memory_mb:
+          type: integer
+          minimum: 0
+          description: Memory allocated to the job (MB)
+        requested_gpus:
+          type: integer
+          minimum: 0
+          description: GPUs requested by the job
+        allocated_gpus:
+          type: integer
+          minimum: 0
+          description: GPUs allocated to the job
+        cluster_name:
+          type: string
+          description: Cluster identifier for multi-cluster deployments
+        scheduler_instance:
+          type: string
+          description: Scheduler instance identifier
+        ingest_version:
+          type: string
+          description: Ingestion pipeline version
+        last_sample_at:
+          type: string
+          format: date-time
+          description: Timestamp of the latest metrics sample
+        sample_count:
+          type: integer
+          minimum: 0
+          description: Total number of metrics samples recorded for the job
+        avg_cpu_usage:
+          type: number
+          format: double
+          description: Average CPU usage across samples
+        max_cpu_usage:
+          type: number
+          format: double
+          description: Maximum CPU usage across samples
+        max_memory_usage_mb:
+          type: integer
+          minimum: 0
+          description: Maximum memory usage across samples (MB)
+        avg_gpu_usage:
+          type: number
+          format: double
+          description: Average GPU usage across samples
+        max_gpu_usage:
+          type: number
+          format: double
+          description: Maximum GPU usage across samples
         scheduler:
           $ref: '#/components/schemas/SchedulerInfo'
 
@@ -534,12 +632,21 @@ components:
           example: normal
         priority:
           type: integer
-          description: Job priority in the scheduler queue
+          format: int64
+          description: Job priority in the scheduler queue (Slurm uses uint32 which may exceed int32)
           example: 100
         exit_code:
           type: integer
           description: Job exit code (available after completion)
           example: 0
+        state_reason:
+          type: string
+          description: Scheduler-provided reason for state transitions
+          example: None
+        time_limit_minutes:
+          type: integer
+          description: Time limit in minutes
+          example: 60
         extra:
           type: object
           additionalProperties: true

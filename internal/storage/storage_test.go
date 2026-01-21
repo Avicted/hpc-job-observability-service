@@ -35,7 +35,7 @@ func TestSQLiteStorage(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := WithAuditInfo(context.Background(), NewAuditInfo("test", "storage-test"))
 
 	// Test CreateJob
 	t.Run("CreateJob", func(t *testing.T) {
@@ -281,7 +281,7 @@ func TestStressConcurrentJobs(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := WithAuditInfo(context.Background(), NewAuditInfo("test", "storage-test"))
 	jobCount := 5000
 	workers := 100
 	metricsSamplesPerJob := 3
@@ -445,7 +445,7 @@ func TestSQLiteStorage_AdditionalFilters(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := WithAuditInfo(context.Background(), NewAuditInfo("test", "storage-test"))
 
 	// Create test jobs for filtering
 	for i := 0; i < 10; i++ {
@@ -563,7 +563,7 @@ func TestSQLiteStorage_MetricsFilters(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := WithAuditInfo(context.Background(), NewAuditInfo("test", "storage-test"))
 
 	// Create a job
 	_ = store.CreateJob(ctx, &Job{
@@ -679,7 +679,7 @@ func TestSQLiteStorage_GPUUsage(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := WithAuditInfo(context.Background(), NewAuditInfo("test", "storage-test"))
 
 	// Test job with GPU usage
 	t.Run("Job_WithGPU", func(t *testing.T) {
@@ -750,7 +750,7 @@ func TestSQLiteStorage_UpdateJobNonexistent(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := WithAuditInfo(context.Background(), NewAuditInfo("test", "storage-test"))
 
 	job := &Job{
 		ID:    "nonexistent-job",
@@ -782,7 +782,7 @@ func TestSQLiteStorage_SeedDemoData(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := WithAuditInfo(context.Background(), NewAuditInfo("test", "storage-test"))
 
 	// Seed demo data
 	if err := store.SeedDemoData(); err != nil {
@@ -861,7 +861,7 @@ func TestSQLiteStorage_CreateJob_Defaults(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := WithAuditInfo(context.Background(), NewAuditInfo("test", "storage-test"))
 	job := &Job{ID: "defaults-job", User: "testuser", Nodes: []string{"node-1"}}
 	if err := store.CreateJob(ctx, job); err != nil {
 		t.Fatalf("CreateJob failed: %v", err)
@@ -895,7 +895,7 @@ func TestSQLiteStorage_RecordMetrics_DefaultTimestamp(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := WithAuditInfo(context.Background(), NewAuditInfo("test", "storage-test"))
 	if err := store.CreateJob(ctx, &Job{ID: "metric-ts-job", User: "u", Nodes: []string{"n"}, State: JobStateRunning, StartTime: time.Now()}); err != nil {
 		t.Fatalf("CreateJob failed: %v", err)
 	}
@@ -927,7 +927,7 @@ func TestSQLiteStorage_GetLatestMetrics_WithGPU(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := WithAuditInfo(context.Background(), NewAuditInfo("test", "storage-test"))
 	if err := store.CreateJob(ctx, &Job{ID: "latest-gpu", User: "u", Nodes: []string{"n"}, State: JobStateRunning, StartTime: time.Now()}); err != nil {
 		t.Fatalf("CreateJob failed: %v", err)
 	}
@@ -963,7 +963,7 @@ func TestSQLiteStorage_GetJobMetrics_LimitCap(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := WithAuditInfo(context.Background(), NewAuditInfo("test", "storage-test"))
 	if err := store.CreateJob(ctx, &Job{ID: "metric-limit-job", User: "u", Nodes: []string{"n"}, State: JobStateRunning, StartTime: time.Now()}); err != nil {
 		t.Fatalf("CreateJob failed: %v", err)
 	}

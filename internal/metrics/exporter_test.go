@@ -35,6 +35,10 @@ func testStore(t *testing.T) storage.Storage {
 	return store
 }
 
+func auditContext() context.Context {
+	return storage.WithAuditInfo(context.Background(), storage.NewAuditInfo("test", "metrics-test"))
+}
+
 func TestNewExporter(t *testing.T) {
 	store := testStore(t)
 	exporter := NewExporter(store)
@@ -99,7 +103,7 @@ func TestExporter_Register(t *testing.T) {
 func TestExporter_Collect(t *testing.T) {
 	store := testStore(t)
 	exporter := NewExporter(store)
-	ctx := context.Background()
+	ctx := auditContext()
 
 	// Create test jobs
 	gpuUsage := 45.0
@@ -226,7 +230,7 @@ func TestDefaultHandler(t *testing.T) {
 func TestExporter_AllJobStates(t *testing.T) {
 	store := testStore(t)
 	exporter := NewExporter(store)
-	ctx := context.Background()
+	ctx := auditContext()
 
 	// Create jobs in all states
 	states := []storage.JobState{
@@ -263,7 +267,7 @@ func TestExporter_AllJobStates(t *testing.T) {
 func TestExporter_MetricsFormat(t *testing.T) {
 	store := testStore(t)
 	exporter := NewExporter(store)
-	ctx := context.Background()
+	ctx := auditContext()
 
 	// Create a job
 	job := &storage.Job{
@@ -318,7 +322,7 @@ func TestExporter_Register_DuplicateCollector(t *testing.T) {
 func TestExporter_NodeMetrics(t *testing.T) {
 	store := testStore(t)
 	exporter := NewExporter(store)
-	ctx := context.Background()
+	ctx := auditContext()
 
 	// Create multiple running jobs on same and different nodes
 	gpuUsage1 := 60.0
@@ -388,7 +392,7 @@ func TestExporter_NodeMetrics(t *testing.T) {
 func TestExporter_NodeMetrics_NoRunningJobs(t *testing.T) {
 	store := testStore(t)
 	exporter := NewExporter(store)
-	ctx := context.Background()
+	ctx := auditContext()
 
 	// Create only completed/pending jobs - no running jobs
 	endTime := time.Now()
@@ -430,7 +434,7 @@ func TestExporter_NodeMetrics_NoRunningJobs(t *testing.T) {
 func TestExporter_NodeMetrics_MultiNodeJob(t *testing.T) {
 	store := testStore(t)
 	exporter := NewExporter(store)
-	ctx := context.Background()
+	ctx := auditContext()
 
 	// Create a multi-node job - metrics should be recorded for each node
 	gpuUsage := 75.0

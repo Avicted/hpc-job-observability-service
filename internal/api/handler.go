@@ -3,15 +3,16 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/avic/hpc-job-observability-service/internal/api/server"
 	"github.com/avic/hpc-job-observability-service/internal/api/types"
 	"github.com/avic/hpc-job-observability-service/internal/metrics"
 	"github.com/avic/hpc-job-observability-service/internal/storage"
+	"github.com/google/uuid"
 )
 
 // Server implements the generated ServerInterface.
@@ -131,7 +132,12 @@ func (s *Server) ListJobs(w http.ResponseWriter, r *http.Request, params server.
 }
 
 // CreateJob implements ServerInterface.CreateJob
-func (s *Server) CreateJob(w http.ResponseWriter, r *http.Request) {
+func (s *Server) CreateJob(w http.ResponseWriter, r *http.Request, params server.CreateJobParams) {
+	auditInfo, ok := s.auditInfoFromParams(w, params.XChangedBy, params.XSource, params.XCorrelationId)
+	if !ok {
+		return
+	}
+
 	var req types.CreateJobRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
@@ -153,12 +159,16 @@ func (s *Server) CreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	job := &storage.Job{
-		ID:        req.Id,
-		User:      req.User,
-		Nodes:     req.Nodes,
-		State:     storage.JobStateRunning,
-		StartTime: time.Now(),
-		Scheduler: s.apiSchedulerToStorage(req.Scheduler),
+		ID:            req.Id,
+		User:          req.User,
+		Nodes:         req.Nodes,
+		State:         storage.JobStateRunning,
+		StartTime:     time.Now(),
+		Scheduler:     s.apiSchedulerToStorage(req.Scheduler),
+		Audit:         auditInfo,
+		ClusterName:   "default",
+		SchedulerInst: "api",
+		IngestVersion: "api-v1",
 	}
 
 	if err := s.store.CreateJob(r.Context(), job); err != nil {
@@ -192,7 +202,12 @@ func (s *Server) GetJob(w http.ResponseWriter, r *http.Request, jobId server.Job
 }
 
 // UpdateJob implements ServerInterface.UpdateJob
-func (s *Server) UpdateJob(w http.ResponseWriter, r *http.Request, jobId server.JobId) {
+func (s *Server) UpdateJob(w http.ResponseWriter, r *http.Request, jobId server.JobId, params server.UpdateJobParams) {
+	auditInfo, ok := s.auditInfoFromParams(w, params.XChangedBy, params.XSource, params.XCorrelationId)
+	if !ok {
+		return
+	}
+
 	var req types.UpdateJobRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
@@ -227,6 +242,7 @@ func (s *Server) UpdateJob(w http.ResponseWriter, r *http.Request, jobId server.
 	if req.GpuUsage != nil {
 		job.GPUUsage = req.GpuUsage
 	}
+	job.Audit = auditInfo
 
 	if err := s.store.UpdateJob(r.Context(), job); err != nil {
 		s.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
@@ -240,8 +256,14 @@ func (s *Server) UpdateJob(w http.ResponseWriter, r *http.Request, jobId server.
 }
 
 // DeleteJob implements ServerInterface.DeleteJob
-func (s *Server) DeleteJob(w http.ResponseWriter, r *http.Request, jobId server.JobId) {
-	if err := s.store.DeleteJob(r.Context(), string(jobId)); err != nil {
+func (s *Server) DeleteJob(w http.ResponseWriter, r *http.Request, jobId server.JobId, params server.DeleteJobParams) {
+	auditInfo, ok := s.auditInfoFromParams(w, params.XChangedBy, params.XSource, params.XCorrelationId)
+	if !ok {
+		return
+	}
+
+	ctx := storage.WithAuditInfo(r.Context(), auditInfo)
+	if err := s.store.DeleteJob(ctx, string(jobId)); err != nil {
 		if err == storage.ErrJobNotFound {
 			s.writeError(w, http.StatusNotFound, "not_found", "Job not found")
 			return
@@ -251,6 +273,50 @@ func (s *Server) DeleteJob(w http.ResponseWriter, r *http.Request, jobId server.
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) auditInfoFromRequest(w http.ResponseWriter, r *http.Request) (*storage.JobAuditInfo, bool) {
+	changedBy := strings.TrimSpace(r.Header.Get("X-Changed-By"))
+	source := strings.TrimSpace(r.Header.Get("X-Source"))
+	correlationID := strings.TrimSpace(r.Header.Get("X-Correlation-Id"))
+
+	if changedBy == "" {
+		s.writeError(w, http.StatusBadRequest, "validation_error", "X-Changed-By header is required")
+		return nil, false
+	}
+	if source == "" {
+		s.writeError(w, http.StatusBadRequest, "validation_error", "X-Source header is required")
+		return nil, false
+	}
+	if correlationID == "" {
+		correlationID = uuid.NewString()
+	}
+	w.Header().Set("X-Correlation-Id", correlationID)
+
+	return storage.NewAuditInfoWithCorrelation(changedBy, source, correlationID), true
+}
+
+func (s *Server) auditInfoFromParams(w http.ResponseWriter, changedBy string, source string, correlationID *string) (*storage.JobAuditInfo, bool) {
+	changedBy = strings.TrimSpace(changedBy)
+	source = strings.TrimSpace(source)
+	if changedBy == "" {
+		s.writeError(w, http.StatusBadRequest, "validation_error", "X-Changed-By header is required")
+		return nil, false
+	}
+	if source == "" {
+		s.writeError(w, http.StatusBadRequest, "validation_error", "X-Source header is required")
+		return nil, false
+	}
+	finalCorrelationID := ""
+	if correlationID != nil {
+		finalCorrelationID = strings.TrimSpace(*correlationID)
+	}
+	if finalCorrelationID == "" {
+		finalCorrelationID = uuid.NewString()
+	}
+	w.Header().Set("X-Correlation-Id", finalCorrelationID)
+
+	return storage.NewAuditInfoWithCorrelation(changedBy, source, finalCorrelationID), true
 }
 
 // GetJobMetrics implements ServerInterface.GetJobMetrics
@@ -299,6 +365,11 @@ func (s *Server) GetJobMetrics(w http.ResponseWriter, r *http.Request, jobId ser
 
 // RecordJobMetrics implements ServerInterface.RecordJobMetrics
 func (s *Server) RecordJobMetrics(w http.ResponseWriter, r *http.Request, jobId server.JobId) {
+	auditInfo, ok := s.auditInfoFromRequest(w, r)
+	if !ok {
+		return
+	}
+
 	// Check if job exists
 	job, err := s.store.GetJob(r.Context(), string(jobId))
 	if err != nil {
@@ -343,7 +414,11 @@ func (s *Server) RecordJobMetrics(w http.ResponseWriter, r *http.Request, jobId 
 	job.CPUUsage = req.CpuUsage
 	job.MemoryUsageMB = int64(req.MemoryUsageMb)
 	job.GPUUsage = req.GpuUsage
-	_ = s.store.UpdateJob(context.Background(), job)
+	job.Audit = auditInfo
+	if err := s.store.UpdateJob(r.Context(), job); err != nil {
+		s.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
 
 	// Update Prometheus metrics
 	s.exporter.UpdateJobMetrics(job)
@@ -380,6 +455,73 @@ func (s *Server) storageJobToAPI(job *storage.Job) types.Job {
 
 	if job.RuntimeSeconds > 0 {
 		resp.RuntimeSeconds = &job.RuntimeSeconds
+	}
+	if job.LastSampleAt != nil {
+		resp.LastSampleAt = job.LastSampleAt
+	}
+	if job.NodeCount > 0 {
+		nodeCount := job.NodeCount
+		resp.NodeCount = &nodeCount
+	}
+	if job.RequestedCPUs > 0 {
+		v := int(job.RequestedCPUs)
+		resp.RequestedCpus = &v
+	}
+	if job.AllocatedCPUs > 0 {
+		v := int(job.AllocatedCPUs)
+		resp.AllocatedCpus = &v
+	}
+	if job.RequestedMemMB > 0 {
+		v := int(job.RequestedMemMB)
+		resp.RequestedMemoryMb = &v
+	}
+	if job.AllocatedMemMB > 0 {
+		v := int(job.AllocatedMemMB)
+		resp.AllocatedMemoryMb = &v
+	}
+	if job.RequestedGPUs > 0 {
+		v := int(job.RequestedGPUs)
+		resp.RequestedGpus = &v
+	}
+	if job.AllocatedGPUs > 0 {
+		v := int(job.AllocatedGPUs)
+		resp.AllocatedGpus = &v
+	}
+	if job.ClusterName != "" {
+		v := job.ClusterName
+		resp.ClusterName = &v
+	}
+	if job.SchedulerInst != "" {
+		v := job.SchedulerInst
+		resp.SchedulerInstance = &v
+	}
+	if job.IngestVersion != "" {
+		v := job.IngestVersion
+		resp.IngestVersion = &v
+	}
+	if job.SampleCount > 0 {
+		v := int(job.SampleCount)
+		resp.SampleCount = &v
+	}
+	if job.AvgCPUUsage > 0 {
+		v := job.AvgCPUUsage
+		resp.AvgCpuUsage = &v
+	}
+	if job.MaxCPUUsage > 0 {
+		v := job.MaxCPUUsage
+		resp.MaxCpuUsage = &v
+	}
+	if job.MaxMemUsageMB > 0 {
+		v := int(job.MaxMemUsageMB)
+		resp.MaxMemoryUsageMb = &v
+	}
+	if job.AvgGPUUsage > 0 {
+		v := job.AvgGPUUsage
+		resp.AvgGpuUsage = &v
+	}
+	if job.MaxGPUUsage > 0 {
+		v := job.MaxGPUUsage
+		resp.MaxGpuUsage = &v
 	}
 
 	// Convert scheduler info if present
@@ -424,6 +566,12 @@ func (s *Server) storageSchedulerToAPI(sched *storage.SchedulerInfo) *types.Sche
 	if sched.ExitCode != nil {
 		result.ExitCode = sched.ExitCode
 	}
+	if sched.StateReason != "" {
+		result.StateReason = &sched.StateReason
+	}
+	if sched.TimeLimitMins != nil {
+		result.TimeLimitMinutes = sched.TimeLimitMins
+	}
 	if len(sched.Extra) > 0 {
 		result.Extra = &sched.Extra
 	}
@@ -464,6 +612,12 @@ func (s *Server) apiSchedulerToStorage(sched *types.SchedulerInfo) *storage.Sche
 	}
 	if sched.ExitCode != nil {
 		result.ExitCode = sched.ExitCode
+	}
+	if sched.StateReason != nil {
+		result.StateReason = *sched.StateReason
+	}
+	if sched.TimeLimitMinutes != nil {
+		result.TimeLimitMins = sched.TimeLimitMinutes
 	}
 	if sched.Extra != nil {
 		result.Extra = *sched.Extra
