@@ -49,8 +49,8 @@ cp .env.example .env
 # Run with SQLite (default)
 ./server
 
-# Run with demo data
-./server --seed-demo
+# Run with demo data (mock backend only)
+SEED_DEMO=true SCHEDULER_BACKEND=mock ./server
 
 # Run with PostgreSQL
 DATABASE_TYPE=postgres DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
@@ -64,7 +64,11 @@ cp .env.example .env
 # Edit .env with your settings (especially passwords!)
 
 # Start the full stack with Slurm integration
-docker-compose --profile slurm up --build
+docker-compose --profile slurm up --build --force-recreate
+
+# (Optional) Seed demo data when using mock backend
+# Note: demo seeding is ignored when SCHEDULER_BACKEND=slurm
+SEED_DEMO=true SCHEDULER_BACKEND=mock docker-compose up --build
 
 # Or start only the Slurm container (for testing scheduler module)
 docker-compose --profile slurm up slurm
@@ -76,6 +80,36 @@ docker-compose --profile mock up
 # View Grafana at http://localhost:3000 (credentials from .env)
 # View app at http://localhost:8080
 ```
+
+#### Troubleshooting: demo data persists
+
+If you previously ran with the mock backend or `SEED_DEMO=true`, the PostgreSQL data is stored in the `postgres_data` volume. When you switch to `SCHEDULER_BACKEND=slurm`, you may still see old demo jobs until the volume is cleared.
+
+To reset to a clean database:
+
+```bash
+docker-compose down -v
+docker volume rm <project>_postgres_data  # only if it still exists
+docker-compose --profile slurm up --build --force-recreate
+```
+
+#### Troubleshooting: network not found
+
+If you see an error like “failed to set up container networking: network … not found”, a Compose-managed network was likely removed while containers still referenced it.
+
+Fix by recreating the stack and its network:
+
+```bash
+docker-compose down -v
+docker network rm <project>_hpc-network  # only if it still exists
+docker-compose --profile slurm up --build --force-recreate
+```
+
+Notes:
+- If you manually deleted the network, add `--force-recreate` to ensure containers are rebuilt against the new network.
+- Compose creates a project-scoped network named `<project>_hpc-network`.
+- Keep a consistent project name if you use `COMPOSE_PROJECT_NAME` or `-p`.
+- Avoid `docker start` on Compose-managed containers; use `docker-compose up` instead.
 
 ## Grafana Dashboards
 
@@ -171,11 +205,9 @@ cp .env.example .env
 | `GF_SECURITY_ADMIN_USER` | `admin` | Grafana admin username |
 | `GF_SECURITY_ADMIN_PASSWORD` | - | Grafana admin password |
 
-### Command-line Flags
+### Demo Data
 
-| Flag | Description |
-|------|-------------|
-| `--seed-demo` | Seed database with demo data on startup |
+Use the `SEED_DEMO` environment variable to seed demo data on startup (mock backend only).
 
 ## Prometheus Metrics
 
