@@ -35,7 +35,7 @@ COPY --from=builder /server /app/server
 COPY --from=builder /mockserver /app/mockserver
 
 # Copy OpenAPI spec for mock server
-COPY config/openapi.yaml /app/openapi.yaml
+COPY config/openapi/service/openapi.yaml /app/openapi.yaml
 
 # Create non-root user
 RUN adduser -D -g '' appuser
