@@ -24,7 +24,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["/app/server", "-seed-demo"]
+    command: ["/app/server"]
     networks:
       - hpc-network
     healthcheck:

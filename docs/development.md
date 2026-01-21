@@ -85,8 +85,8 @@ go build -o mockserver ./cmd/mockserver
 # Run with SQLite (default)
 ./server
 
-# Run with demo data
-./server --seed-demo
+# Run with demo data (mock backend only)
+SEED_DEMO=true SCHEDULER_BACKEND=mock ./server
 
 # Run with PostgreSQL
 DATABASE_TYPE=postgres DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
@@ -104,9 +104,43 @@ docker-compose --profile slurm up slurm
 # Start with mock server for testing
 docker-compose --profile mock up
 
+# (Optional) Seed demo data when using mock backend
+# Note: demo seeding is ignored when SCHEDULER_BACKEND=slurm
+SEED_DEMO=true SCHEDULER_BACKEND=mock docker-compose up --build
+
 # Stop and clean up
 docker-compose down -v
 ```
+
+#### Troubleshooting: demo data persists
+
+If you previously ran with the mock backend or `SEED_DEMO=true`, the PostgreSQL data is stored in the `postgres_data` volume. When you switch to `SCHEDULER_BACKEND=slurm`, you may still see old demo jobs until the volume is cleared.
+
+To reset to a clean database:
+
+```bash
+docker-compose down -v
+docker volume rm <project>_postgres_data  # only if it still exists
+docker-compose --profile slurm up --build --force-recreate
+```
+
+#### Troubleshooting: network not found
+
+If you see an error like “failed to set up container networking: network … not found”, a Compose-managed network was likely removed while containers still referenced it.
+
+Fix by recreating the stack and its network:
+
+```bash
+docker-compose down -v
+docker network rm <project>_hpc-network  # only if it still exists
+docker-compose --profile slurm up --build
+```
+
+Notes:
+- If you manually deleted the network, add `--force-recreate` to ensure containers are rebuilt against the new network.
+- Compose creates a project-scoped network named `<project>_hpc-network`.
+- Keep a consistent project name if you use `COMPOSE_PROJECT_NAME` or `-p`.
+- Avoid `docker start` on Compose-managed containers; use `docker-compose up` instead.
 
 ## Slurm Integration Testing
 
@@ -119,11 +153,11 @@ When using the `slurm` backend, the service automatically syncs jobs from the Sl
 - **Sync Interval**: Jobs are synced every 30 seconds
 - **Initial Delay**: First sync occurs 5 seconds after startup
 - **Upsert Logic**: Jobs are created or updated based on their ID
-- **Demo Data**: When using `slurm` backend, the `-seed-demo` flag is ignored (jobs come from Slurm)
+- **Demo Data**: When using `slurm` backend, `SEED_DEMO` is ignored (jobs come from Slurm)
 
 When using the `mock` backend:
 - **No Syncer**: Jobs must be created manually or via demo data
-- **Demo Data**: The `-seed-demo` flag seeds 100 demo jobs
+- **Demo Data**: Set `SEED_DEMO=true` to seed 100 demo jobs
 
 ### Architecture (WIP)
 

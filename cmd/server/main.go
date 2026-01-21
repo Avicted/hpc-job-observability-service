@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -85,7 +84,7 @@ func main() {
 			log.Fatalf("Failed to seed demo data: %v", err)
 		}
 	} else if cfg.SeedDemo && cfg.SchedulerBackend != "mock" {
-		log.Println("Note: -seed-demo flag ignored when using slurm backend (jobs will be synced from scheduler)")
+		log.Println("Note: SEED_DEMO is ignored when using slurm backend (jobs will be synced from scheduler)")
 	}
 
 	// Start job syncer for real scheduler backends
@@ -148,16 +147,15 @@ func main() {
 func loadConfig() (*Config, error) {
 	cfg := &Config{}
 
-	// Flags
-	flag.BoolVar(&cfg.SeedDemo, "seed-demo", false, "Seed database with demo data")
-	flag.Parse()
-
 	// Environment variables with defaults
 	cfg.Port = getEnvInt("PORT", 8080)
 	cfg.Host = getEnv("HOST", "0.0.0.0")
 	cfg.DatabaseType = getEnv("DATABASE_TYPE", "sqlite")
 	cfg.DatabaseURL = getEnv("DATABASE_URL", "file:hpc_jobs.db?cache=shared&mode=rwc")
 	cfg.MetricsRetentionDays = getEnvInt("METRICS_RETENTION_DAYS", 7)
+
+	// Demo seed (opt-in)
+	cfg.SeedDemo = getEnvBool("SEED_DEMO", false)
 
 	// Scheduler configuration (required)
 	cfg.SchedulerBackend = getEnv("SCHEDULER_BACKEND", "")
@@ -191,6 +189,15 @@ func getEnvInt(key string, defaultVal int) int {
 	if val := os.Getenv(key); val != "" {
 		if intVal, err := strconv.Atoi(val); err == nil {
 			return intVal
+		}
+	}
+	return defaultVal
+}
+
+func getEnvBool(key string, defaultVal bool) bool {
+	if val := os.Getenv(key); val != "" {
+		if boolVal, err := strconv.ParseBool(val); err == nil {
+			return boolVal
 		}
 	}
 	return defaultVal
