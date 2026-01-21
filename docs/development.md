@@ -122,15 +122,17 @@ When using the `mock` backend:
 - **No Syncer**: Jobs must be created manually or via demo data
 - **Demo Data**: The `-seed-demo` flag seeds 100 demo jobs
 
-### Architecture
+### Architecture (WIP)
 
-The Slurm integration testing stack includes:
+The Slurm integration testing stack is **work in progress** and currently uses a
+single container that bundles:
 
 - **slurmctld** - Slurm controller daemon
-- **slurmd1, slurmd2** - Two compute nodes for running jobs
-- **slurmrestd** - REST API daemon (exposed on port 6820)
+- **slurmd** - Compute daemon
 - **slurmdbd** - Database daemon for accounting
-- **mysql** - MySQL database for Slurm accounting data
+- **slurmrestd** - REST API daemon (exposed on port 6820)
+
+This single-container setup is intended for local testing only and may change.
 
 ### Quick Start
 
@@ -138,8 +140,8 @@ The Slurm integration testing stack includes:
 # Start the full stack with Slurm integration
 docker-compose --profile slurm up --build
 
-# Or start Slurm services only (for testing scheduler module)
-docker-compose --profile slurm up slurmctld slurmd1 slurmd2 slurmrestd slurmdbd mysql
+# Or start only the Slurm container (for testing scheduler module)
+docker-compose --profile slurm up slurm
 ```
 
 ### Environment Configuration
@@ -151,14 +153,30 @@ When using Slurm, set these environment variables in your `.env` file:
 SCHEDULER_BACKEND=slurm
 
 # Required: Point to slurmrestd
-SLURM_BASE_URL=http://slurmrestd:6820
+# Local/native runs: http://localhost:6820
+# Docker Compose:     http://slurm:6820 (container hostname)
+SLURM_BASE_URL=http://localhost:6820
 
-# Optional: API version (default: v0.0.44)
-SLURM_API_VERSION=v0.0.44
+# Optional: API version (default: v0.0.36 for the test container)
+SLURM_API_VERSION=v0.0.36
 
 # Optional: Auth token (depends on slurmrestd auth config)
 SLURM_AUTH_TOKEN=
 ```
+
+### Node Metrics (WIP)
+
+When running with the Slurm backend, node-level metrics are pulled from the
+Slurm nodes API and exported to Prometheus. This provides node load and capacity
+metrics even when no jobs are running, similar to the mock backend.
+
+Key metrics include:
+- `hpc_node_cpu_load`
+- `hpc_node_cpu_usage_percent`
+- `hpc_node_memory_usage_bytes`
+- `hpc_node_total_cpus`
+- `hpc_node_total_memory_bytes`
+- `hpc_node_state`
 
 ### Running Unit Tests
 
@@ -189,10 +207,10 @@ docker-compose --profile slurm ps
 # 3. Submit a test job
 docker-compose exec slurm sbatch --wrap="echo 'Hello from Slurm'; sleep 30"
 
-# 4. Check job status via slurmrestd (uses slurmdb API v0.0.36)
-curl http://localhost:6820/slurmdb/v0.0.36/jobs
+# 4. Check job status via slurmrestd
+curl http://localhost:6820/slurm/v0.0.36/jobs/
 
-# 5. Verify slurmctld is running
+# 5. Verify node status
 docker-compose exec slurm sinfo
 
 # 6. Check job queue
@@ -210,8 +228,8 @@ To test the full integration (service + Slurm):
 # Create .env with Slurm config
 cat > .env << 'EOF'
 SCHEDULER_BACKEND=slurm
-SLURM_BASE_URL=http://slurmrestd:6820
-SLURM_API_VERSION=v0.0.44
+SLURM_BASE_URL=http://slurm:6820
+SLURM_API_VERSION=v0.0.36
 DATABASE_TYPE=postgres
 DATABASE_URL=postgres://hpc:hpc_password@postgres:5432/hpc_jobs?sslmode=disable
 EOF
