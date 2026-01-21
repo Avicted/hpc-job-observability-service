@@ -81,6 +81,10 @@ docker-compose --profile mock up
 # View app at http://localhost:8080
 ```
 
+#### Slurm readiness check
+
+When `SCHEDULER_BACKEND=slurm`, the service waits (up to 60 seconds) for `slurmrestd` to become reachable before starting. If it cannot reach `SLURM_BASE_URL`, the service exits with a clear error message. Ensure the stack is started with the `slurm` profile and wait for the slurm container to be healthy.
+
 #### Troubleshooting: demo data persists
 
 If you previously ran with the mock backend or `SEED_DEMO=true`, the PostgreSQL data is stored in the `postgres_data` volume. When you switch to `SCHEDULER_BACKEND=slurm`, you may still see old demo jobs until the volume is cleared.
@@ -100,7 +104,7 @@ If you see an error like “failed to set up container networking: network … n
 Fix by recreating the stack and its network:
 
 ```bash
-docker-compose down -v
+docker-compose down
 docker network rm <project>_hpc-network  # only if it still exists
 docker-compose --profile slurm up --build --force-recreate
 ```

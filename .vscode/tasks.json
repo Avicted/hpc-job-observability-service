@@ -86,17 +86,17 @@
             ]
         },
         {
-            "label": "Docker Compose Up",
+            "label": "Docker Compose Up (With Slurm)",
             "type": "shell",
-            "command": "docker-compose up --build",
+            "command": "docker-compose --profile slurm up --build",
             "group": "none",
             "problemMatcher": [],
             "isBackground": true
         },
         {
-            "label": "Docker Compose Down",
+            "label": "Docker Compose Down (Clean)",
             "type": "shell",
-            "command": "docker-compose down",
+            "command": "docker-compose down -v",
             "group": "none",
             "problemMatcher": []
         },
