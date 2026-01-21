@@ -18,15 +18,15 @@ type mockSlurmClient struct {
 	err           error
 }
 
-func (m *mockSlurmClient) SlurmctldGetJobsWithResponse(ctx context.Context, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetJobsResponse, error) {
+func (m *mockSlurmClient) SlurmctldGetJobsWithResponse(ctx context.Context, params *slurmclient.SlurmctldGetJobsParams, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetJobsResponse, error) {
 	return m.jobsResponse, m.err
 }
 
-func (m *mockSlurmClient) SlurmctldGetJobWithResponse(ctx context.Context, jobId int64, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetJobResponse, error) {
+func (m *mockSlurmClient) SlurmctldGetJobWithResponse(ctx context.Context, jobId string, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetJobResponse, error) {
 	return m.jobResponse, m.err
 }
 
-func (m *mockSlurmClient) SlurmctldGetNodesWithResponse(ctx context.Context, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetNodesResponse, error) {
+func (m *mockSlurmClient) SlurmctldGetNodesWithResponse(ctx context.Context, params *slurmclient.SlurmctldGetNodesParams, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetNodesResponse, error) {
 	return m.nodesResponse, m.err
 }
 
@@ -34,8 +34,7 @@ func (m *mockSlurmClient) SlurmctldPingWithResponse(ctx context.Context, reqEdit
 	return m.pingResponse, m.err
 }
 
-// Helper to create string pointers for tests
-func strPtr(s string) *string { return &s }
+// Helper functions strPtr, intPtr, int64Ptr are defined in mock.go
 
 func TestSlurmJobSource_Type(t *testing.T) {
 	source := NewSlurmJobSourceWithClient(SlurmConfig{}, &mockSlurmClient{})
@@ -52,40 +51,40 @@ func TestSlurmJobSource_SupportsMetrics(t *testing.T) {
 }
 
 func TestSlurmJobSource_ListJobs(t *testing.T) {
-	startTime := strPtr("1737478800") // Unix timestamp
-	submitTime := strPtr("1737475200")
+	startTime := int64Ptr(1737478800) // Unix timestamp
+	submitTime := int64Ptr(1737475200)
 
-	jobs := []slurmclient.V0036JobResponseProperties{
+	jobs := []slurmclient.V0037JobResponseProperties{
 		{
-			JobId:     strPtr("12345"),
-			UserId:    strPtr("alice"),
+			JobId:     intPtr(12345),
+			UserName:  strPtr("alice"),
 			Nodes:     strPtr("node01,node02"),
 			JobState:  strPtr("RUNNING"),
 			Partition: strPtr("compute"),
 			Account:   strPtr("research"),
 			Qos:       strPtr("normal"),
-			Priority:  strPtr("1000"),
+			Priority:  intPtr(1000),
 			StartTime: startTime,
-			Cpus:      strPtr("32"),
+			Cpus:      intPtr(32),
 		},
 		{
-			JobId:      strPtr("12346"),
-			UserId:     strPtr("bob"),
+			JobId:      intPtr(12346),
+			UserName:   strPtr("bob"),
 			Nodes:      strPtr("node03"),
 			JobState:   strPtr("PENDING"),
 			Partition:  strPtr("gpu"),
 			Account:    strPtr("ml"),
 			Qos:        strPtr("high"),
-			Priority:   strPtr("2000"),
+			Priority:   intPtr(2000),
 			SubmitTime: submitTime,
-			Cpus:       strPtr("8"),
+			Cpus:       intPtr(8),
 		},
 	}
 
 	client := &mockSlurmClient{
 		jobsResponse: &slurmclient.SlurmctldGetJobsResponse{
 			HTTPResponse: &http.Response{StatusCode: http.StatusOK},
-			JSON200: &slurmclient.V0036JobsResponse{
+			JSON200: &slurmclient.V0037JobsResponse{
 				Jobs: &jobs,
 			},
 		},
@@ -131,16 +130,16 @@ func TestSlurmJobSource_ListJobs(t *testing.T) {
 }
 
 func TestSlurmJobSource_ListJobs_WithFilter(t *testing.T) {
-	jobs := []slurmclient.V0036JobResponseProperties{
-		{JobId: strPtr("1"), UserId: strPtr("alice"), JobState: strPtr("RUNNING"), Partition: strPtr("compute")},
-		{JobId: strPtr("2"), UserId: strPtr("bob"), JobState: strPtr("RUNNING"), Partition: strPtr("gpu")},
-		{JobId: strPtr("3"), UserId: strPtr("alice"), JobState: strPtr("PENDING"), Partition: strPtr("compute")},
+	jobs := []slurmclient.V0037JobResponseProperties{
+		{JobId: intPtr(1), UserName: strPtr("alice"), JobState: strPtr("RUNNING"), Partition: strPtr("compute")},
+		{JobId: intPtr(2), UserName: strPtr("bob"), JobState: strPtr("RUNNING"), Partition: strPtr("gpu")},
+		{JobId: intPtr(3), UserName: strPtr("alice"), JobState: strPtr("PENDING"), Partition: strPtr("compute")},
 	}
 
 	client := &mockSlurmClient{
 		jobsResponse: &slurmclient.SlurmctldGetJobsResponse{
 			HTTPResponse: &http.Response{StatusCode: http.StatusOK},
-			JSON200:      &slurmclient.V0036JobsResponse{Jobs: &jobs},
+			JSON200:      &slurmclient.V0037JobsResponse{Jobs: &jobs},
 		},
 	}
 
@@ -170,18 +169,18 @@ func TestSlurmJobSource_ListJobs_WithFilter(t *testing.T) {
 }
 
 func TestSlurmJobSource_ListJobs_Pagination(t *testing.T) {
-	jobs := []slurmclient.V0036JobResponseProperties{
-		{JobId: strPtr("1"), UserId: strPtr("user"), JobState: strPtr("RUNNING")},
-		{JobId: strPtr("2"), UserId: strPtr("user"), JobState: strPtr("RUNNING")},
-		{JobId: strPtr("3"), UserId: strPtr("user"), JobState: strPtr("RUNNING")},
-		{JobId: strPtr("4"), UserId: strPtr("user"), JobState: strPtr("RUNNING")},
-		{JobId: strPtr("5"), UserId: strPtr("user"), JobState: strPtr("RUNNING")},
+	jobs := []slurmclient.V0037JobResponseProperties{
+		{JobId: intPtr(1), UserName: strPtr("user"), JobState: strPtr("RUNNING")},
+		{JobId: intPtr(2), UserName: strPtr("user"), JobState: strPtr("RUNNING")},
+		{JobId: intPtr(3), UserName: strPtr("user"), JobState: strPtr("RUNNING")},
+		{JobId: intPtr(4), UserName: strPtr("user"), JobState: strPtr("RUNNING")},
+		{JobId: intPtr(5), UserName: strPtr("user"), JobState: strPtr("RUNNING")},
 	}
 
 	client := &mockSlurmClient{
 		jobsResponse: &slurmclient.SlurmctldGetJobsResponse{
 			HTTPResponse: &http.Response{StatusCode: http.StatusOK},
-			JSON200:      &slurmclient.V0036JobsResponse{Jobs: &jobs},
+			JSON200:      &slurmclient.V0037JobsResponse{Jobs: &jobs},
 		},
 	}
 
@@ -228,10 +227,10 @@ func TestSlurmJobSource_ListJobs_Error(t *testing.T) {
 }
 
 func TestSlurmJobSource_GetJob(t *testing.T) {
-	jobs := []slurmclient.V0036JobResponseProperties{
+	jobs := []slurmclient.V0037JobResponseProperties{
 		{
-			JobId:     strPtr("12345"),
-			UserId:    strPtr("alice"),
+			JobId:     intPtr(12345),
+			UserName:  strPtr("alice"),
 			JobState:  strPtr("RUNNING"),
 			Partition: strPtr("compute"),
 		},
@@ -240,7 +239,7 @@ func TestSlurmJobSource_GetJob(t *testing.T) {
 	client := &mockSlurmClient{
 		jobResponse: &slurmclient.SlurmctldGetJobResponse{
 			HTTPResponse: &http.Response{StatusCode: http.StatusOK},
-			JSON200:      &slurmclient.V0036JobsResponse{Jobs: &jobs},
+			JSON200:      &slurmclient.V0037JobsResponse{Jobs: &jobs},
 		},
 	}
 
@@ -279,18 +278,29 @@ func TestSlurmJobSource_GetJob_NotFound(t *testing.T) {
 }
 
 func TestSlurmJobSource_GetJob_InvalidID(t *testing.T) {
-	source := NewSlurmJobSourceWithClient(SlurmConfig{}, &mockSlurmClient{})
+	// With v0.0.37, job IDs are strings passed directly to the API
+	// The API will return 404 for non-existent jobs
+	client := &mockSlurmClient{
+		jobResponse: &slurmclient.SlurmctldGetJobResponse{
+			HTTPResponse: &http.Response{StatusCode: http.StatusNotFound},
+		},
+	}
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, client)
 
 	ctx := context.Background()
-	_, err := source.GetJob(ctx, "not-a-number")
-	if err == nil {
-		t.Error("Expected error for invalid job ID")
+	job, err := source.GetJob(ctx, "not-a-number")
+	// Should not error, just return nil for not found
+	if err != nil {
+		t.Errorf("GetJob() error = %v, want nil", err)
+	}
+	if job != nil {
+		t.Error("GetJob() should return nil for not found job")
 	}
 }
 
 func TestSlurmJobSource_ListNodes(t *testing.T) {
 	cpuLoad := int64(240) // 2.40 load
-	nodes := []slurmclient.V0036Node{
+	nodes := []slurmclient.V0037Node{
 		{
 			Name:       strPtr("node01"),
 			Hostname:   strPtr("node01.cluster"),
@@ -314,7 +324,7 @@ func TestSlurmJobSource_ListNodes(t *testing.T) {
 	client := &mockSlurmClient{
 		nodesResponse: &slurmclient.SlurmctldGetNodesResponse{
 			HTTPResponse: &http.Response{StatusCode: http.StatusOK},
-			JSON200:      &slurmclient.V0036NodesResponse{Nodes: &nodes},
+			JSON200:      &slurmclient.V0037NodesResponse{Nodes: &nodes},
 		},
 	}
 

@@ -33,9 +33,9 @@ type SlurmConfig struct {
 // SlurmClient defines the interface for Slurm API operations.
 // This interface allows mocking in tests.
 type SlurmClient interface {
-	SlurmctldGetJobsWithResponse(ctx context.Context, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetJobsResponse, error)
-	SlurmctldGetJobWithResponse(ctx context.Context, jobId int64, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetJobResponse, error)
-	SlurmctldGetNodesWithResponse(ctx context.Context, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetNodesResponse, error)
+	SlurmctldGetJobsWithResponse(ctx context.Context, params *slurmclient.SlurmctldGetJobsParams, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetJobsResponse, error)
+	SlurmctldGetJobWithResponse(ctx context.Context, jobId string, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetJobResponse, error)
+	SlurmctldGetNodesWithResponse(ctx context.Context, params *slurmclient.SlurmctldGetNodesParams, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetNodesResponse, error)
 	SlurmctldPingWithResponse(ctx context.Context, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldPingResponse, error)
 }
 
@@ -56,8 +56,8 @@ func NewSlurmJobSource(config SlurmConfig) (*SlurmJobSource, error) {
 		}
 	}
 
-	// Build the server URL with API version path
-	serverURL := fmt.Sprintf("%s/slurm/%s", config.BaseURL, config.APIVersion)
+	// Use just the base URL - the generated client already includes /slurm/v0.0.36 in paths
+	serverURL := config.BaseURL
 
 	client, err := slurmclient.NewClientWithResponses(
 		serverURL,
@@ -109,7 +109,7 @@ func (s *SlurmJobSource) Type() SchedulerType {
 
 // ListJobs fetches jobs from Slurm.
 func (s *SlurmJobSource) ListJobs(ctx context.Context, filter JobFilter) ([]*Job, error) {
-	resp, err := s.client.SlurmctldGetJobsWithResponse(ctx, s.requestEditors()...)
+	resp, err := s.client.SlurmctldGetJobsWithResponse(ctx, nil, s.requestEditors()...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list jobs: %w", err)
 	}
@@ -145,12 +145,7 @@ func (s *SlurmJobSource) ListJobs(ctx context.Context, filter JobFilter) ([]*Job
 
 // GetJob fetches a specific job from Slurm.
 func (s *SlurmJobSource) GetJob(ctx context.Context, id string) (*Job, error) {
-	jobID, err := strconv.ParseInt(id, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("invalid job ID %q: %w", id, err)
-	}
-
-	resp, err := s.client.SlurmctldGetJobWithResponse(ctx, jobID, s.requestEditors()...)
+	resp, err := s.client.SlurmctldGetJobWithResponse(ctx, id, s.requestEditors()...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get job: %w", err)
 	}
@@ -184,7 +179,7 @@ func (s *SlurmJobSource) SupportsMetrics() bool {
 
 // ListNodes fetches all compute nodes from Slurm.
 func (s *SlurmJobSource) ListNodes(ctx context.Context) ([]*Node, error) {
-	resp, err := s.client.SlurmctldGetNodesWithResponse(ctx, s.requestEditors()...)
+	resp, err := s.client.SlurmctldGetNodesWithResponse(ctx, nil, s.requestEditors()...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}
@@ -230,8 +225,8 @@ func (s *SlurmJobSource) requestEditors() []slurmclient.RequestEditorFn {
 }
 
 // convertJob converts a Slurm API job to our normalized Job model.
-func (s *SlurmJobSource) convertJob(sj *slurmclient.V0036JobResponseProperties) *Job {
-	jobID := derefStr(sj.JobId)
+func (s *SlurmJobSource) convertJob(sj *slurmclient.V0037JobResponseProperties) *Job {
+	jobID := fmt.Sprintf("%d", derefInt(sj.JobId))
 
 	job := &Job{
 		ID:    jobID,
@@ -241,13 +236,13 @@ func (s *SlurmJobSource) convertJob(sj *slurmclient.V0036JobResponseProperties) 
 	}
 
 	// Node count
-	job.NodeCount = parseIntStr(derefStr(sj.NodeCount))
+	job.NodeCount = derefInt(sj.NodeCount)
 	if job.NodeCount == 0 && len(job.Nodes) > 0 {
 		job.NodeCount = len(job.Nodes)
 	}
 
 	// CPU resources
-	job.AllocatedCPUs = int64(parseIntStr(derefStr(sj.Cpus)))
+	job.AllocatedCPUs = int64(derefInt(sj.Cpus))
 	job.RequestedCPUs = parseTRESInt(derefStr(sj.TresReqStr), "cpu")
 	if job.RequestedCPUs == 0 {
 		job.RequestedCPUs = job.AllocatedCPUs
@@ -270,9 +265,9 @@ func (s *SlurmJobSource) convertJob(sj *slurmclient.V0036JobResponseProperties) 
 		job.RequestedGPUs = job.AllocatedGPUs
 	}
 
-	// Timestamps
-	job.StartTime = parseUnixTime(derefStr(sj.StartTime))
-	if endTime := parseUnixTime(derefStr(sj.EndTime)); !endTime.IsZero() {
+	// Timestamps (now int64 Unix timestamps)
+	job.StartTime = parseUnixTimeInt64(derefInt64(sj.StartTime))
+	if endTime := parseUnixTimeInt64(derefInt64(sj.EndTime)); !endTime.IsZero() {
 		if job.State == JobStateCompleted || job.State == JobStateFailed || job.State == JobStateCancelled {
 			job.EndTime = &endTime
 		}
@@ -288,20 +283,28 @@ func (s *SlurmJobSource) convertJob(sj *slurmclient.V0036JobResponseProperties) 
 }
 
 // extractUser gets the user from job properties.
-func (s *SlurmJobSource) extractUser(sj *slurmclient.V0036JobResponseProperties) string {
-	if user := derefStr(sj.UserId); user != "" {
+func (s *SlurmJobSource) extractUser(sj *slurmclient.V0037JobResponseProperties) string {
+	if user := derefStr(sj.UserName); user != "" {
 		return user
 	}
-	return derefStr(sj.Account)
+	if account := derefStr(sj.Account); account != "" {
+		return account
+	}
+	// Fall back to user ID if nothing else is available
+	if uid := derefInt(sj.UserId); uid > 0 {
+		return fmt.Sprintf("uid:%d", uid)
+	}
+	return "unknown"
 }
 
 // extractMemoryUsage tries to get memory usage from various sources.
-func (s *SlurmJobSource) extractMemoryUsage(sj *slurmclient.V0036JobResponseProperties) int64 {
+func (s *SlurmJobSource) extractMemoryUsage(sj *slurmclient.V0037JobResponseProperties) int64 {
 	if mem := parseIntStr(derefStr(sj.MemoryPerNode)); mem > 0 {
 		return int64(mem)
 	}
 	if memPerCpu := parseIntStr(derefStr(sj.MemoryPerCpu)); memPerCpu > 0 {
-		if cpus := parseIntStr(derefStr(sj.Cpus)); cpus > 0 {
+		cpus := derefInt(sj.Cpus)
+		if cpus > 0 {
 			return int64(memPerCpu * cpus)
 		}
 	}
@@ -323,7 +326,7 @@ func (s *SlurmJobSource) calculateRuntime(job *Job) float64 {
 }
 
 // buildSchedulerInfo creates the scheduler metadata block.
-func (s *SlurmJobSource) buildSchedulerInfo(sj *slurmclient.V0036JobResponseProperties, jobID string) *SchedulerInfo {
+func (s *SlurmJobSource) buildSchedulerInfo(sj *slurmclient.V0037JobResponseProperties, jobID string) *SchedulerInfo {
 	info := &SchedulerInfo{
 		Type:          SchedulerTypeSlurm,
 		ExternalJobID: jobID,
@@ -334,11 +337,11 @@ func (s *SlurmJobSource) buildSchedulerInfo(sj *slurmclient.V0036JobResponseProp
 		StateReason:   derefStr(sj.StateReason),
 	}
 
-	if submitTime := parseUnixTime(derefStr(sj.SubmitTime)); !submitTime.IsZero() {
+	if submitTime := parseUnixTimeInt64(derefInt64(sj.SubmitTime)); !submitTime.IsZero() {
 		info.SubmitTime = &submitTime
 	}
 
-	if priority := parseIntStr(derefStr(sj.Priority)); priority > 0 {
+	if priority := derefInt(sj.Priority); priority > 0 {
 		p := int64(priority)
 		info.Priority = &p
 	}
@@ -347,8 +350,9 @@ func (s *SlurmJobSource) buildSchedulerInfo(sj *slurmclient.V0036JobResponseProp
 		info.ExitCode = sj.ExitCode
 	}
 
-	if timeLimit := parseIntStr(derefStr(sj.TimeLimit)); timeLimit > 0 {
-		info.TimeLimitMins = &timeLimit
+	if timeLimit := derefInt64(sj.TimeLimit); timeLimit > 0 {
+		t := int(timeLimit)
+		info.TimeLimitMins = &t
 	}
 
 	info.Extra = map[string]interface{}{
@@ -361,7 +365,7 @@ func (s *SlurmJobSource) buildSchedulerInfo(sj *slurmclient.V0036JobResponseProp
 }
 
 // convertNode converts a Slurm API node to our normalized Node model.
-func (s *SlurmJobSource) convertNode(sn *slurmclient.V0036Node) *Node {
+func (s *SlurmJobSource) convertNode(sn *slurmclient.V0037Node) *Node {
 	node := &Node{
 		Name:         derefStr(sn.Name),
 		Hostname:     derefStr(sn.Hostname),
@@ -456,6 +460,13 @@ func derefInt(i *int) int {
 	return *i
 }
 
+func derefInt64(i *int64) int64 {
+	if i == nil {
+		return 0
+	}
+	return *i
+}
+
 func parseIntStr(s string) int {
 	if s == "" {
 		return 0
@@ -470,6 +481,13 @@ func parseUnixTime(s string) time.Time {
 		return time.Time{}
 	}
 	return time.Unix(int64(ts), 0)
+}
+
+func parseUnixTimeInt64(ts int64) time.Time {
+	if ts <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(ts, 0)
 }
 
 // parseNodeList converts Slurm node list format to slice.

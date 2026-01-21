@@ -2204,8 +2204,8 @@ type JobProperties struct {
 	// CurrentWorkingDirectory Instruct Slurm to connect the batch script's standard output directly to the file name.
 	CurrentWorkingDirectory *string `json:"current_working_directory,omitempty"`
 
-	// Deadline Remove the job if no ending is possible before this deadline (start > (deadline - time[-min])).
-	Deadline *string `json:"deadline,omitempty"`
+	// Deadline Remove the job if no ending is possible before this deadline (start > (deadline - time[-min])). (Unix timestamp)
+	Deadline *int64 `json:"deadline,omitempty"`
 
 	// DelayBoot Do not reboot nodes in order to satisfied this job's feature specification if the job has been eligible to run for less than this time period.
 	DelayBoot *int `json:"delay_boot,omitempty"`
@@ -2300,7 +2300,7 @@ type JobProperties struct {
 	Partition *string `json:"partition,omitempty"`
 
 	// Priority Request a specific job priority.
-	Priority *string `json:"priority,omitempty"`
+	Priority *int `json:"priority,omitempty"`
 
 	// Qos Request a quality of service for the job.
 	Qos *string `json:"qos,omitempty"`
@@ -2590,8 +2590,8 @@ type V0036JobProperties struct {
 	// CurrentWorkingDirectory Instruct Slurm to connect the batch script's standard output directly to the file name.
 	CurrentWorkingDirectory *string `json:"current_working_directory,omitempty"`
 
-	// Deadline Remove the job if no ending is possible before this deadline (start > (deadline - time[-min])).
-	Deadline *string `json:"deadline,omitempty"`
+	// Deadline Remove the job if no ending is possible before this deadline (start > (deadline - time[-min])). (Unix timestamp)
+	Deadline *int64 `json:"deadline,omitempty"`
 
 	// DelayBoot Do not reboot nodes in order to satisfied this job's feature specification if the job has been eligible to run for less than this time period.
 	DelayBoot *int `json:"delay_boot,omitempty"`
@@ -2690,7 +2690,7 @@ type V0036JobProperties struct {
 	Partition *string `json:"partition,omitempty"`
 
 	// Priority Request a specific job priority.
-	Priority *string `json:"priority,omitempty"`
+	Priority *int `json:"priority,omitempty"`
 
 	// Qos Request a quality of service for the job.
 	Qos *string `json:"qos,omitempty"`
@@ -2767,8 +2767,8 @@ type V0036JobResources struct {
 	// AllocatedHosts number of assigned job hosts
 	AllocatedHosts *int `json:"allocated_hosts,omitempty"`
 
-	// AllocatedNodes node allocations
-	AllocatedNodes *[]V0036NodeAllocation `json:"allocated_nodes,omitempty"`
+	// AllocatedNodes node allocations (map with node indices as keys)
+	AllocatedNodes *map[string]V0036NodeAllocation `json:"allocated_nodes,omitempty"`
 
 	// Nodes list of assigned job nodes
 	Nodes *string `json:"nodes,omitempty"`
@@ -2779,26 +2779,26 @@ type V0036JobResponseProperties struct {
 	// Account Charge resources used by this job to specified account
 	Account *string `json:"account,omitempty"`
 
-	// AccrueTime time job is eligible for running
-	AccrueTime *string `json:"accrue_time,omitempty"`
+	// AccrueTime time job is eligible for running (Unix timestamp)
+	AccrueTime *int64 `json:"accrue_time,omitempty"`
 
 	// AdminComment administrator's arbitrary comment
 	AdminComment *string `json:"admin_comment,omitempty"`
 
 	// ArrayJobId job_id of a job array or 0 if N/A
-	ArrayJobId *string `json:"array_job_id,omitempty"`
+	ArrayJobId *int `json:"array_job_id,omitempty"`
 
 	// ArrayMaxTasks Maximum number of running array tasks
-	ArrayMaxTasks *string `json:"array_max_tasks,omitempty"`
+	ArrayMaxTasks *int `json:"array_max_tasks,omitempty"`
 
 	// ArrayTaskId task_id of a job array
-	ArrayTaskId *string `json:"array_task_id,omitempty"`
+	ArrayTaskId *int `json:"array_task_id,omitempty"`
 
 	// ArrayTaskString string expression of task IDs in this record
 	ArrayTaskString *string `json:"array_task_string,omitempty"`
 
 	// AssociationId association id for job
-	AssociationId *string `json:"association_id,omitempty"`
+	AssociationId *int `json:"association_id,omitempty"`
 
 	// BatchFeatures features required for batch script's node
 	BatchFeatures *string `json:"batch_features,omitempty"`
@@ -2810,7 +2810,7 @@ type V0036JobResponseProperties struct {
 	BatchHost *string `json:"batch_host,omitempty"`
 
 	// BillableTres billable TRES
-	BillableTres *string `json:"billable_tres,omitempty"`
+	BillableTres *float64 `json:"billable_tres,omitempty"`
 
 	// BurstBuffer burst buffer specifications
 	BurstBuffer *string `json:"burst_buffer,omitempty"`
@@ -2849,7 +2849,7 @@ type V0036JobResponseProperties struct {
 	CpuFrequencyMinimum *string `json:"cpu_frequency_minimum,omitempty"`
 
 	// Cpus minimum number of cpus required by job
-	Cpus *string `json:"cpus,omitempty"`
+	Cpus *int `json:"cpus,omitempty"`
 
 	// CpusPerTask number of processors required for each task
 	CpusPerTask *string `json:"cpus_per_task,omitempty"`
@@ -2860,23 +2860,23 @@ type V0036JobResponseProperties struct {
 	// CurrentWorkingDirectory pathname of working directory
 	CurrentWorkingDirectory *string `json:"current_working_directory,omitempty"`
 
-	// Deadline job start deadline
-	Deadline *string `json:"deadline,omitempty"`
+	// Deadline job start deadline  (Unix timestamp)
+	Deadline *int64 `json:"deadline,omitempty"`
 
-	// DelayBoot command to be executed
-	DelayBoot *string `json:"delay_boot,omitempty"`
+	// DelayBoot command to be executed (Unix timestamp)
+	DelayBoot *int64 `json:"delay_boot,omitempty"`
 
 	// Dependency synchronize job execution with other jobs
 	Dependency *string `json:"dependency,omitempty"`
 
 	// DerivedExitCode highest exit code of all job steps
-	DerivedExitCode *string `json:"derived_exit_code,omitempty"`
+	DerivedExitCode *int `json:"derived_exit_code,omitempty"`
 
-	// EligibleTime time job is eligible for running
-	EligibleTime *string `json:"eligible_time,omitempty"`
+	// EligibleTime time job is eligible for running (Unix timestamp)
+	EligibleTime *int64 `json:"eligible_time,omitempty"`
 
-	// EndTime time of termination, actual or expected
-	EndTime *string `json:"end_time,omitempty"`
+	// EndTime time of termination, actual or expected (Unix timestamp)
+	EndTime *int64 `json:"end_time,omitempty"`
 
 	// ExcludedNodes comma separated list of excluded nodes
 	ExcludedNodes *string `json:"excluded_nodes,omitempty"`
@@ -2903,35 +2903,34 @@ type V0036JobResponseProperties struct {
 	GresDetail *[]string `json:"gres_detail,omitempty"`
 
 	// GroupId group job submitted as
-	GroupId *string `json:"group_id,omitempty"`
+	GroupId *int `json:"group_id,omitempty"`
 
 	// HetJobId job ID of hetjob leader
-	HetJobId *string `json:"het_job_id,omitempty"`
+	HetJobId *int `json:"het_job_id,omitempty"`
 
 	// HetJobIdSet job IDs for all components
 	HetJobIdSet *string `json:"het_job_id_set,omitempty"`
 
 	// HetJobOffset HetJob component offset from leader
-	HetJobOffset *string `json:"het_job_offset,omitempty"`
+	HetJobOffset *int `json:"het_job_offset,omitempty"`
 
 	// JobId job ID
-	JobId        *string            `json:"job_id,omitempty"`
-	JobResources *V0036JobResources `json:"job_resources,omitempty"`
+	JobId *int `json:"job_id,omitempty"`
 
 	// JobState state of the job
 	JobState *string `json:"job_state,omitempty"`
 
-	// LastSchedEvaluation last time job was evaluated for scheduling
-	LastSchedEvaluation *string `json:"last_sched_evaluation,omitempty"`
+	// LastSchedEvaluation last time job was evaluated for scheduling (Unix timestamp)
+	LastSchedEvaluation *int64 `json:"last_sched_evaluation,omitempty"`
 
 	// Licenses licenses required by the job
 	Licenses *string `json:"licenses,omitempty"`
 
 	// MaxCpus maximum number of cpus usable by job
-	MaxCpus *string `json:"max_cpus,omitempty"`
+	MaxCpus *int `json:"max_cpus,omitempty"`
 
 	// MaxNodes maximum number of nodes usable by job
-	MaxNodes *string `json:"max_nodes,omitempty"`
+	MaxNodes *int `json:"max_nodes,omitempty"`
 
 	// McsLabel mcs_label if mcs plugin in use
 	McsLabel *string `json:"mcs_label,omitempty"`
@@ -2946,10 +2945,10 @@ type V0036JobResponseProperties struct {
 	MemoryPerTres *string `json:"memory_per_tres,omitempty"`
 
 	// MinimumCpusPerNode minimum # CPUs per node
-	MinimumCpusPerNode *string `json:"minimum_cpus_per_node,omitempty"`
+	MinimumCpusPerNode *int `json:"minimum_cpus_per_node,omitempty"`
 
 	// MinimumTmpDiskPerNode minimum tmp disk per node
-	MinimumTmpDiskPerNode *string `json:"minimum_tmp_disk_per_node,omitempty"`
+	MinimumTmpDiskPerNode *int `json:"minimum_tmp_disk_per_node,omitempty"`
 
 	// Name name of the job
 	Name *string `json:"name,omitempty"`
@@ -2958,7 +2957,7 @@ type V0036JobResponseProperties struct {
 	Nice *string `json:"nice,omitempty"`
 
 	// NodeCount minimum number of nodes required by job
-	NodeCount *string `json:"node_count,omitempty"`
+	NodeCount *int `json:"node_count,omitempty"`
 
 	// Nodes list of nodes allocated to job
 	Nodes *string `json:"nodes,omitempty"`
@@ -2966,14 +2965,14 @@ type V0036JobResponseProperties struct {
 	// Partition name of assigned partition
 	Partition *string `json:"partition,omitempty"`
 
-	// PreSusTime time job ran prior to last suspend
-	PreSusTime *string `json:"pre_sus_time,omitempty"`
+	// PreSusTime time job ran prior to last suspend (Unix timestamp)
+	PreSusTime *int64 `json:"pre_sus_time,omitempty"`
 
-	// PreemptTime preemption signal time
-	PreemptTime *string `json:"preempt_time,omitempty"`
+	// PreemptTime preemption signal time (Unix timestamp)
+	PreemptTime *int64 `json:"preempt_time,omitempty"`
 
 	// Priority relative priority of the job
-	Priority *string `json:"priority,omitempty"`
+	Priority *int `json:"priority,omitempty"`
 
 	// Profile Job profiling requested
 	Profile *[]string `json:"profile,omitempty"`
@@ -2990,23 +2989,23 @@ type V0036JobResponseProperties struct {
 	// RequiredNodes comma separated list of required nodes
 	RequiredNodes *string `json:"required_nodes,omitempty"`
 
-	// ResizeTime time of latest size change
-	ResizeTime *string `json:"resize_time,omitempty"`
+	// ResizeTime time of latest size change (Unix timestamp)
+	ResizeTime *int64 `json:"resize_time,omitempty"`
 
 	// RestartCnt count of job restarts
-	RestartCnt *string `json:"restart_cnt,omitempty"`
+	RestartCnt *int `json:"restart_cnt,omitempty"`
 
 	// ResvName reservation name
 	ResvName *string `json:"resv_name,omitempty"`
 
 	// Shared type and if job can share nodes with other jobs
-	Shared *string `json:"shared,omitempty"`
+	Shared *int `json:"shared,omitempty"`
 
 	// ShowFlags details requested
 	ShowFlags *[]string `json:"show_flags,omitempty"`
 
 	// SocketsPerBoard sockets per board required by job
-	SocketsPerBoard *string `json:"sockets_per_board,omitempty"`
+	SocketsPerBoard *int `json:"sockets_per_board,omitempty"`
 
 	// SocketsPerNode sockets per node required by job
 	SocketsPerNode *string `json:"sockets_per_node,omitempty"`
@@ -3020,8 +3019,8 @@ type V0036JobResponseProperties struct {
 	// StandardOutput pathname of job's stdout file
 	StandardOutput *string `json:"standard_output,omitempty"`
 
-	// StartTime time execution begins, actual or expected
-	StartTime *string `json:"start_time,omitempty"`
+	// StartTime time execution begins, actual or expected (Unix timestamp)
+	StartTime *int64 `json:"start_time,omitempty"`
 
 	// StateDescription optional details for state_reason
 	StateDescription *string `json:"state_description,omitempty"`
@@ -3029,20 +3028,20 @@ type V0036JobResponseProperties struct {
 	// StateReason reason job still pending or failed
 	StateReason *string `json:"state_reason,omitempty"`
 
-	// SubmitTime time of job submission
-	SubmitTime *string `json:"submit_time,omitempty"`
+	// SubmitTime time of job submission (Unix timestamp)
+	SubmitTime *int64 `json:"submit_time,omitempty"`
 
-	// SuspendTime time job last suspended or resumed
-	SuspendTime *string `json:"suspend_time,omitempty"`
+	// SuspendTime time job last suspended or resumed (Unix timestamp)
+	SuspendTime *int64 `json:"suspend_time,omitempty"`
 
 	// SystemComment slurmctld's arbitrary comment
 	SystemComment *string `json:"system_comment,omitempty"`
 
 	// Tasks requested task count
-	Tasks *string `json:"tasks,omitempty"`
+	Tasks *int `json:"tasks,omitempty"`
 
 	// TasksPerBoard number of tasks to invoke on each board
-	TasksPerBoard *string `json:"tasks_per_board,omitempty"`
+	TasksPerBoard *int `json:"tasks_per_board,omitempty"`
 
 	// TasksPerCore number of tasks to invoke on each core
 	TasksPerCore *string `json:"tasks_per_core,omitempty"`
@@ -3056,11 +3055,11 @@ type V0036JobResponseProperties struct {
 	// ThreadsPerCore threads per core required by job
 	ThreadsPerCore *string `json:"threads_per_core,omitempty"`
 
-	// TimeLimit maximum run time in minutes
-	TimeLimit *string `json:"time_limit,omitempty"`
+	// TimeLimit maximum run time in minutes (Unix timestamp)
+	TimeLimit *int64 `json:"time_limit,omitempty"`
 
-	// TimeMinimum minimum run time in minutes
-	TimeMinimum *string `json:"time_minimum,omitempty"`
+	// TimeMinimum minimum run time in minutes (Unix timestamp)
+	TimeMinimum *int64 `json:"time_minimum,omitempty"`
 
 	// TresAllocStr tres used in the job
 	TresAllocStr *string `json:"tres_alloc_str,omitempty"`
@@ -3087,7 +3086,7 @@ type V0036JobResponseProperties struct {
 	TresReqStr *string `json:"tres_req_str,omitempty"`
 
 	// UserId user id the job runs as
-	UserId *string `json:"user_id,omitempty"`
+	UserId *int `json:"user_id,omitempty"`
 
 	// UserName user the job runs as
 	UserName *string `json:"user_name,omitempty"`
@@ -3576,8 +3575,8 @@ type V0037JobProperties struct {
 	// CurrentWorkingDirectory Instruct Slurm to connect the batch script's standard output directly to the file name.
 	CurrentWorkingDirectory *string `json:"current_working_directory,omitempty"`
 
-	// Deadline Remove the job if no ending is possible before this deadline (start > (deadline - time[-min])).
-	Deadline *string `json:"deadline,omitempty"`
+	// Deadline Remove the job if no ending is possible before this deadline (start > (deadline - time[-min])). (Unix timestamp)
+	Deadline *int64 `json:"deadline,omitempty"`
 
 	// DelayBoot Do not reboot nodes in order to satisfied this job's feature specification if the job has been eligible to run for less than this time period.
 	DelayBoot *int `json:"delay_boot,omitempty"`
@@ -3676,7 +3675,7 @@ type V0037JobProperties struct {
 	Partition *string `json:"partition,omitempty"`
 
 	// Priority Request a specific job priority.
-	Priority *string `json:"priority,omitempty"`
+	Priority *int `json:"priority,omitempty"`
 
 	// Qos Request a quality of service for the job.
 	Qos *string `json:"qos,omitempty"`
@@ -3753,8 +3752,8 @@ type V0037JobResources struct {
 	// AllocatedHosts number of assigned job hosts
 	AllocatedHosts *int `json:"allocated_hosts,omitempty"`
 
-	// AllocatedNodes node allocations
-	AllocatedNodes *[]V0037NodeAllocation `json:"allocated_nodes,omitempty"`
+	// AllocatedNodes node allocations (map with node indices as keys)
+	AllocatedNodes *map[string]V0037NodeAllocation `json:"allocated_nodes,omitempty"`
 
 	// Nodes list of assigned job nodes
 	Nodes *string `json:"nodes,omitempty"`
@@ -3772,19 +3771,19 @@ type V0037JobResponseProperties struct {
 	AdminComment *string `json:"admin_comment,omitempty"`
 
 	// ArrayJobId job_id of a job array or 0 if N/A
-	ArrayJobId *string `json:"array_job_id,omitempty"`
+	ArrayJobId *int `json:"array_job_id,omitempty"`
 
 	// ArrayMaxTasks Maximum number of running array tasks
-	ArrayMaxTasks *string `json:"array_max_tasks,omitempty"`
+	ArrayMaxTasks *int `json:"array_max_tasks,omitempty"`
 
 	// ArrayTaskId task_id of a job array
-	ArrayTaskId *string `json:"array_task_id,omitempty"`
+	ArrayTaskId *int `json:"array_task_id,omitempty"`
 
 	// ArrayTaskString string expression of task IDs in this record
 	ArrayTaskString *string `json:"array_task_string,omitempty"`
 
 	// AssociationId association id for job
-	AssociationId *string `json:"association_id,omitempty"`
+	AssociationId *int `json:"association_id,omitempty"`
 
 	// BatchFeatures features required for batch script's node
 	BatchFeatures *string `json:"batch_features,omitempty"`
@@ -3796,7 +3795,7 @@ type V0037JobResponseProperties struct {
 	BatchHost *string `json:"batch_host,omitempty"`
 
 	// BillableTres billable TRES
-	BillableTres *string `json:"billable_tres,omitempty"`
+	BillableTres *float64 `json:"billable_tres,omitempty"`
 
 	// BurstBuffer burst buffer specifications
 	BurstBuffer *string `json:"burst_buffer,omitempty"`
@@ -3835,7 +3834,7 @@ type V0037JobResponseProperties struct {
 	CpuFrequencyMinimum *string `json:"cpu_frequency_minimum,omitempty"`
 
 	// Cpus minimum number of cpus required by job
-	Cpus *string `json:"cpus,omitempty"`
+	Cpus *int `json:"cpus,omitempty"`
 
 	// CpusPerTask number of processors required for each task
 	CpusPerTask *string `json:"cpus_per_task,omitempty"`
@@ -3846,17 +3845,17 @@ type V0037JobResponseProperties struct {
 	// CurrentWorkingDirectory pathname of working directory
 	CurrentWorkingDirectory *string `json:"current_working_directory,omitempty"`
 
-	// Deadline job start deadline
-	Deadline *string `json:"deadline,omitempty"`
+	// Deadline job start deadline  (Unix timestamp)
+	Deadline *int64 `json:"deadline,omitempty"`
 
-	// DelayBoot command to be executed
-	DelayBoot *string `json:"delay_boot,omitempty"`
+	// DelayBoot command to be executed (Unix timestamp)
+	DelayBoot *int64 `json:"delay_boot,omitempty"`
 
 	// Dependency synchronize job execution with other jobs
 	Dependency *string `json:"dependency,omitempty"`
 
 	// DerivedExitCode highest exit code of all job steps
-	DerivedExitCode *string `json:"derived_exit_code,omitempty"`
+	DerivedExitCode *int `json:"derived_exit_code,omitempty"`
 
 	// EligibleTime time job is eligible for running
 	EligibleTime *int64 `json:"eligible_time,omitempty"`
@@ -3889,35 +3888,34 @@ type V0037JobResponseProperties struct {
 	GresDetail *[]string `json:"gres_detail,omitempty"`
 
 	// GroupId group job submitted as
-	GroupId *string `json:"group_id,omitempty"`
+	GroupId *int `json:"group_id,omitempty"`
 
 	// HetJobId job ID of hetjob leader
-	HetJobId *string `json:"het_job_id,omitempty"`
+	HetJobId *int `json:"het_job_id,omitempty"`
 
 	// HetJobIdSet job IDs for all components
 	HetJobIdSet *string `json:"het_job_id_set,omitempty"`
 
 	// HetJobOffset HetJob component offset from leader
-	HetJobOffset *string `json:"het_job_offset,omitempty"`
+	HetJobOffset *int `json:"het_job_offset,omitempty"`
 
 	// JobId job ID
-	JobId        *string            `json:"job_id,omitempty"`
-	JobResources *V0037JobResources `json:"job_resources,omitempty"`
+	JobId *int `json:"job_id,omitempty"`
 
 	// JobState state of the job
 	JobState *string `json:"job_state,omitempty"`
 
-	// LastSchedEvaluation last time job was evaluated for scheduling
-	LastSchedEvaluation *string `json:"last_sched_evaluation,omitempty"`
+	// LastSchedEvaluation last time job was evaluated for scheduling (Unix timestamp)
+	LastSchedEvaluation *int64 `json:"last_sched_evaluation,omitempty"`
 
 	// Licenses licenses required by the job
 	Licenses *string `json:"licenses,omitempty"`
 
 	// MaxCpus maximum number of cpus usable by job
-	MaxCpus *string `json:"max_cpus,omitempty"`
+	MaxCpus *int `json:"max_cpus,omitempty"`
 
 	// MaxNodes maximum number of nodes usable by job
-	MaxNodes *string `json:"max_nodes,omitempty"`
+	MaxNodes *int `json:"max_nodes,omitempty"`
 
 	// McsLabel mcs_label if mcs plugin in use
 	McsLabel *string `json:"mcs_label,omitempty"`
@@ -3932,10 +3930,10 @@ type V0037JobResponseProperties struct {
 	MemoryPerTres *string `json:"memory_per_tres,omitempty"`
 
 	// MinimumCpusPerNode minimum # CPUs per node
-	MinimumCpusPerNode *string `json:"minimum_cpus_per_node,omitempty"`
+	MinimumCpusPerNode *int `json:"minimum_cpus_per_node,omitempty"`
 
 	// MinimumTmpDiskPerNode minimum tmp disk per node
-	MinimumTmpDiskPerNode *string `json:"minimum_tmp_disk_per_node,omitempty"`
+	MinimumTmpDiskPerNode *int `json:"minimum_tmp_disk_per_node,omitempty"`
 
 	// Name name of the job
 	Name *string `json:"name,omitempty"`
@@ -3944,7 +3942,7 @@ type V0037JobResponseProperties struct {
 	Nice *string `json:"nice,omitempty"`
 
 	// NodeCount minimum number of nodes required by job
-	NodeCount *string `json:"node_count,omitempty"`
+	NodeCount *int `json:"node_count,omitempty"`
 
 	// Nodes list of nodes allocated to job
 	Nodes *string `json:"nodes,omitempty"`
@@ -3959,7 +3957,7 @@ type V0037JobResponseProperties struct {
 	PreemptTime *int64 `json:"preempt_time,omitempty"`
 
 	// Priority relative priority of the job
-	Priority *string `json:"priority,omitempty"`
+	Priority *int `json:"priority,omitempty"`
 
 	// Profile Job profiling requested
 	Profile *[]string `json:"profile,omitempty"`
@@ -3980,19 +3978,19 @@ type V0037JobResponseProperties struct {
 	ResizeTime *int64 `json:"resize_time,omitempty"`
 
 	// RestartCnt count of job restarts
-	RestartCnt *string `json:"restart_cnt,omitempty"`
+	RestartCnt *int `json:"restart_cnt,omitempty"`
 
 	// ResvName reservation name
 	ResvName *string `json:"resv_name,omitempty"`
 
 	// Shared type and if job can share nodes with other jobs
-	Shared *string `json:"shared,omitempty"`
+	Shared *int `json:"shared,omitempty"`
 
 	// ShowFlags details requested
 	ShowFlags *[]string `json:"show_flags,omitempty"`
 
 	// SocketsPerBoard sockets per board required by job
-	SocketsPerBoard *string `json:"sockets_per_board,omitempty"`
+	SocketsPerBoard *int `json:"sockets_per_board,omitempty"`
 
 	// SocketsPerNode sockets per node required by job
 	SocketsPerNode *string `json:"sockets_per_node,omitempty"`
@@ -4025,10 +4023,10 @@ type V0037JobResponseProperties struct {
 	SystemComment *string `json:"system_comment,omitempty"`
 
 	// Tasks requested task count
-	Tasks *string `json:"tasks,omitempty"`
+	Tasks *int `json:"tasks,omitempty"`
 
 	// TasksPerBoard number of tasks to invoke on each board
-	TasksPerBoard *string `json:"tasks_per_board,omitempty"`
+	TasksPerBoard *int `json:"tasks_per_board,omitempty"`
 
 	// TasksPerCore number of tasks to invoke on each core
 	TasksPerCore *string `json:"tasks_per_core,omitempty"`
@@ -4042,11 +4040,11 @@ type V0037JobResponseProperties struct {
 	// ThreadsPerCore threads per core required by job
 	ThreadsPerCore *string `json:"threads_per_core,omitempty"`
 
-	// TimeLimit maximum run time in minutes
-	TimeLimit *string `json:"time_limit,omitempty"`
+	// TimeLimit maximum run time in minutes (Unix timestamp)
+	TimeLimit *int64 `json:"time_limit,omitempty"`
 
-	// TimeMinimum minimum run time in minutes
-	TimeMinimum *string `json:"time_minimum,omitempty"`
+	// TimeMinimum minimum run time in minutes (Unix timestamp)
+	TimeMinimum *int64 `json:"time_minimum,omitempty"`
 
 	// TresAllocStr tres used in the job
 	TresAllocStr *string `json:"tres_alloc_str,omitempty"`
@@ -4073,7 +4071,7 @@ type V0037JobResponseProperties struct {
 	TresReqStr *string `json:"tres_req_str,omitempty"`
 
 	// UserId user id the job runs as
-	UserId *string `json:"user_id,omitempty"`
+	UserId *int `json:"user_id,omitempty"`
 
 	// UserName user the job runs as
 	UserName *string `json:"user_name,omitempty"`
@@ -4469,7 +4467,43 @@ type V0037Signal string
 // SlurmctldCancelJobParams defines parameters for SlurmctldCancelJob.
 type SlurmctldCancelJobParams struct {
 	// Signal signal to send to job
-	Signal *V0036Signal `form:"signal,omitempty" json:"signal,omitempty"`
+	Signal *V0037Signal `form:"signal,omitempty" json:"signal,omitempty"`
+}
+
+// SlurmctldGetJobsParams defines parameters for SlurmctldGetJobs.
+type SlurmctldGetJobsParams struct {
+	// UpdateTime Filter if changed since update_time. Use of this parameter can result in faster replies.
+	UpdateTime *int64 `json:"update_time,omitempty"`
+}
+
+// SlurmctldGetNodesParams defines parameters for SlurmctldGetNodes.
+type SlurmctldGetNodesParams struct {
+	// UpdateTime Filter if changed since update_time. Use of this parameter can result in faster replies.
+	UpdateTime *int64 `json:"update_time,omitempty"`
+}
+
+// SlurmctldGetPartitionParams defines parameters for SlurmctldGetPartition.
+type SlurmctldGetPartitionParams struct {
+	// UpdateTime Filter if there were no partition changes (not limited to partition in URL endpoint) since update_time.
+	UpdateTime *int64 `json:"update_time,omitempty"`
+}
+
+// SlurmctldGetPartitionsParams defines parameters for SlurmctldGetPartitions.
+type SlurmctldGetPartitionsParams struct {
+	// UpdateTime Filter if changed since update_time. Use of this parameter can result in faster replies.
+	UpdateTime *int64 `json:"update_time,omitempty"`
+}
+
+// SlurmctldGetReservationParams defines parameters for SlurmctldGetReservation.
+type SlurmctldGetReservationParams struct {
+	// UpdateTime Filter if no reservation (not limited to reservation in URL) changed since update_time.
+	UpdateTime *int64 `json:"update_time,omitempty"`
+}
+
+// SlurmctldGetReservationsParams defines parameters for SlurmctldGetReservations.
+type SlurmctldGetReservationsParams struct {
+	// UpdateTime Filter if changed since update_time. Use of this parameter can result in faster replies.
+	UpdateTime *int64 `json:"update_time,omitempty"`
 }
 
 // SlurmdbdDeleteAssociationParams defines parameters for SlurmdbdDeleteAssociation.
@@ -4596,10 +4630,10 @@ type SlurmdbdGetJobsParams struct {
 }
 
 // SlurmctldSubmitJobJSONRequestBody defines body for SlurmctldSubmitJob for application/json ContentType.
-type SlurmctldSubmitJobJSONRequestBody = V0036JobSubmission
+type SlurmctldSubmitJobJSONRequestBody = V0037JobSubmission
 
 // SlurmctldUpdateJobJSONRequestBody defines body for SlurmctldUpdateJob for application/json ContentType.
-type SlurmctldUpdateJobJSONRequestBody = V0036JobProperties
+type SlurmctldUpdateJobJSONRequestBody = V0037JobProperties
 
 // AsJobPropertiesExclusive0 returns the union data inside the JobProperties_Exclusive as a JobPropertiesExclusive0
 func (t JobProperties_Exclusive) AsJobPropertiesExclusive0() (JobPropertiesExclusive0, error) {
@@ -4872,33 +4906,39 @@ type ClientInterface interface {
 	SlurmctldSubmitJob(ctx context.Context, body SlurmctldSubmitJobJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SlurmctldCancelJob request
-	SlurmctldCancelJob(ctx context.Context, jobId int64, params *SlurmctldCancelJobParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	SlurmctldCancelJob(ctx context.Context, jobId string, params *SlurmctldCancelJobParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SlurmctldGetJob request
-	SlurmctldGetJob(ctx context.Context, jobId int64, reqEditors ...RequestEditorFn) (*http.Response, error)
+	SlurmctldGetJob(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SlurmctldUpdateJobWithBody request with any body
-	SlurmctldUpdateJobWithBody(ctx context.Context, jobId int64, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	SlurmctldUpdateJobWithBody(ctx context.Context, jobId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	SlurmctldUpdateJob(ctx context.Context, jobId int64, body SlurmctldUpdateJobJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	SlurmctldUpdateJob(ctx context.Context, jobId string, body SlurmctldUpdateJobJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SlurmctldGetJobs request
-	SlurmctldGetJobs(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	SlurmctldGetJobs(ctx context.Context, params *SlurmctldGetJobsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SlurmctldGetNode request
 	SlurmctldGetNode(ctx context.Context, nodeName string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SlurmctldGetNodes request
-	SlurmctldGetNodes(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	SlurmctldGetNodes(ctx context.Context, params *SlurmctldGetNodesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SlurmctldGetPartition request
-	SlurmctldGetPartition(ctx context.Context, partitionName string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	SlurmctldGetPartition(ctx context.Context, partitionName string, params *SlurmctldGetPartitionParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SlurmctldGetPartitions request
-	SlurmctldGetPartitions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	SlurmctldGetPartitions(ctx context.Context, params *SlurmctldGetPartitionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SlurmctldPing request
 	SlurmctldPing(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SlurmctldGetReservation request
+	SlurmctldGetReservation(ctx context.Context, reservationName string, params *SlurmctldGetReservationParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SlurmctldGetReservations request
+	SlurmctldGetReservations(ctx context.Context, params *SlurmctldGetReservationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SlurmdbdDeleteAccount request
 	SlurmdbdDeleteAccount(ctx context.Context, accountName string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -4920,6 +4960,9 @@ type ClientInterface interface {
 
 	// SlurmdbdGetAssociations request
 	SlurmdbdGetAssociations(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SlurmdbdUpdateAssociations request
+	SlurmdbdUpdateAssociations(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SlurmdbdDeleteCluster request
 	SlurmdbdDeleteCluster(ctx context.Context, clusterName string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5036,7 +5079,7 @@ func (c *Client) SlurmctldSubmitJob(ctx context.Context, body SlurmctldSubmitJob
 	return c.Client.Do(req)
 }
 
-func (c *Client) SlurmctldCancelJob(ctx context.Context, jobId int64, params *SlurmctldCancelJobParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) SlurmctldCancelJob(ctx context.Context, jobId string, params *SlurmctldCancelJobParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSlurmctldCancelJobRequest(c.Server, jobId, params)
 	if err != nil {
 		return nil, err
@@ -5048,7 +5091,7 @@ func (c *Client) SlurmctldCancelJob(ctx context.Context, jobId int64, params *Sl
 	return c.Client.Do(req)
 }
 
-func (c *Client) SlurmctldGetJob(ctx context.Context, jobId int64, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) SlurmctldGetJob(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSlurmctldGetJobRequest(c.Server, jobId)
 	if err != nil {
 		return nil, err
@@ -5060,7 +5103,7 @@ func (c *Client) SlurmctldGetJob(ctx context.Context, jobId int64, reqEditors ..
 	return c.Client.Do(req)
 }
 
-func (c *Client) SlurmctldUpdateJobWithBody(ctx context.Context, jobId int64, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) SlurmctldUpdateJobWithBody(ctx context.Context, jobId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSlurmctldUpdateJobRequestWithBody(c.Server, jobId, contentType, body)
 	if err != nil {
 		return nil, err
@@ -5072,7 +5115,7 @@ func (c *Client) SlurmctldUpdateJobWithBody(ctx context.Context, jobId int64, co
 	return c.Client.Do(req)
 }
 
-func (c *Client) SlurmctldUpdateJob(ctx context.Context, jobId int64, body SlurmctldUpdateJobJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) SlurmctldUpdateJob(ctx context.Context, jobId string, body SlurmctldUpdateJobJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSlurmctldUpdateJobRequest(c.Server, jobId, body)
 	if err != nil {
 		return nil, err
@@ -5084,8 +5127,8 @@ func (c *Client) SlurmctldUpdateJob(ctx context.Context, jobId int64, body Slurm
 	return c.Client.Do(req)
 }
 
-func (c *Client) SlurmctldGetJobs(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSlurmctldGetJobsRequest(c.Server)
+func (c *Client) SlurmctldGetJobs(ctx context.Context, params *SlurmctldGetJobsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSlurmctldGetJobsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5108,8 +5151,8 @@ func (c *Client) SlurmctldGetNode(ctx context.Context, nodeName string, reqEdito
 	return c.Client.Do(req)
 }
 
-func (c *Client) SlurmctldGetNodes(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSlurmctldGetNodesRequest(c.Server)
+func (c *Client) SlurmctldGetNodes(ctx context.Context, params *SlurmctldGetNodesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSlurmctldGetNodesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5120,8 +5163,8 @@ func (c *Client) SlurmctldGetNodes(ctx context.Context, reqEditors ...RequestEdi
 	return c.Client.Do(req)
 }
 
-func (c *Client) SlurmctldGetPartition(ctx context.Context, partitionName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSlurmctldGetPartitionRequest(c.Server, partitionName)
+func (c *Client) SlurmctldGetPartition(ctx context.Context, partitionName string, params *SlurmctldGetPartitionParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSlurmctldGetPartitionRequest(c.Server, partitionName, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5132,8 +5175,8 @@ func (c *Client) SlurmctldGetPartition(ctx context.Context, partitionName string
 	return c.Client.Do(req)
 }
 
-func (c *Client) SlurmctldGetPartitions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSlurmctldGetPartitionsRequest(c.Server)
+func (c *Client) SlurmctldGetPartitions(ctx context.Context, params *SlurmctldGetPartitionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSlurmctldGetPartitionsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5146,6 +5189,30 @@ func (c *Client) SlurmctldGetPartitions(ctx context.Context, reqEditors ...Reque
 
 func (c *Client) SlurmctldPing(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSlurmctldPingRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SlurmctldGetReservation(ctx context.Context, reservationName string, params *SlurmctldGetReservationParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSlurmctldGetReservationRequest(c.Server, reservationName, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SlurmctldGetReservations(ctx context.Context, params *SlurmctldGetReservationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSlurmctldGetReservationsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5230,6 +5297,18 @@ func (c *Client) SlurmdbdGetAssociation(ctx context.Context, params *SlurmdbdGet
 
 func (c *Client) SlurmdbdGetAssociations(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSlurmdbdGetAssociationsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SlurmdbdUpdateAssociations(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSlurmdbdUpdateAssociationsRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -5540,7 +5619,7 @@ func NewSlurmctldDiagRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurm/v0.0.36/diag")
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/diag")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5578,7 +5657,7 @@ func NewSlurmctldSubmitJobRequestWithBody(server string, contentType string, bod
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurm/v0.0.36/job/submit")
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/job/submit")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5599,7 +5678,7 @@ func NewSlurmctldSubmitJobRequestWithBody(server string, contentType string, bod
 }
 
 // NewSlurmctldCancelJobRequest generates requests for SlurmctldCancelJob
-func NewSlurmctldCancelJobRequest(server string, jobId int64, params *SlurmctldCancelJobParams) (*http.Request, error) {
+func NewSlurmctldCancelJobRequest(server string, jobId string, params *SlurmctldCancelJobParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -5614,7 +5693,7 @@ func NewSlurmctldCancelJobRequest(server string, jobId int64, params *SlurmctldC
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurm/v0.0.36/job/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/job/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5655,7 +5734,7 @@ func NewSlurmctldCancelJobRequest(server string, jobId int64, params *SlurmctldC
 }
 
 // NewSlurmctldGetJobRequest generates requests for SlurmctldGetJob
-func NewSlurmctldGetJobRequest(server string, jobId int64) (*http.Request, error) {
+func NewSlurmctldGetJobRequest(server string, jobId string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -5670,7 +5749,7 @@ func NewSlurmctldGetJobRequest(server string, jobId int64) (*http.Request, error
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurm/v0.0.36/job/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/job/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5689,7 +5768,7 @@ func NewSlurmctldGetJobRequest(server string, jobId int64) (*http.Request, error
 }
 
 // NewSlurmctldUpdateJobRequest calls the generic SlurmctldUpdateJob builder with application/json body
-func NewSlurmctldUpdateJobRequest(server string, jobId int64, body SlurmctldUpdateJobJSONRequestBody) (*http.Request, error) {
+func NewSlurmctldUpdateJobRequest(server string, jobId string, body SlurmctldUpdateJobJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
@@ -5700,7 +5779,7 @@ func NewSlurmctldUpdateJobRequest(server string, jobId int64, body SlurmctldUpda
 }
 
 // NewSlurmctldUpdateJobRequestWithBody generates requests for SlurmctldUpdateJob with any type of body
-func NewSlurmctldUpdateJobRequestWithBody(server string, jobId int64, contentType string, body io.Reader) (*http.Request, error) {
+func NewSlurmctldUpdateJobRequestWithBody(server string, jobId string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -5715,7 +5794,7 @@ func NewSlurmctldUpdateJobRequestWithBody(server string, jobId int64, contentTyp
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurm/v0.0.36/job/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/job/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5736,7 +5815,7 @@ func NewSlurmctldUpdateJobRequestWithBody(server string, jobId int64, contentTyp
 }
 
 // NewSlurmctldGetJobsRequest generates requests for SlurmctldGetJobs
-func NewSlurmctldGetJobsRequest(server string) (*http.Request, error) {
+func NewSlurmctldGetJobsRequest(server string, params *SlurmctldGetJobsParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -5744,7 +5823,7 @@ func NewSlurmctldGetJobsRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurm/v0.0.36/jobs")
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/jobs")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5752,6 +5831,28 @@ func NewSlurmctldGetJobsRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.UpdateTime != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("simple", false, "update_time", runtime.ParamLocationQuery, *params.UpdateTime); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -5778,7 +5879,7 @@ func NewSlurmctldGetNodeRequest(server string, nodeName string) (*http.Request, 
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurm/v0.0.36/node/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/node/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5797,7 +5898,7 @@ func NewSlurmctldGetNodeRequest(server string, nodeName string) (*http.Request, 
 }
 
 // NewSlurmctldGetNodesRequest generates requests for SlurmctldGetNodes
-func NewSlurmctldGetNodesRequest(server string) (*http.Request, error) {
+func NewSlurmctldGetNodesRequest(server string, params *SlurmctldGetNodesParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -5805,7 +5906,7 @@ func NewSlurmctldGetNodesRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurm/v0.0.36/nodes")
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/nodes")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5813,6 +5914,28 @@ func NewSlurmctldGetNodesRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.UpdateTime != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("simple", false, "update_time", runtime.ParamLocationQuery, *params.UpdateTime); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -5824,7 +5947,7 @@ func NewSlurmctldGetNodesRequest(server string) (*http.Request, error) {
 }
 
 // NewSlurmctldGetPartitionRequest generates requests for SlurmctldGetPartition
-func NewSlurmctldGetPartitionRequest(server string, partitionName string) (*http.Request, error) {
+func NewSlurmctldGetPartitionRequest(server string, partitionName string, params *SlurmctldGetPartitionParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -5839,7 +5962,7 @@ func NewSlurmctldGetPartitionRequest(server string, partitionName string) (*http
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurm/v0.0.36/partition/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/partition/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5847,6 +5970,28 @@ func NewSlurmctldGetPartitionRequest(server string, partitionName string) (*http
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.UpdateTime != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("simple", false, "update_time", runtime.ParamLocationQuery, *params.UpdateTime); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -5858,7 +6003,7 @@ func NewSlurmctldGetPartitionRequest(server string, partitionName string) (*http
 }
 
 // NewSlurmctldGetPartitionsRequest generates requests for SlurmctldGetPartitions
-func NewSlurmctldGetPartitionsRequest(server string) (*http.Request, error) {
+func NewSlurmctldGetPartitionsRequest(server string, params *SlurmctldGetPartitionsParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -5866,7 +6011,7 @@ func NewSlurmctldGetPartitionsRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurm/v0.0.36/partitions")
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/partitions")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5874,6 +6019,28 @@ func NewSlurmctldGetPartitionsRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.UpdateTime != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("simple", false, "update_time", runtime.ParamLocationQuery, *params.UpdateTime); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -5893,7 +6060,7 @@ func NewSlurmctldPingRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurm/v0.0.36/ping")
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/ping")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5901,6 +6068,111 @@ func NewSlurmctldPingRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSlurmctldGetReservationRequest generates requests for SlurmctldGetReservation
+func NewSlurmctldGetReservationRequest(server string, reservationName string, params *SlurmctldGetReservationParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "reservation_name", runtime.ParamLocationPath, reservationName)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/reservation/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.UpdateTime != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("simple", false, "update_time", runtime.ParamLocationQuery, *params.UpdateTime); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSlurmctldGetReservationsRequest generates requests for SlurmctldGetReservations
+func NewSlurmctldGetReservationsRequest(server string, params *SlurmctldGetReservationsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/slurm/v0.0.37/reservations")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.UpdateTime != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("simple", false, "update_time", runtime.ParamLocationQuery, *params.UpdateTime); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -5927,7 +6199,7 @@ func NewSlurmdbdDeleteAccountRequest(server string, accountName string) (*http.R
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/account/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/account/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5961,7 +6233,7 @@ func NewSlurmdbdGetAccountRequest(server string, accountName string) (*http.Requ
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/account/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/account/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5988,7 +6260,7 @@ func NewSlurmdbdGetAccountsRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/accounts")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/accounts")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6015,7 +6287,7 @@ func NewSlurmdbdUpdateAccountRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/accounts")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/accounts")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6042,7 +6314,7 @@ func NewSlurmdbdDeleteAssociationRequest(server string, params *SlurmdbdDeleteAs
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/association")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/association")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6131,7 +6403,7 @@ func NewSlurmdbdGetAssociationRequest(server string, params *SlurmdbdGetAssociat
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/association")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/association")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6228,7 +6500,7 @@ func NewSlurmdbdGetAssociationsRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/associations")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/associations")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6239,6 +6511,33 @@ func NewSlurmdbdGetAssociationsRequest(server string) (*http.Request, error) {
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSlurmdbdUpdateAssociationsRequest generates requests for SlurmdbdUpdateAssociations
+func NewSlurmdbdUpdateAssociationsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/associations")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -6262,7 +6561,7 @@ func NewSlurmdbdDeleteClusterRequest(server string, clusterName string) (*http.R
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/cluster/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/cluster/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6296,7 +6595,7 @@ func NewSlurmdbdGetClusterRequest(server string, clusterName string) (*http.Requ
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/cluster/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/cluster/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6323,7 +6622,7 @@ func NewSlurmdbdGetClustersRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/clusters")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/clusters")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6350,7 +6649,7 @@ func NewSlurmdbdAddClustersRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/clusters")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/clusters")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6377,7 +6676,7 @@ func NewSlurmdbdGetDbConfigRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/config")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/config")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6404,7 +6703,7 @@ func NewSlurmdbdSetDbConfigRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/config")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/config")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6431,7 +6730,7 @@ func NewSlurmdbdDiagRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/diag")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/diag")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6465,7 +6764,7 @@ func NewSlurmdbdGetJobRequest(server string, jobId int64) (*http.Request, error)
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/job/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/job/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6492,7 +6791,7 @@ func NewSlurmdbdGetJobsRequest(server string, params *SlurmdbdGetJobsParams) (*h
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/jobs")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/jobs")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6925,7 +7224,7 @@ func NewSlurmdbdGetQosRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/qos")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/qos")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6959,7 +7258,7 @@ func NewSlurmdbdDeleteQosRequest(server string, qosName string) (*http.Request, 
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/qos/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/qos/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6993,7 +7292,7 @@ func NewSlurmdbdGetSingleQosRequest(server string, qosName string) (*http.Reques
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/qos/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/qos/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -7020,7 +7319,7 @@ func NewSlurmdbdGetTresRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/tres")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/tres")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -7047,7 +7346,7 @@ func NewSlurmdbdUpdateTresRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/tres")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/tres")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -7081,7 +7380,7 @@ func NewSlurmdbdDeleteUserRequest(server string, userName string) (*http.Request
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/user/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/user/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -7115,7 +7414,7 @@ func NewSlurmdbdGetUserRequest(server string, userName string) (*http.Request, e
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/user/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/user/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -7142,7 +7441,7 @@ func NewSlurmdbdGetUsersRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/users")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/users")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -7169,7 +7468,7 @@ func NewSlurmdbdUpdateUsersRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/users")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/users")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -7203,7 +7502,7 @@ func NewSlurmdbdDeleteWckeyRequest(server string, wckey string) (*http.Request, 
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/wckey/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/wckey/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -7237,7 +7536,7 @@ func NewSlurmdbdGetWckeyRequest(server string, wckey string) (*http.Request, err
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/wckey/%s", pathParam0)
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/wckey/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -7264,7 +7563,7 @@ func NewSlurmdbdGetWckeysRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/wckeys")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/wckeys")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -7291,7 +7590,7 @@ func NewSlurmdbdAddWckeysRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/slurmdb/v0.0.36/wckeys")
+	operationPath := fmt.Sprintf("/slurmdb/v0.0.37/wckeys")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -7364,33 +7663,39 @@ type ClientWithResponsesInterface interface {
 	SlurmctldSubmitJobWithResponse(ctx context.Context, body SlurmctldSubmitJobJSONRequestBody, reqEditors ...RequestEditorFn) (*SlurmctldSubmitJobResponse, error)
 
 	// SlurmctldCancelJobWithResponse request
-	SlurmctldCancelJobWithResponse(ctx context.Context, jobId int64, params *SlurmctldCancelJobParams, reqEditors ...RequestEditorFn) (*SlurmctldCancelJobResponse, error)
+	SlurmctldCancelJobWithResponse(ctx context.Context, jobId string, params *SlurmctldCancelJobParams, reqEditors ...RequestEditorFn) (*SlurmctldCancelJobResponse, error)
 
 	// SlurmctldGetJobWithResponse request
-	SlurmctldGetJobWithResponse(ctx context.Context, jobId int64, reqEditors ...RequestEditorFn) (*SlurmctldGetJobResponse, error)
+	SlurmctldGetJobWithResponse(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*SlurmctldGetJobResponse, error)
 
 	// SlurmctldUpdateJobWithBodyWithResponse request with any body
-	SlurmctldUpdateJobWithBodyWithResponse(ctx context.Context, jobId int64, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SlurmctldUpdateJobResponse, error)
+	SlurmctldUpdateJobWithBodyWithResponse(ctx context.Context, jobId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SlurmctldUpdateJobResponse, error)
 
-	SlurmctldUpdateJobWithResponse(ctx context.Context, jobId int64, body SlurmctldUpdateJobJSONRequestBody, reqEditors ...RequestEditorFn) (*SlurmctldUpdateJobResponse, error)
+	SlurmctldUpdateJobWithResponse(ctx context.Context, jobId string, body SlurmctldUpdateJobJSONRequestBody, reqEditors ...RequestEditorFn) (*SlurmctldUpdateJobResponse, error)
 
 	// SlurmctldGetJobsWithResponse request
-	SlurmctldGetJobsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SlurmctldGetJobsResponse, error)
+	SlurmctldGetJobsWithResponse(ctx context.Context, params *SlurmctldGetJobsParams, reqEditors ...RequestEditorFn) (*SlurmctldGetJobsResponse, error)
 
 	// SlurmctldGetNodeWithResponse request
 	SlurmctldGetNodeWithResponse(ctx context.Context, nodeName string, reqEditors ...RequestEditorFn) (*SlurmctldGetNodeResponse, error)
 
 	// SlurmctldGetNodesWithResponse request
-	SlurmctldGetNodesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SlurmctldGetNodesResponse, error)
+	SlurmctldGetNodesWithResponse(ctx context.Context, params *SlurmctldGetNodesParams, reqEditors ...RequestEditorFn) (*SlurmctldGetNodesResponse, error)
 
 	// SlurmctldGetPartitionWithResponse request
-	SlurmctldGetPartitionWithResponse(ctx context.Context, partitionName string, reqEditors ...RequestEditorFn) (*SlurmctldGetPartitionResponse, error)
+	SlurmctldGetPartitionWithResponse(ctx context.Context, partitionName string, params *SlurmctldGetPartitionParams, reqEditors ...RequestEditorFn) (*SlurmctldGetPartitionResponse, error)
 
 	// SlurmctldGetPartitionsWithResponse request
-	SlurmctldGetPartitionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SlurmctldGetPartitionsResponse, error)
+	SlurmctldGetPartitionsWithResponse(ctx context.Context, params *SlurmctldGetPartitionsParams, reqEditors ...RequestEditorFn) (*SlurmctldGetPartitionsResponse, error)
 
 	// SlurmctldPingWithResponse request
 	SlurmctldPingWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SlurmctldPingResponse, error)
+
+	// SlurmctldGetReservationWithResponse request
+	SlurmctldGetReservationWithResponse(ctx context.Context, reservationName string, params *SlurmctldGetReservationParams, reqEditors ...RequestEditorFn) (*SlurmctldGetReservationResponse, error)
+
+	// SlurmctldGetReservationsWithResponse request
+	SlurmctldGetReservationsWithResponse(ctx context.Context, params *SlurmctldGetReservationsParams, reqEditors ...RequestEditorFn) (*SlurmctldGetReservationsResponse, error)
 
 	// SlurmdbdDeleteAccountWithResponse request
 	SlurmdbdDeleteAccountWithResponse(ctx context.Context, accountName string, reqEditors ...RequestEditorFn) (*SlurmdbdDeleteAccountResponse, error)
@@ -7412,6 +7717,9 @@ type ClientWithResponsesInterface interface {
 
 	// SlurmdbdGetAssociationsWithResponse request
 	SlurmdbdGetAssociationsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SlurmdbdGetAssociationsResponse, error)
+
+	// SlurmdbdUpdateAssociationsWithResponse request
+	SlurmdbdUpdateAssociationsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SlurmdbdUpdateAssociationsResponse, error)
 
 	// SlurmdbdDeleteClusterWithResponse request
 	SlurmdbdDeleteClusterWithResponse(ctx context.Context, clusterName string, reqEditors ...RequestEditorFn) (*SlurmdbdDeleteClusterResponse, error)
@@ -7504,8 +7812,8 @@ func (r GetOpenapiV3Response) StatusCode() int {
 type SlurmctldDiagResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *V0036Diag
-	YAML200      *V0036Diag
+	JSON200      *V0037Diag
+	YAML200      *V0037Diag
 }
 
 // Status returns HTTPResponse.Status
@@ -7527,8 +7835,8 @@ func (r SlurmctldDiagResponse) StatusCode() int {
 type SlurmctldSubmitJobResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *V0036JobSubmissionResponse
-	YAML200      *V0036JobSubmissionResponse
+	JSON200      *V0037JobSubmissionResponse
+	YAML200      *V0037JobSubmissionResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -7571,8 +7879,8 @@ func (r SlurmctldCancelJobResponse) StatusCode() int {
 type SlurmctldGetJobResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *V0036JobsResponse
-	YAML200      *V0036JobsResponse
+	JSON200      *V0037JobsResponse
+	YAML200      *V0037JobsResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -7615,8 +7923,8 @@ func (r SlurmctldUpdateJobResponse) StatusCode() int {
 type SlurmctldGetJobsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *V0036JobsResponse
-	YAML200      *V0036JobsResponse
+	JSON200      *V0037JobsResponse
+	YAML200      *V0037JobsResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -7638,8 +7946,8 @@ func (r SlurmctldGetJobsResponse) StatusCode() int {
 type SlurmctldGetNodeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *V0036NodesResponse
-	YAML200      *V0036NodesResponse
+	JSON200      *V0037NodesResponse
+	YAML200      *V0037NodesResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -7661,8 +7969,8 @@ func (r SlurmctldGetNodeResponse) StatusCode() int {
 type SlurmctldGetNodesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *V0036NodesResponse
-	YAML200      *V0036NodesResponse
+	JSON200      *V0037NodesResponse
+	YAML200      *V0037NodesResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -7684,8 +7992,8 @@ func (r SlurmctldGetNodesResponse) StatusCode() int {
 type SlurmctldGetPartitionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *V0036PartitionsResponse
-	YAML200      *V0036PartitionsResponse
+	JSON200      *V0037PartitionsResponse
+	YAML200      *V0037PartitionsResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -7707,8 +8015,8 @@ func (r SlurmctldGetPartitionResponse) StatusCode() int {
 type SlurmctldGetPartitionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *V0036PartitionsResponse
-	YAML200      *V0036PartitionsResponse
+	JSON200      *V0037PartitionsResponse
+	YAML200      *V0037PartitionsResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -7730,8 +8038,8 @@ func (r SlurmctldGetPartitionsResponse) StatusCode() int {
 type SlurmctldPingResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *V0036Pings
-	YAML200      *V0036Pings
+	JSON200      *V0037Pings
+	YAML200      *V0037Pings
 }
 
 // Status returns HTTPResponse.Status
@@ -7750,11 +8058,57 @@ func (r SlurmctldPingResponse) StatusCode() int {
 	return 0
 }
 
+type SlurmctldGetReservationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *V0037ReservationsResponse
+	YAML200      *V0037ReservationsResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r SlurmctldGetReservationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SlurmctldGetReservationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type SlurmctldGetReservationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *V0037ReservationsResponse
+	YAML200      *V0037ReservationsResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r SlurmctldGetReservationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SlurmctldGetReservationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type SlurmdbdDeleteAccountResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ResponseAccountDelete
-	YAML200      *Dbv0036ResponseAccountDelete
+	JSON200      *Dbv0037ResponseAccountDelete
+	YAML200      *Dbv0037ResponseAccountDelete
 }
 
 // Status returns HTTPResponse.Status
@@ -7776,8 +8130,8 @@ func (r SlurmdbdDeleteAccountResponse) StatusCode() int {
 type SlurmdbdGetAccountResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036AccountInfo
-	YAML200      *Dbv0036AccountInfo
+	JSON200      *Dbv0037AccountInfo
+	YAML200      *Dbv0037AccountInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -7799,8 +8153,8 @@ func (r SlurmdbdGetAccountResponse) StatusCode() int {
 type SlurmdbdGetAccountsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036AccountInfo
-	YAML200      *Dbv0036AccountInfo
+	JSON200      *Dbv0037AccountInfo
+	YAML200      *Dbv0037AccountInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -7822,8 +8176,8 @@ func (r SlurmdbdGetAccountsResponse) StatusCode() int {
 type SlurmdbdUpdateAccountResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036AccountResponse
-	YAML200      *Dbv0036AccountResponse
+	JSON200      *Dbv0037AccountResponse
+	YAML200      *Dbv0037AccountResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -7845,8 +8199,8 @@ func (r SlurmdbdUpdateAccountResponse) StatusCode() int {
 type SlurmdbdDeleteAssociationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ResponseAssociationDelete
-	YAML200      *Dbv0036ResponseAssociationDelete
+	JSON200      *Dbv0037ResponseAssociationDelete
+	YAML200      *Dbv0037ResponseAssociationDelete
 }
 
 // Status returns HTTPResponse.Status
@@ -7868,8 +8222,8 @@ func (r SlurmdbdDeleteAssociationResponse) StatusCode() int {
 type SlurmdbdGetAssociationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036AssociationsInfo
-	YAML200      *Dbv0036AssociationsInfo
+	JSON200      *Dbv0037AssociationsInfo
+	YAML200      *Dbv0037AssociationsInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -7891,8 +8245,8 @@ func (r SlurmdbdGetAssociationResponse) StatusCode() int {
 type SlurmdbdGetAssociationsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036AssociationsInfo
-	YAML200      *Dbv0036AssociationsInfo
+	JSON200      *Dbv0037AssociationsInfo
+	YAML200      *Dbv0037AssociationsInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -7911,11 +8265,34 @@ func (r SlurmdbdGetAssociationsResponse) StatusCode() int {
 	return 0
 }
 
+type SlurmdbdUpdateAssociationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Dbv0037ResponseAssociations
+	YAML200      *Dbv0037ResponseAssociations
+}
+
+// Status returns HTTPResponse.Status
+func (r SlurmdbdUpdateAssociationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SlurmdbdUpdateAssociationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type SlurmdbdDeleteClusterResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ResponseClusterDelete
-	YAML200      *Dbv0036ResponseClusterDelete
+	JSON200      *Dbv0037ResponseClusterDelete
+	YAML200      *Dbv0037ResponseClusterDelete
 }
 
 // Status returns HTTPResponse.Status
@@ -7937,8 +8314,8 @@ func (r SlurmdbdDeleteClusterResponse) StatusCode() int {
 type SlurmdbdGetClusterResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ClusterInfo
-	YAML200      *Dbv0036ClusterInfo
+	JSON200      *Dbv0037ClusterInfo
+	YAML200      *Dbv0037ClusterInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -7960,8 +8337,8 @@ func (r SlurmdbdGetClusterResponse) StatusCode() int {
 type SlurmdbdGetClustersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ClusterInfo
-	YAML200      *Dbv0036ClusterInfo
+	JSON200      *Dbv0037ClusterInfo
+	YAML200      *Dbv0037ClusterInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -7983,8 +8360,8 @@ func (r SlurmdbdGetClustersResponse) StatusCode() int {
 type SlurmdbdAddClustersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ResponseClusterAdd
-	YAML200      *Dbv0036ResponseClusterAdd
+	JSON200      *Dbv0037ResponseClusterAdd
+	YAML200      *Dbv0037ResponseClusterAdd
 }
 
 // Status returns HTTPResponse.Status
@@ -8006,8 +8383,8 @@ func (r SlurmdbdAddClustersResponse) StatusCode() int {
 type SlurmdbdGetDbConfigResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ConfigInfo
-	YAML200      *Dbv0036ConfigInfo
+	JSON200      *Dbv0037ConfigInfo
+	YAML200      *Dbv0037ConfigInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -8029,8 +8406,8 @@ func (r SlurmdbdGetDbConfigResponse) StatusCode() int {
 type SlurmdbdSetDbConfigResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ConfigResponse
-	YAML200      *Dbv0036ConfigResponse
+	JSON200      *Dbv0037ConfigResponse
+	YAML200      *Dbv0037ConfigResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -8052,8 +8429,8 @@ func (r SlurmdbdSetDbConfigResponse) StatusCode() int {
 type SlurmdbdDiagResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036Diag
-	YAML200      *Dbv0036Diag
+	JSON200      *Dbv0037Diag
+	YAML200      *Dbv0037Diag
 }
 
 // Status returns HTTPResponse.Status
@@ -8075,8 +8452,8 @@ func (r SlurmdbdDiagResponse) StatusCode() int {
 type SlurmdbdGetJobResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036JobInfo
-	YAML200      *Dbv0036JobInfo
+	JSON200      *Dbv0037JobInfo
+	YAML200      *Dbv0037JobInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -8098,8 +8475,8 @@ func (r SlurmdbdGetJobResponse) StatusCode() int {
 type SlurmdbdGetJobsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036JobInfo
-	YAML200      *Dbv0036JobInfo
+	JSON200      *Dbv0037JobInfo
+	YAML200      *Dbv0037JobInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -8121,8 +8498,8 @@ func (r SlurmdbdGetJobsResponse) StatusCode() int {
 type SlurmdbdGetQosResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036QosInfo
-	YAML200      *Dbv0036QosInfo
+	JSON200      *Dbv0037QosInfo
+	YAML200      *Dbv0037QosInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -8144,8 +8521,8 @@ func (r SlurmdbdGetQosResponse) StatusCode() int {
 type SlurmdbdDeleteQosResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ResponseQosDelete
-	YAML200      *Dbv0036ResponseQosDelete
+	JSON200      *Dbv0037ResponseQosDelete
+	YAML200      *Dbv0037ResponseQosDelete
 }
 
 // Status returns HTTPResponse.Status
@@ -8167,8 +8544,8 @@ func (r SlurmdbdDeleteQosResponse) StatusCode() int {
 type SlurmdbdGetSingleQosResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036QosInfo
-	YAML200      *Dbv0036QosInfo
+	JSON200      *Dbv0037QosInfo
+	YAML200      *Dbv0037QosInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -8190,8 +8567,8 @@ func (r SlurmdbdGetSingleQosResponse) StatusCode() int {
 type SlurmdbdGetTresResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036TresInfo
-	YAML200      *Dbv0036TresInfo
+	JSON200      *Dbv0037TresInfo
+	YAML200      *Dbv0037TresInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -8213,8 +8590,8 @@ func (r SlurmdbdGetTresResponse) StatusCode() int {
 type SlurmdbdUpdateTresResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ResponseTres
-	YAML200      *Dbv0036ResponseTres
+	JSON200      *Dbv0037ResponseTres
+	YAML200      *Dbv0037ResponseTres
 }
 
 // Status returns HTTPResponse.Status
@@ -8236,8 +8613,8 @@ func (r SlurmdbdUpdateTresResponse) StatusCode() int {
 type SlurmdbdDeleteUserResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ResponseUserDelete
-	YAML200      *Dbv0036ResponseUserDelete
+	JSON200      *Dbv0037ResponseUserDelete
+	YAML200      *Dbv0037ResponseUserDelete
 }
 
 // Status returns HTTPResponse.Status
@@ -8259,8 +8636,8 @@ func (r SlurmdbdDeleteUserResponse) StatusCode() int {
 type SlurmdbdGetUserResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036UserInfo
-	YAML200      *Dbv0036UserInfo
+	JSON200      *Dbv0037UserInfo
+	YAML200      *Dbv0037UserInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -8282,8 +8659,8 @@ func (r SlurmdbdGetUserResponse) StatusCode() int {
 type SlurmdbdGetUsersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036UserInfo
-	YAML200      *Dbv0036UserInfo
+	JSON200      *Dbv0037UserInfo
+	YAML200      *Dbv0037UserInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -8305,8 +8682,8 @@ func (r SlurmdbdGetUsersResponse) StatusCode() int {
 type SlurmdbdUpdateUsersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ResponseUserUpdate
-	YAML200      *Dbv0036ResponseUserUpdate
+	JSON200      *Dbv0037ResponseUserUpdate
+	YAML200      *Dbv0037ResponseUserUpdate
 }
 
 // Status returns HTTPResponse.Status
@@ -8328,8 +8705,8 @@ func (r SlurmdbdUpdateUsersResponse) StatusCode() int {
 type SlurmdbdDeleteWckeyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ResponseWckeyDelete
-	YAML200      *Dbv0036ResponseWckeyDelete
+	JSON200      *Dbv0037ResponseWckeyDelete
+	YAML200      *Dbv0037ResponseWckeyDelete
 }
 
 // Status returns HTTPResponse.Status
@@ -8351,8 +8728,8 @@ func (r SlurmdbdDeleteWckeyResponse) StatusCode() int {
 type SlurmdbdGetWckeyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036WckeyInfo
-	YAML200      *Dbv0036WckeyInfo
+	JSON200      *Dbv0037WckeyInfo
+	YAML200      *Dbv0037WckeyInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -8374,8 +8751,8 @@ func (r SlurmdbdGetWckeyResponse) StatusCode() int {
 type SlurmdbdGetWckeysResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036WckeyInfo
-	YAML200      *Dbv0036WckeyInfo
+	JSON200      *Dbv0037WckeyInfo
+	YAML200      *Dbv0037WckeyInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -8397,8 +8774,8 @@ func (r SlurmdbdGetWckeysResponse) StatusCode() int {
 type SlurmdbdAddWckeysResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Dbv0036ResponseWckeyAdd
-	YAML200      *Dbv0036ResponseWckeyAdd
+	JSON200      *Dbv0037ResponseWckeyAdd
+	YAML200      *Dbv0037ResponseWckeyAdd
 }
 
 // Status returns HTTPResponse.Status
@@ -8453,7 +8830,7 @@ func (c *ClientWithResponses) SlurmctldSubmitJobWithResponse(ctx context.Context
 }
 
 // SlurmctldCancelJobWithResponse request returning *SlurmctldCancelJobResponse
-func (c *ClientWithResponses) SlurmctldCancelJobWithResponse(ctx context.Context, jobId int64, params *SlurmctldCancelJobParams, reqEditors ...RequestEditorFn) (*SlurmctldCancelJobResponse, error) {
+func (c *ClientWithResponses) SlurmctldCancelJobWithResponse(ctx context.Context, jobId string, params *SlurmctldCancelJobParams, reqEditors ...RequestEditorFn) (*SlurmctldCancelJobResponse, error) {
 	rsp, err := c.SlurmctldCancelJob(ctx, jobId, params, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -8462,7 +8839,7 @@ func (c *ClientWithResponses) SlurmctldCancelJobWithResponse(ctx context.Context
 }
 
 // SlurmctldGetJobWithResponse request returning *SlurmctldGetJobResponse
-func (c *ClientWithResponses) SlurmctldGetJobWithResponse(ctx context.Context, jobId int64, reqEditors ...RequestEditorFn) (*SlurmctldGetJobResponse, error) {
+func (c *ClientWithResponses) SlurmctldGetJobWithResponse(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*SlurmctldGetJobResponse, error) {
 	rsp, err := c.SlurmctldGetJob(ctx, jobId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -8471,7 +8848,7 @@ func (c *ClientWithResponses) SlurmctldGetJobWithResponse(ctx context.Context, j
 }
 
 // SlurmctldUpdateJobWithBodyWithResponse request with arbitrary body returning *SlurmctldUpdateJobResponse
-func (c *ClientWithResponses) SlurmctldUpdateJobWithBodyWithResponse(ctx context.Context, jobId int64, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SlurmctldUpdateJobResponse, error) {
+func (c *ClientWithResponses) SlurmctldUpdateJobWithBodyWithResponse(ctx context.Context, jobId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SlurmctldUpdateJobResponse, error) {
 	rsp, err := c.SlurmctldUpdateJobWithBody(ctx, jobId, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -8479,7 +8856,7 @@ func (c *ClientWithResponses) SlurmctldUpdateJobWithBodyWithResponse(ctx context
 	return ParseSlurmctldUpdateJobResponse(rsp)
 }
 
-func (c *ClientWithResponses) SlurmctldUpdateJobWithResponse(ctx context.Context, jobId int64, body SlurmctldUpdateJobJSONRequestBody, reqEditors ...RequestEditorFn) (*SlurmctldUpdateJobResponse, error) {
+func (c *ClientWithResponses) SlurmctldUpdateJobWithResponse(ctx context.Context, jobId string, body SlurmctldUpdateJobJSONRequestBody, reqEditors ...RequestEditorFn) (*SlurmctldUpdateJobResponse, error) {
 	rsp, err := c.SlurmctldUpdateJob(ctx, jobId, body, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -8488,8 +8865,8 @@ func (c *ClientWithResponses) SlurmctldUpdateJobWithResponse(ctx context.Context
 }
 
 // SlurmctldGetJobsWithResponse request returning *SlurmctldGetJobsResponse
-func (c *ClientWithResponses) SlurmctldGetJobsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SlurmctldGetJobsResponse, error) {
-	rsp, err := c.SlurmctldGetJobs(ctx, reqEditors...)
+func (c *ClientWithResponses) SlurmctldGetJobsWithResponse(ctx context.Context, params *SlurmctldGetJobsParams, reqEditors ...RequestEditorFn) (*SlurmctldGetJobsResponse, error) {
+	rsp, err := c.SlurmctldGetJobs(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -8506,8 +8883,8 @@ func (c *ClientWithResponses) SlurmctldGetNodeWithResponse(ctx context.Context, 
 }
 
 // SlurmctldGetNodesWithResponse request returning *SlurmctldGetNodesResponse
-func (c *ClientWithResponses) SlurmctldGetNodesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SlurmctldGetNodesResponse, error) {
-	rsp, err := c.SlurmctldGetNodes(ctx, reqEditors...)
+func (c *ClientWithResponses) SlurmctldGetNodesWithResponse(ctx context.Context, params *SlurmctldGetNodesParams, reqEditors ...RequestEditorFn) (*SlurmctldGetNodesResponse, error) {
+	rsp, err := c.SlurmctldGetNodes(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -8515,8 +8892,8 @@ func (c *ClientWithResponses) SlurmctldGetNodesWithResponse(ctx context.Context,
 }
 
 // SlurmctldGetPartitionWithResponse request returning *SlurmctldGetPartitionResponse
-func (c *ClientWithResponses) SlurmctldGetPartitionWithResponse(ctx context.Context, partitionName string, reqEditors ...RequestEditorFn) (*SlurmctldGetPartitionResponse, error) {
-	rsp, err := c.SlurmctldGetPartition(ctx, partitionName, reqEditors...)
+func (c *ClientWithResponses) SlurmctldGetPartitionWithResponse(ctx context.Context, partitionName string, params *SlurmctldGetPartitionParams, reqEditors ...RequestEditorFn) (*SlurmctldGetPartitionResponse, error) {
+	rsp, err := c.SlurmctldGetPartition(ctx, partitionName, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -8524,8 +8901,8 @@ func (c *ClientWithResponses) SlurmctldGetPartitionWithResponse(ctx context.Cont
 }
 
 // SlurmctldGetPartitionsWithResponse request returning *SlurmctldGetPartitionsResponse
-func (c *ClientWithResponses) SlurmctldGetPartitionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SlurmctldGetPartitionsResponse, error) {
-	rsp, err := c.SlurmctldGetPartitions(ctx, reqEditors...)
+func (c *ClientWithResponses) SlurmctldGetPartitionsWithResponse(ctx context.Context, params *SlurmctldGetPartitionsParams, reqEditors ...RequestEditorFn) (*SlurmctldGetPartitionsResponse, error) {
+	rsp, err := c.SlurmctldGetPartitions(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -8539,6 +8916,24 @@ func (c *ClientWithResponses) SlurmctldPingWithResponse(ctx context.Context, req
 		return nil, err
 	}
 	return ParseSlurmctldPingResponse(rsp)
+}
+
+// SlurmctldGetReservationWithResponse request returning *SlurmctldGetReservationResponse
+func (c *ClientWithResponses) SlurmctldGetReservationWithResponse(ctx context.Context, reservationName string, params *SlurmctldGetReservationParams, reqEditors ...RequestEditorFn) (*SlurmctldGetReservationResponse, error) {
+	rsp, err := c.SlurmctldGetReservation(ctx, reservationName, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSlurmctldGetReservationResponse(rsp)
+}
+
+// SlurmctldGetReservationsWithResponse request returning *SlurmctldGetReservationsResponse
+func (c *ClientWithResponses) SlurmctldGetReservationsWithResponse(ctx context.Context, params *SlurmctldGetReservationsParams, reqEditors ...RequestEditorFn) (*SlurmctldGetReservationsResponse, error) {
+	rsp, err := c.SlurmctldGetReservations(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSlurmctldGetReservationsResponse(rsp)
 }
 
 // SlurmdbdDeleteAccountWithResponse request returning *SlurmdbdDeleteAccountResponse
@@ -8602,6 +8997,15 @@ func (c *ClientWithResponses) SlurmdbdGetAssociationsWithResponse(ctx context.Co
 		return nil, err
 	}
 	return ParseSlurmdbdGetAssociationsResponse(rsp)
+}
+
+// SlurmdbdUpdateAssociationsWithResponse request returning *SlurmdbdUpdateAssociationsResponse
+func (c *ClientWithResponses) SlurmdbdUpdateAssociationsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SlurmdbdUpdateAssociationsResponse, error) {
+	rsp, err := c.SlurmdbdUpdateAssociations(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSlurmdbdUpdateAssociationsResponse(rsp)
 }
 
 // SlurmdbdDeleteClusterWithResponse request returning *SlurmdbdDeleteClusterResponse
@@ -8833,14 +9237,14 @@ func ParseSlurmctldDiagResponse(rsp *http.Response) (*SlurmctldDiagResponse, err
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest V0036Diag
+		var dest V0037Diag
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest V0036Diag
+		var dest V0037Diag
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -8866,14 +9270,14 @@ func ParseSlurmctldSubmitJobResponse(rsp *http.Response) (*SlurmctldSubmitJobRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest V0036JobSubmissionResponse
+		var dest V0037JobSubmissionResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest V0036JobSubmissionResponse
+		var dest V0037JobSubmissionResponse
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -8915,14 +9319,14 @@ func ParseSlurmctldGetJobResponse(rsp *http.Response) (*SlurmctldGetJobResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest V0036JobsResponse
+		var dest V0037JobsResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest V0036JobsResponse
+		var dest V0037JobsResponse
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -8964,14 +9368,14 @@ func ParseSlurmctldGetJobsResponse(rsp *http.Response) (*SlurmctldGetJobsRespons
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest V0036JobsResponse
+		var dest V0037JobsResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest V0036JobsResponse
+		var dest V0037JobsResponse
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -8997,14 +9401,14 @@ func ParseSlurmctldGetNodeResponse(rsp *http.Response) (*SlurmctldGetNodeRespons
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest V0036NodesResponse
+		var dest V0037NodesResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest V0036NodesResponse
+		var dest V0037NodesResponse
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9030,14 +9434,14 @@ func ParseSlurmctldGetNodesResponse(rsp *http.Response) (*SlurmctldGetNodesRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest V0036NodesResponse
+		var dest V0037NodesResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest V0036NodesResponse
+		var dest V0037NodesResponse
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9063,14 +9467,14 @@ func ParseSlurmctldGetPartitionResponse(rsp *http.Response) (*SlurmctldGetPartit
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest V0036PartitionsResponse
+		var dest V0037PartitionsResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest V0036PartitionsResponse
+		var dest V0037PartitionsResponse
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9096,14 +9500,14 @@ func ParseSlurmctldGetPartitionsResponse(rsp *http.Response) (*SlurmctldGetParti
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest V0036PartitionsResponse
+		var dest V0037PartitionsResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest V0036PartitionsResponse
+		var dest V0037PartitionsResponse
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9129,14 +9533,80 @@ func ParseSlurmctldPingResponse(rsp *http.Response) (*SlurmctldPingResponse, err
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest V0036Pings
+		var dest V0037Pings
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest V0036Pings
+		var dest V0037Pings
+		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.YAML200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSlurmctldGetReservationResponse parses an HTTP response from a SlurmctldGetReservationWithResponse call
+func ParseSlurmctldGetReservationResponse(rsp *http.Response) (*SlurmctldGetReservationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SlurmctldGetReservationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest V0037ReservationsResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
+		var dest V0037ReservationsResponse
+		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.YAML200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSlurmctldGetReservationsResponse parses an HTTP response from a SlurmctldGetReservationsWithResponse call
+func ParseSlurmctldGetReservationsResponse(rsp *http.Response) (*SlurmctldGetReservationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SlurmctldGetReservationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest V0037ReservationsResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
+		var dest V0037ReservationsResponse
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9162,14 +9632,14 @@ func ParseSlurmdbdDeleteAccountResponse(rsp *http.Response) (*SlurmdbdDeleteAcco
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseAccountDelete
+		var dest Dbv0037ResponseAccountDelete
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseAccountDelete
+		var dest Dbv0037ResponseAccountDelete
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9195,14 +9665,14 @@ func ParseSlurmdbdGetAccountResponse(rsp *http.Response) (*SlurmdbdGetAccountRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036AccountInfo
+		var dest Dbv0037AccountInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036AccountInfo
+		var dest Dbv0037AccountInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9228,14 +9698,14 @@ func ParseSlurmdbdGetAccountsResponse(rsp *http.Response) (*SlurmdbdGetAccountsR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036AccountInfo
+		var dest Dbv0037AccountInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036AccountInfo
+		var dest Dbv0037AccountInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9261,14 +9731,14 @@ func ParseSlurmdbdUpdateAccountResponse(rsp *http.Response) (*SlurmdbdUpdateAcco
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036AccountResponse
+		var dest Dbv0037AccountResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036AccountResponse
+		var dest Dbv0037AccountResponse
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9294,14 +9764,14 @@ func ParseSlurmdbdDeleteAssociationResponse(rsp *http.Response) (*SlurmdbdDelete
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseAssociationDelete
+		var dest Dbv0037ResponseAssociationDelete
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseAssociationDelete
+		var dest Dbv0037ResponseAssociationDelete
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9327,14 +9797,14 @@ func ParseSlurmdbdGetAssociationResponse(rsp *http.Response) (*SlurmdbdGetAssoci
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036AssociationsInfo
+		var dest Dbv0037AssociationsInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036AssociationsInfo
+		var dest Dbv0037AssociationsInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9360,14 +9830,47 @@ func ParseSlurmdbdGetAssociationsResponse(rsp *http.Response) (*SlurmdbdGetAssoc
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036AssociationsInfo
+		var dest Dbv0037AssociationsInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036AssociationsInfo
+		var dest Dbv0037AssociationsInfo
+		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.YAML200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSlurmdbdUpdateAssociationsResponse parses an HTTP response from a SlurmdbdUpdateAssociationsWithResponse call
+func ParseSlurmdbdUpdateAssociationsResponse(rsp *http.Response) (*SlurmdbdUpdateAssociationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SlurmdbdUpdateAssociationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Dbv0037ResponseAssociations
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
+		var dest Dbv0037ResponseAssociations
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9393,14 +9896,14 @@ func ParseSlurmdbdDeleteClusterResponse(rsp *http.Response) (*SlurmdbdDeleteClus
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseClusterDelete
+		var dest Dbv0037ResponseClusterDelete
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseClusterDelete
+		var dest Dbv0037ResponseClusterDelete
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9426,14 +9929,14 @@ func ParseSlurmdbdGetClusterResponse(rsp *http.Response) (*SlurmdbdGetClusterRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ClusterInfo
+		var dest Dbv0037ClusterInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ClusterInfo
+		var dest Dbv0037ClusterInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9459,14 +9962,14 @@ func ParseSlurmdbdGetClustersResponse(rsp *http.Response) (*SlurmdbdGetClustersR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ClusterInfo
+		var dest Dbv0037ClusterInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ClusterInfo
+		var dest Dbv0037ClusterInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9492,14 +9995,14 @@ func ParseSlurmdbdAddClustersResponse(rsp *http.Response) (*SlurmdbdAddClustersR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseClusterAdd
+		var dest Dbv0037ResponseClusterAdd
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseClusterAdd
+		var dest Dbv0037ResponseClusterAdd
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9525,14 +10028,14 @@ func ParseSlurmdbdGetDbConfigResponse(rsp *http.Response) (*SlurmdbdGetDbConfigR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ConfigInfo
+		var dest Dbv0037ConfigInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ConfigInfo
+		var dest Dbv0037ConfigInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9558,14 +10061,14 @@ func ParseSlurmdbdSetDbConfigResponse(rsp *http.Response) (*SlurmdbdSetDbConfigR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ConfigResponse
+		var dest Dbv0037ConfigResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ConfigResponse
+		var dest Dbv0037ConfigResponse
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9591,14 +10094,14 @@ func ParseSlurmdbdDiagResponse(rsp *http.Response) (*SlurmdbdDiagResponse, error
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036Diag
+		var dest Dbv0037Diag
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036Diag
+		var dest Dbv0037Diag
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9624,14 +10127,14 @@ func ParseSlurmdbdGetJobResponse(rsp *http.Response) (*SlurmdbdGetJobResponse, e
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036JobInfo
+		var dest Dbv0037JobInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036JobInfo
+		var dest Dbv0037JobInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9657,14 +10160,14 @@ func ParseSlurmdbdGetJobsResponse(rsp *http.Response) (*SlurmdbdGetJobsResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036JobInfo
+		var dest Dbv0037JobInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036JobInfo
+		var dest Dbv0037JobInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9690,14 +10193,14 @@ func ParseSlurmdbdGetQosResponse(rsp *http.Response) (*SlurmdbdGetQosResponse, e
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036QosInfo
+		var dest Dbv0037QosInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036QosInfo
+		var dest Dbv0037QosInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9723,14 +10226,14 @@ func ParseSlurmdbdDeleteQosResponse(rsp *http.Response) (*SlurmdbdDeleteQosRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseQosDelete
+		var dest Dbv0037ResponseQosDelete
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseQosDelete
+		var dest Dbv0037ResponseQosDelete
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9756,14 +10259,14 @@ func ParseSlurmdbdGetSingleQosResponse(rsp *http.Response) (*SlurmdbdGetSingleQo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036QosInfo
+		var dest Dbv0037QosInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036QosInfo
+		var dest Dbv0037QosInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9789,14 +10292,14 @@ func ParseSlurmdbdGetTresResponse(rsp *http.Response) (*SlurmdbdGetTresResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036TresInfo
+		var dest Dbv0037TresInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036TresInfo
+		var dest Dbv0037TresInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9822,14 +10325,14 @@ func ParseSlurmdbdUpdateTresResponse(rsp *http.Response) (*SlurmdbdUpdateTresRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseTres
+		var dest Dbv0037ResponseTres
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseTres
+		var dest Dbv0037ResponseTres
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9855,14 +10358,14 @@ func ParseSlurmdbdDeleteUserResponse(rsp *http.Response) (*SlurmdbdDeleteUserRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseUserDelete
+		var dest Dbv0037ResponseUserDelete
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseUserDelete
+		var dest Dbv0037ResponseUserDelete
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9888,14 +10391,14 @@ func ParseSlurmdbdGetUserResponse(rsp *http.Response) (*SlurmdbdGetUserResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036UserInfo
+		var dest Dbv0037UserInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036UserInfo
+		var dest Dbv0037UserInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9921,14 +10424,14 @@ func ParseSlurmdbdGetUsersResponse(rsp *http.Response) (*SlurmdbdGetUsersRespons
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036UserInfo
+		var dest Dbv0037UserInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036UserInfo
+		var dest Dbv0037UserInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9954,14 +10457,14 @@ func ParseSlurmdbdUpdateUsersResponse(rsp *http.Response) (*SlurmdbdUpdateUsersR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseUserUpdate
+		var dest Dbv0037ResponseUserUpdate
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseUserUpdate
+		var dest Dbv0037ResponseUserUpdate
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9987,14 +10490,14 @@ func ParseSlurmdbdDeleteWckeyResponse(rsp *http.Response) (*SlurmdbdDeleteWckeyR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseWckeyDelete
+		var dest Dbv0037ResponseWckeyDelete
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseWckeyDelete
+		var dest Dbv0037ResponseWckeyDelete
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -10020,14 +10523,14 @@ func ParseSlurmdbdGetWckeyResponse(rsp *http.Response) (*SlurmdbdGetWckeyRespons
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036WckeyInfo
+		var dest Dbv0037WckeyInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036WckeyInfo
+		var dest Dbv0037WckeyInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -10053,14 +10556,14 @@ func ParseSlurmdbdGetWckeysResponse(rsp *http.Response) (*SlurmdbdGetWckeysRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036WckeyInfo
+		var dest Dbv0037WckeyInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036WckeyInfo
+		var dest Dbv0037WckeyInfo
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -10086,14 +10589,14 @@ func ParseSlurmdbdAddWckeysResponse(rsp *http.Response) (*SlurmdbdAddWckeysRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseWckeyAdd
+		var dest Dbv0037ResponseWckeyAdd
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest Dbv0036ResponseWckeyAdd
+		var dest Dbv0037ResponseWckeyAdd
 		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

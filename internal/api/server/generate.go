@@ -3,4 +3,4 @@
 // To regenerate: go generate ./...
 package server
 
-//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config=../../../config/oapi-codegen-server.yaml ../../../config/openapi.yaml
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config=../../../config/openapi/service/oapi-codegen-server.yaml ../../../config/openapi/service/openapi.yaml

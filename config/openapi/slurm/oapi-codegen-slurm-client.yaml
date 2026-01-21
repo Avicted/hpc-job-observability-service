@@ -3,7 +3,7 @@
 # Run: go generate ./...
 #
 # Note: The original Slurm OpenAPI spec (slurm-openapi.json) contains multiple API versions.
-# We use a filtered spec (slurm-openapi-v0.0.36.json) that only includes v0.0.36 paths
+# We use a filtered spec (slurm-openapi-v0.0.37.json) that only includes v0.0.37 paths
 # to avoid duplicate operation ID conflicts. To support a different API version:
 # 1. Update the filter script in docs/development.md
 # 2. Regenerate: go generate ./internal/slurmclient/...

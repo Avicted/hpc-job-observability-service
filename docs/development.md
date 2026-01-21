@@ -18,12 +18,17 @@ hpc-job-observability-service/
 │   └── mockserver/         # OpenAPI mock server
 │       └── main.go
 ├── config/                 # Configuration files
-│   ├── openapi.yaml        # OpenAPI 3.0 specification (our API)
-│   ├── oapi-codegen-types.yaml
-│   ├── oapi-codegen-server.yaml
-│   ├── oapi-codegen-slurm-client.yaml  # Slurm client codegen config
-│   ├── slurm-openapi.json              # Full Slurm OpenAPI spec
-│   ├── slurm-openapi-v0.0.36.json      # Filtered Slurm spec (v0.0.36)
+│   ├── openapi/            # OpenAPI specifications
+│   │   ├── service/        # Our service API
+│   │   │   ├── openapi.yaml            # OpenAPI 3.0 specification
+│   │   │   ├── oapi-codegen-server.yaml
+│   │   │   └── oapi-codegen-types.yaml
+│   │   └── slurm/          # Slurm REST API
+│   │       ├── slurm-openapi.json          # Full Slurm OpenAPI spec
+│   │       ├── slurm-openapi-v0.0.37.json  # Filtered spec (v0.0.37)
+│   │       └── oapi-codegen-slurm-client.yaml
+│   ├── grafana/            # Grafana dashboards
+│   ├── slurm/              # Slurm container config
 │   └── prometheus.yml
 ├── docs/                   # Documentation
 │   ├── architecture.md
@@ -60,8 +65,10 @@ hpc-job-observability-service/
 │       ├── sqlite.go       # SQLite implementation
 │       ├── postgres.go     # PostgreSQL implementation
 │       └── storage_test.go
-├── .vscode/
-│   └── tasks.json          # VS Code tasks
+├── scripts/                # Utility scripts
+│   ├── coverage.sh
+│   ├── filter-slurm-openapi.py
+│   └── verify-docker-stack.sh
 ├── Dockerfile
 ├── docker-compose.yml
 ├── go.mod
@@ -209,8 +216,8 @@ SCHEDULER_BACKEND=slurm
 # Docker Compose:     http://slurm:6820 (container hostname)
 SLURM_BASE_URL=http://localhost:6820
 
-# Optional: API version (default: v0.0.36 for the test container)
-SLURM_API_VERSION=v0.0.36
+# Optional: API version (default: v0.0.37 for the test container)
+SLURM_API_VERSION=v0.0.37
 
 # Optional: Auth token (depends on slurmrestd auth config)
 SLURM_AUTH_TOKEN=
@@ -232,7 +239,7 @@ Key metrics include:
 
 ### Running Unit Tests
 
-The existing unit tests for Slurm use `httptest.Server` to mock slurmrestd responses:
+The unit tests for Slurm use mock clients to simulate slurmrestd responses:
 
 ```bash
 # Run all tests including Slurm unit tests
@@ -245,7 +252,54 @@ go test ./internal/scheduler/... -v
 ./scripts/coverage.sh
 ```
 
-### Running Integration Tests
+### Running End-to-End Integration Tests
+
+The project includes comprehensive E2E tests that run against a real Slurm cluster.
+These tests:
+- Submit real jobs to Slurm via sbatch
+- Sync jobs to the database
+- Verify data through the REST API
+- Validate data integrity between Slurm, storage, and API
+
+**Prerequisites:**
+- Docker and Docker Compose
+- Slurm stack running via `docker-compose --profile slurm up -d`
+
+**Running E2E Tests:**
+
+```bash
+# 1. Start the Slurm stack
+docker-compose --profile slurm up -d
+
+# 2. Wait for services to be healthy (slurmrestd should be accessible)
+docker-compose --profile slurm ps
+curl -s http://localhost:6820/openapi/v3 | head -5
+
+# 3. Run E2E tests with the slurm_e2e build tag
+go test ./internal/api -tags=slurm_e2e -v
+
+# 4. Run specific E2E test
+go test ./internal/api -tags=slurm_e2e -v -run TestSlurmE2E_JobSubmissionAndSync
+
+# 5. Stop Slurm when done
+docker-compose --profile slurm down
+```
+
+**What the E2E tests cover:**
+- `TestSlurmE2E_RealSlurmConnection` - Verify connectivity to slurmrestd
+- `TestSlurmE2E_JobSubmissionAndSync` - Submit job, sync, verify in storage/API
+- `TestSlurmE2E_JobCompletion` - Full job lifecycle to completion
+- `TestSlurmE2E_MultipleJobs` - Concurrent job handling
+- `TestSlurmE2E_NodesList` - Listing Slurm nodes
+- `TestSlurmE2E_JobFiltering` - API filtering and pagination
+- `TestSlurmE2E_DataIntegrity` - Data consistency across layers
+- `TestSlurmE2E_SchedulerInfo` - Scheduler-specific metadata
+- `TestSlurmE2E_ContinuousSync` - Repeated sync stability
+
+**Note:** E2E tests are skipped automatically if Slurm is not available,
+allowing `go test ./...` to run without Docker.
+
+### Manual Integration Testing
 
 With the Slurm stack running, you can submit real jobs and verify the integration:
 
@@ -260,7 +314,7 @@ docker-compose --profile slurm ps
 docker-compose exec slurm sbatch --wrap="echo 'Hello from Slurm'; sleep 30"
 
 # 4. Check job status via slurmrestd
-curl http://localhost:6820/slurm/v0.0.36/jobs/
+curl http://localhost:6820/slurm/v0.0.37/jobs/
 
 # 5. Verify node status
 docker-compose exec slurm sinfo
@@ -281,7 +335,7 @@ To test the full integration (service + Slurm):
 cat > .env << 'EOF'
 SCHEDULER_BACKEND=slurm
 SLURM_BASE_URL=http://slurm:6820
-SLURM_API_VERSION=v0.0.36
+SLURM_API_VERSION=v0.0.37
 DATABASE_TYPE=postgres
 DATABASE_URL=postgres://hpc:hpc_password@postgres:5432/hpc_jobs?sslmode=disable
 EOF
@@ -374,9 +428,9 @@ The project uses a runtime-free Go client generated from the official Slurm Open
 This provides type-safe access to slurmrestd endpoints.
 
 **Files:**
-- `config/slurm-openapi.json` - Full Slurm OpenAPI spec (fetched from slurmrestd)
-- `config/slurm-openapi-v0.0.36.json` - Filtered spec (v0.0.36 paths only)
-- `config/oapi-codegen-slurm-client.yaml` - oapi-codegen configuration
+- `config/openapi/slurm/slurm-openapi.json` - Full Slurm OpenAPI spec (fetched from slurmrestd)
+- `config/openapi/slurm/slurm-openapi-v0.0.37.json` - Filtered spec (v0.0.37 paths only)
+- `config/openapi/slurm/oapi-codegen-slurm-client.yaml` - oapi-codegen configuration
 - `internal/slurmclient/client.gen.go` - Generated client code
 - `scripts/filter-slurm-openapi.py` - Script to filter spec to a single API version
 
@@ -389,12 +443,12 @@ This provides type-safe access to slurmrestd endpoints.
 
 2. Fetch the latest OpenAPI spec:
    ```bash
-   curl -s http://localhost:6820/openapi/v3 > config/slurm-openapi.json
+   curl -s http://localhost:6820/openapi/v3 > config/openapi/slurm/slurm-openapi.json
    ```
 
 3. Filter to a single API version (to avoid duplicate operation IDs):
    ```bash
-   ./scripts/filter-slurm-openapi.py --version v0.0.36
+   ./scripts/filter-slurm-openapi.py --version v0.0.37
    ```
 
 4. Regenerate the client:

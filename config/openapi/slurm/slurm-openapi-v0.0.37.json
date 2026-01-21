@@ -10,7 +10,25 @@
     }
   ],
   "paths": {
-    "/slurmdb/v0.0.36/job/{job_id}": {
+    "/openapi/v3": {
+      "get": {
+        "tags": [
+          "openapi"
+        ],
+        "summary": "Retrieve OpenAPI Specification",
+        "responses": {
+          "200": {
+            "description": "OpenAPI Specification"
+          }
+        }
+      },
+      "servers": [
+        {
+          "url": "/"
+        }
+      ]
+    },
+    "/slurmdb/v0.0.37/job/{job_id}": {
       "get": {
         "tags": [
           "slurm"
@@ -37,12 +55,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_job_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_job_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_job_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_job_info"
                 }
               }
             },
@@ -54,7 +72,7 @@
         }
       }
     },
-    "/slurmdb/v0.0.36/config": {
+    "/slurmdb/v0.0.37/config": {
       "get": {
         "tags": [
           "slurm"
@@ -66,12 +84,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_config_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_config_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_config_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_config_info"
                 }
               }
             },
@@ -94,12 +112,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_config_response"
+                  "$ref": "#/components/schemas/dbv0.0.37_config_response"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_config_response"
+                  "$ref": "#/components/schemas/dbv0.0.37_config_response"
                 }
               }
             }
@@ -110,7 +128,7 @@
         }
       }
     },
-    "/slurmdb/v0.0.36/tres": {
+    "/slurmdb/v0.0.37/tres": {
       "post": {
         "tags": [
           "slurm"
@@ -121,12 +139,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_tres"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_tres"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_tres"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_tres"
                 }
               }
             },
@@ -148,12 +166,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_tres_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_tres_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_tres_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_tres_info"
                 }
               }
             },
@@ -166,7 +184,7 @@
         "summary": "Get TRES info"
       }
     },
-    "/slurmdb/v0.0.36/qos/{qos_name}": {
+    "/slurmdb/v0.0.37/qos/{qos_name}": {
       "delete": {
         "tags": [
           "slurm"
@@ -178,12 +196,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_qos_delete"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_qos_delete"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_qos_delete"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_qos_delete"
                 }
               }
             },
@@ -218,12 +236,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_qos_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_qos_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_qos_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_qos_info"
                 }
               }
             },
@@ -248,7 +266,7 @@
         ]
       }
     },
-    "/slurmdb/v0.0.36/qos": {
+    "/slurmdb/v0.0.37/qos": {
       "get": {
         "tags": [
           "slurm"
@@ -259,12 +277,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_qos_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_qos_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_qos_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_qos_info"
                 }
               }
             },
@@ -277,7 +295,34 @@
         "summary": "Get QOS list"
       }
     },
-    "/slurmdb/v0.0.36/associations": {
+    "/slurmdb/v0.0.37/associations": {
+      "post": {
+        "tags": [
+          "slurm"
+        ],
+        "operationId": "slurmdbd_update_associations",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/dbv0.0.37_response_associations"
+                }
+              },
+              "application/x-yaml": {
+                "schema": {
+                  "$ref": "#/components/schemas/dbv0.0.37_response_associations"
+                }
+              }
+            },
+            "description": "status of associations update"
+          },
+          "default": {
+            "description": "Unable to update associations"
+          }
+        },
+        "summary": "Set associations info"
+      },
       "get": {
         "tags": [
           "slurm"
@@ -288,12 +333,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_associations_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_associations_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_associations_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_associations_info"
                 }
               }
             },
@@ -306,7 +351,7 @@
         "summary": "Get association list"
       }
     },
-    "/slurmdb/v0.0.36/association": {
+    "/slurmdb/v0.0.37/association": {
       "get": {
         "tags": [
           "slurm"
@@ -363,12 +408,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_associations_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_associations_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_associations_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_associations_info"
                 }
               }
             },
@@ -436,12 +481,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_association_delete"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_association_delete"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_association_delete"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_association_delete"
                 }
               }
             },
@@ -454,7 +499,7 @@
         "summary": "Delete association"
       }
     },
-    "/slurmdb/v0.0.36/user/{user_name}": {
+    "/slurmdb/v0.0.37/user/{user_name}": {
       "delete": {
         "tags": [
           "slurm"
@@ -466,12 +511,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_user_delete"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_user_delete"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_user_delete"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_user_delete"
                 }
               }
             },
@@ -506,12 +551,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_user_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_user_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_user_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_user_info"
                 }
               }
             },
@@ -536,7 +581,7 @@
         ]
       }
     },
-    "/slurmdb/v0.0.36/users": {
+    "/slurmdb/v0.0.37/users": {
       "post": {
         "tags": [
           "slurm"
@@ -548,12 +593,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_user_update"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_user_update"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_user_update"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_user_update"
                 }
               }
             },
@@ -575,12 +620,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_user_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_user_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_user_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_user_info"
                 }
               }
             },
@@ -592,7 +637,7 @@
         }
       }
     },
-    "/slurmdb/v0.0.36/cluster/{cluster_name}": {
+    "/slurmdb/v0.0.37/cluster/{cluster_name}": {
       "delete": {
         "tags": [
           "slurm"
@@ -604,12 +649,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_cluster_delete"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_cluster_delete"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_cluster_delete"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_cluster_delete"
                 }
               }
             },
@@ -644,12 +689,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_cluster_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_cluster_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_cluster_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_cluster_info"
                 }
               }
             },
@@ -674,7 +719,7 @@
         ]
       }
     },
-    "/slurmdb/v0.0.36/clusters": {
+    "/slurmdb/v0.0.37/clusters": {
       "get": {
         "tags": [
           "slurm"
@@ -685,12 +730,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_cluster_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_cluster_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_cluster_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_cluster_info"
                 }
               }
             },
@@ -712,12 +757,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_cluster_add"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_cluster_add"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_cluster_add"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_cluster_add"
                 }
               }
             },
@@ -730,7 +775,7 @@
         "summary": "Add clusters"
       }
     },
-    "/slurmdb/v0.0.36/wckey/{wckey}": {
+    "/slurmdb/v0.0.37/wckey/{wckey}": {
       "delete": {
         "tags": [
           "slurm"
@@ -742,12 +787,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_wckey_delete"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_wckey_delete"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_wckey_delete"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_wckey_delete"
                 }
               }
             },
@@ -782,12 +827,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_wckey_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_wckey_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_wckey_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_wckey_info"
                 }
               }
             },
@@ -812,7 +857,7 @@
         ]
       }
     },
-    "/slurmdb/v0.0.36/wckeys": {
+    "/slurmdb/v0.0.37/wckeys": {
       "get": {
         "tags": [
           "slurm"
@@ -823,12 +868,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_wckey_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_wckey_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_wckey_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_wckey_info"
                 }
               }
             },
@@ -850,12 +895,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_wckey_add"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_wckey_add"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_wckey_add"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_wckey_add"
                 }
               }
             },
@@ -868,7 +913,7 @@
         "summary": "Add wckeys"
       }
     },
-    "/slurmdb/v0.0.36/account/{account_name}": {
+    "/slurmdb/v0.0.37/account/{account_name}": {
       "delete": {
         "tags": [
           "slurm"
@@ -880,12 +925,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_account_delete"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_account_delete"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_response_account_delete"
+                  "$ref": "#/components/schemas/dbv0.0.37_response_account_delete"
                 }
               }
             },
@@ -920,12 +965,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_account_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_account_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_account_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_account_info"
                 }
               }
             },
@@ -950,7 +995,7 @@
         ]
       }
     },
-    "/slurmdb/v0.0.36/accounts": {
+    "/slurmdb/v0.0.37/accounts": {
       "get": {
         "tags": [
           "slurm"
@@ -961,12 +1006,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_account_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_account_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_account_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_account_info"
                 }
               }
             },
@@ -988,12 +1033,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_account_response"
+                  "$ref": "#/components/schemas/dbv0.0.37_account_response"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_account_response"
+                  "$ref": "#/components/schemas/dbv0.0.37_account_response"
                 }
               }
             },
@@ -1006,7 +1051,7 @@
         "summary": "Update accounts"
       }
     },
-    "/slurmdb/v0.0.36/jobs": {
+    "/slurmdb/v0.0.37/jobs": {
       "get": {
         "tags": [
           "slurm"
@@ -1294,12 +1339,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_job_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_job_info"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_job_info"
+                  "$ref": "#/components/schemas/dbv0.0.37_job_info"
                 }
               }
             },
@@ -1312,7 +1357,7 @@
         "summary": "Get job list"
       }
     },
-    "/slurmdb/v0.0.36/diag": {
+    "/slurmdb/v0.0.37/diag": {
       "get": {
         "tags": [
           "slurm"
@@ -1323,12 +1368,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_diag"
+                  "$ref": "#/components/schemas/dbv0.0.37_diag"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/dbv0.0.36_diag"
+                  "$ref": "#/components/schemas/dbv0.0.37_diag"
                 }
               }
             },
@@ -1341,25 +1386,7 @@
         "summary": "Get slurmdb diagnostics"
       }
     },
-    "/openapi/v3": {
-      "get": {
-        "tags": [
-          "openapi"
-        ],
-        "summary": "Retrieve OpenAPI Specification",
-        "responses": {
-          "200": {
-            "description": "OpenAPI Specification"
-          }
-        }
-      },
-      "servers": [
-        {
-          "url": "/"
-        }
-      ]
-    },
-    "/slurm/v0.0.36/diag": {
+    "/slurm/v0.0.37/diag": {
       "get": {
         "tags": [
           "slurm"
@@ -1372,12 +1399,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_diag"
+                  "$ref": "#/components/schemas/v0.0.37_diag"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_diag"
+                  "$ref": "#/components/schemas/v0.0.37_diag"
                 }
               }
             }
@@ -1388,7 +1415,7 @@
         }
       }
     },
-    "/slurm/v0.0.36/ping": {
+    "/slurm/v0.0.37/ping": {
       "get": {
         "tags": [
           "slurm"
@@ -1401,12 +1428,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_pings"
+                  "$ref": "#/components/schemas/v0.0.37_pings"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_pings"
+                  "$ref": "#/components/schemas/v0.0.37_pings"
                 }
               }
             }
@@ -1417,48 +1444,19 @@
         }
       }
     },
-    "/slurm/v0.0.36/jobs": {
+    "/slurm/v0.0.37/jobs": {
       "get": {
         "tags": [
           "slurm"
         ],
         "operationId": "slurmctld_get_jobs",
         "summary": "get list of jobs",
-        "responses": {
-          "200": {
-            "description": "job(s) information",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_jobs_response"
-                }
-              },
-              "application/x-yaml": {
-                "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_jobs_response"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "job not found"
-          }
-        }
-      }
-    },
-    "/slurm/v0.0.36/job/{job_id}": {
-      "get": {
-        "tags": [
-          "slurm"
-        ],
-        "operationId": "slurmctld_get_job",
-        "summary": "get job info",
         "parameters": [
           {
-            "name": "job_id",
-            "in": "path",
-            "description": "Slurm Job ID",
-            "required": true,
+            "name": "update_time",
+            "in": "query",
+            "description": "Filter if changed since update_time. Use of this parameter can result in faster replies.",
+            "required": false,
             "style": "simple",
             "explode": false,
             "schema": {
@@ -1473,18 +1471,60 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_jobs_response"
+                  "$ref": "#/components/schemas/v0.0.37_jobs_response"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_jobs_response"
+                  "$ref": "#/components/schemas/v0.0.37_jobs_response"
                 }
               }
             }
           },
           "default": {
             "description": "job not found"
+          }
+        }
+      }
+    },
+    "/slurm/v0.0.37/job/{job_id}": {
+      "get": {
+        "tags": [
+          "slurm"
+        ],
+        "operationId": "slurmctld_get_job",
+        "summary": "get job info",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "description": "Slurm JobID",
+            "required": true,
+            "style": "simple",
+            "explode": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "job(s) information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/v0.0.37_jobs_response"
+                }
+              },
+              "application/x-yaml": {
+                "schema": {
+                  "$ref": "#/components/schemas/v0.0.37_jobs_response"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "job matching JobId not found"
           }
         }
       },
@@ -1503,8 +1543,7 @@
             "style": "simple",
             "explode": false,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "type": "string"
             }
           }
         ],
@@ -1513,12 +1552,12 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/v0.0.36_job_properties"
+                "$ref": "#/components/schemas/v0.0.37_job_properties"
               }
             },
             "application/x-yaml": {
               "schema": {
-                "$ref": "#/components/schemas/v0.0.36_job_properties"
+                "$ref": "#/components/schemas/v0.0.37_job_properties"
               }
             }
           },
@@ -1548,8 +1587,7 @@
             "style": "simple",
             "explode": false,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "type": "string"
             }
           },
           {
@@ -1560,7 +1598,7 @@
             "style": "form",
             "explode": true,
             "schema": {
-              "$ref": "#/components/schemas/v0.0.36_signal"
+              "$ref": "#/components/schemas/v0.0.37_signal"
             }
           }
         ],
@@ -1574,7 +1612,7 @@
         }
       }
     },
-    "/slurm/v0.0.36/job/submit": {
+    "/slurm/v0.0.37/job/submit": {
       "post": {
         "tags": [
           "slurm"
@@ -1586,12 +1624,12 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/v0.0.36_job_submission"
+                "$ref": "#/components/schemas/v0.0.37_job_submission"
               }
             },
             "application/x-yaml": {
               "schema": {
-                "$ref": "#/components/schemas/v0.0.36_job_submission"
+                "$ref": "#/components/schemas/v0.0.37_job_submission"
               }
             }
           },
@@ -1603,12 +1641,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_job_submission_response"
+                  "$ref": "#/components/schemas/v0.0.37_job_submission_response"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_job_submission_response"
+                  "$ref": "#/components/schemas/v0.0.37_job_submission_response"
                 }
               }
             }
@@ -1619,25 +1657,39 @@
         }
       }
     },
-    "/slurm/v0.0.36/nodes": {
+    "/slurm/v0.0.37/nodes": {
       "get": {
         "tags": [
           "slurm"
         ],
         "operationId": "slurmctld_get_nodes",
         "summary": "get all node info",
+        "parameters": [
+          {
+            "name": "update_time",
+            "in": "query",
+            "description": "Filter if changed since update_time. Use of this parameter can result in faster replies.",
+            "required": false,
+            "style": "simple",
+            "explode": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "node information",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_nodes_response"
+                  "$ref": "#/components/schemas/v0.0.37_nodes_response"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_nodes_response"
+                  "$ref": "#/components/schemas/v0.0.37_nodes_response"
                 }
               }
             }
@@ -1648,7 +1700,7 @@
         }
       }
     },
-    "/slurm/v0.0.36/node/{node_name}": {
+    "/slurm/v0.0.37/node/{node_name}": {
       "get": {
         "tags": [
           "slurm"
@@ -1674,12 +1726,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_nodes_response"
+                  "$ref": "#/components/schemas/v0.0.37_nodes_response"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_nodes_response"
+                  "$ref": "#/components/schemas/v0.0.37_nodes_response"
                 }
               }
             }
@@ -1690,25 +1742,39 @@
         }
       }
     },
-    "/slurm/v0.0.36/partitions": {
+    "/slurm/v0.0.37/partitions": {
       "get": {
         "tags": [
           "slurm"
         ],
         "operationId": "slurmctld_get_partitions",
         "summary": "get all partition info",
+        "parameters": [
+          {
+            "name": "update_time",
+            "in": "query",
+            "description": "Filter if changed since update_time. Use of this parameter can result in faster replies.",
+            "required": false,
+            "style": "simple",
+            "explode": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "partition information",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_partitions_response"
+                  "$ref": "#/components/schemas/v0.0.37_partitions_response"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_partitions_response"
+                  "$ref": "#/components/schemas/v0.0.37_partitions_response"
                 }
               }
             }
@@ -1719,7 +1785,7 @@
         }
       }
     },
-    "/slurm/v0.0.36/partition/{partition_name}": {
+    "/slurm/v0.0.37/partition/{partition_name}": {
       "get": {
         "tags": [
           "slurm"
@@ -1737,6 +1803,18 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "update_time",
+            "in": "query",
+            "description": "Filter if there were no partition changes (not limited to partition in URL endpoint) since update_time.",
+            "required": false,
+            "style": "simple",
+            "explode": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
           }
         ],
         "responses": {
@@ -1745,18 +1823,115 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_partitions_response"
+                  "$ref": "#/components/schemas/v0.0.37_partitions_response"
                 }
               },
               "application/x-yaml": {
                 "schema": {
-                  "$ref": "#/components/schemas/v0.0.36_partitions_response"
+                  "$ref": "#/components/schemas/v0.0.37_partitions_response"
                 }
               }
             }
           },
           "default": {
             "description": "no partitions found"
+          }
+        }
+      }
+    },
+    "/slurm/v0.0.37/reservations": {
+      "get": {
+        "tags": [
+          "slurm"
+        ],
+        "operationId": "slurmctld_get_reservations",
+        "summary": "get all reservation info",
+        "parameters": [
+          {
+            "name": "update_time",
+            "in": "query",
+            "description": "Filter if changed since update_time. Use of this parameter can result in faster replies.",
+            "required": false,
+            "style": "simple",
+            "explode": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "reservation information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/v0.0.37_reservations_response"
+                }
+              },
+              "application/x-yaml": {
+                "schema": {
+                  "$ref": "#/components/schemas/v0.0.37_reservations_response"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "no reservations found"
+          }
+        }
+      }
+    },
+    "/slurm/v0.0.37/reservation/{reservation_name}": {
+      "get": {
+        "tags": [
+          "slurm"
+        ],
+        "operationId": "slurmctld_get_reservation",
+        "summary": "get reservation info",
+        "parameters": [
+          {
+            "name": "reservation_name",
+            "in": "path",
+            "description": "Slurm Reservation Name",
+            "required": true,
+            "style": "simple",
+            "explode": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "update_time",
+            "in": "query",
+            "description": "Filter if no reservation (not limited to reservation in URL) changed since update_time.",
+            "required": false,
+            "style": "simple",
+            "explode": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "reservation information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/v0.0.37_reservations_response"
+                }
+              },
+              "application/x-yaml": {
+                "schema": {
+                  "$ref": "#/components/schemas/v0.0.37_reservations_response"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "no reservations found"
           }
         }
       }
@@ -5237,8 +5412,9 @@
             "description": "Instruct Slurm to connect the batch script's standard output directly to the file name."
           },
           "deadline": {
-            "type": "string",
-            "description": "Remove the job if no ending is possible before this deadline (start > (deadline - time[-min]))."
+            "type": "integer",
+            "description": "Remove the job if no ending is possible before this deadline (start > (deadline - time[-min])). (Unix timestamp)",
+            "format": "int64"
           },
           "delay_boot": {
             "type": "integer",
@@ -5404,7 +5580,7 @@
             "description": "Request a specific partition for the resource allocation."
           },
           "priority": {
-            "type": "string",
+            "type": "integer",
             "description": "Request a specific job priority."
           },
           "qos": {
@@ -5956,23 +6132,24 @@
             "description": "Charge resources used by this job to specified account"
           },
           "accrue_time": {
-            "type": "string",
-            "description": "time job is eligible for running"
+            "type": "integer",
+            "description": "time job is eligible for running (Unix timestamp)",
+            "format": "int64"
           },
           "admin_comment": {
             "type": "string",
             "description": "administrator's arbitrary comment"
           },
           "array_job_id": {
-            "type": "string",
+            "type": "integer",
             "description": "job_id of a job array or 0 if N/A"
           },
           "array_task_id": {
-            "type": "string",
+            "type": "integer",
             "description": "task_id of a job array"
           },
           "array_max_tasks": {
-            "type": "string",
+            "type": "integer",
             "description": "Maximum number of running array tasks"
           },
           "array_task_string": {
@@ -5980,7 +6157,7 @@
             "description": "string expression of task IDs in this record"
           },
           "association_id": {
-            "type": "string",
+            "type": "integer",
             "description": "association id for job"
           },
           "batch_features": {
@@ -6043,8 +6220,9 @@
             "description": "cores per socket required by job"
           },
           "billable_tres": {
-            "type": "string",
-            "description": "billable TRES"
+            "type": "number",
+            "description": "billable TRES",
+            "format": "double"
           },
           "cpus_per_task": {
             "type": "string",
@@ -6067,28 +6245,32 @@
             "description": "semicolon delimited list of TRES=# values"
           },
           "deadline": {
-            "type": "string",
-            "description": "job start deadline "
+            "type": "integer",
+            "description": "job start deadline  (Unix timestamp)",
+            "format": "int64"
           },
           "delay_boot": {
-            "type": "string",
-            "description": "command to be executed"
+            "type": "integer",
+            "description": "command to be executed (Unix timestamp)",
+            "format": "int64"
           },
           "dependency": {
             "type": "string",
             "description": "synchronize job execution with other jobs"
           },
           "derived_exit_code": {
-            "type": "string",
+            "type": "integer",
             "description": "highest exit code of all job steps"
           },
           "eligible_time": {
-            "type": "string",
-            "description": "time job is eligible for running"
+            "type": "integer",
+            "description": "time job is eligible for running (Unix timestamp)",
+            "format": "int64"
           },
           "end_time": {
-            "type": "string",
-            "description": "time of termination, actual or expected"
+            "type": "integer",
+            "description": "time of termination, actual or expected (Unix timestamp)",
+            "format": "int64"
           },
           "excluded_nodes": {
             "type": "string",
@@ -6122,34 +6304,32 @@
             }
           },
           "group_id": {
-            "type": "string",
+            "type": "integer",
             "description": "group job submitted as"
           },
           "job_id": {
-            "type": "string",
+            "type": "integer",
             "description": "job ID"
-          },
-          "job_resources": {
-            "$ref": "#/components/schemas/v0.0.36_job_resources"
           },
           "job_state": {
             "type": "string",
             "description": "state of the job"
           },
           "last_sched_evaluation": {
-            "type": "string",
-            "description": "last time job was evaluated for scheduling"
+            "type": "integer",
+            "description": "last time job was evaluated for scheduling (Unix timestamp)",
+            "format": "int64"
           },
           "licenses": {
             "type": "string",
             "description": "licenses required by the job"
           },
           "max_cpus": {
-            "type": "string",
+            "type": "integer",
             "description": "maximum number of cpus usable by job"
           },
           "max_nodes": {
-            "type": "string",
+            "type": "integer",
             "description": "maximum number of nodes usable by job"
           },
           "mcs_label": {
@@ -6181,23 +6361,23 @@
             "description": "number of tasks to invoke on each socket"
           },
           "tasks_per_board": {
-            "type": "string",
+            "type": "integer",
             "description": "number of tasks to invoke on each board"
           },
           "cpus": {
-            "type": "string",
+            "type": "integer",
             "description": "minimum number of cpus required by job"
           },
           "node_count": {
-            "type": "string",
+            "type": "integer",
             "description": "minimum number of nodes required by job"
           },
           "tasks": {
-            "type": "string",
+            "type": "integer",
             "description": "requested task count"
           },
           "het_job_id": {
-            "type": "string",
+            "type": "integer",
             "description": "job ID of hetjob leader"
           },
           "het_job_id_set": {
@@ -6205,7 +6385,7 @@
             "description": "job IDs for all components"
           },
           "het_job_offset": {
-            "type": "string",
+            "type": "integer",
             "description": "HetJob component offset from leader"
           },
           "partition": {
@@ -6221,23 +6401,25 @@
             "description": "minimum real memory per cpu"
           },
           "minimum_cpus_per_node": {
-            "type": "string",
+            "type": "integer",
             "description": "minimum # CPUs per node"
           },
           "minimum_tmp_disk_per_node": {
-            "type": "string",
+            "type": "integer",
             "description": "minimum tmp disk per node"
           },
           "preempt_time": {
-            "type": "string",
-            "description": "preemption signal time"
+            "type": "integer",
+            "description": "preemption signal time (Unix timestamp)",
+            "format": "int64"
           },
           "pre_sus_time": {
-            "type": "string",
-            "description": "time job ran prior to last suspend"
+            "type": "integer",
+            "description": "time job ran prior to last suspend (Unix timestamp)",
+            "format": "int64"
           },
           "priority": {
-            "type": "string",
+            "type": "integer",
             "description": "relative priority of the job"
           },
           "profile": {
@@ -6264,11 +6446,12 @@
             "description": "enable or disable job requeue option"
           },
           "resize_time": {
-            "type": "string",
-            "description": "time of latest size change"
+            "type": "integer",
+            "description": "time of latest size change (Unix timestamp)",
+            "format": "int64"
           },
           "restart_cnt": {
-            "type": "string",
+            "type": "integer",
             "description": "count of job restarts"
           },
           "resv_name": {
@@ -6276,7 +6459,7 @@
             "description": "reservation name"
           },
           "shared": {
-            "type": "string",
+            "type": "integer",
             "description": "type and if job can share nodes with other jobs"
           },
           "show_flags": {
@@ -6287,7 +6470,7 @@
             }
           },
           "sockets_per_board": {
-            "type": "string",
+            "type": "integer",
             "description": "sockets per board required by job"
           },
           "sockets_per_node": {
@@ -6295,8 +6478,9 @@
             "description": "sockets per node required by job"
           },
           "start_time": {
-            "type": "string",
-            "description": "time execution begins, actual or expected"
+            "type": "integer",
+            "description": "time execution begins, actual or expected (Unix timestamp)",
+            "format": "int64"
           },
           "state_description": {
             "type": "string",
@@ -6319,24 +6503,28 @@
             "description": "pathname of job's stdout file"
           },
           "submit_time": {
-            "type": "string",
-            "description": "time of job submission"
+            "type": "integer",
+            "description": "time of job submission (Unix timestamp)",
+            "format": "int64"
           },
           "suspend_time": {
-            "type": "string",
-            "description": "time job last suspended or resumed"
+            "type": "integer",
+            "description": "time job last suspended or resumed (Unix timestamp)",
+            "format": "int64"
           },
           "system_comment": {
             "type": "string",
             "description": "slurmctld's arbitrary comment"
           },
           "time_limit": {
-            "type": "string",
-            "description": "maximum run time in minutes"
+            "type": "integer",
+            "description": "maximum run time in minutes (Unix timestamp)",
+            "format": "int64"
           },
           "time_minimum": {
-            "type": "string",
-            "description": "minimum run time in minutes"
+            "type": "integer",
+            "description": "minimum run time in minutes (Unix timestamp)",
+            "format": "int64"
           },
           "threads_per_core": {
             "type": "string",
@@ -6375,7 +6563,7 @@
             "description": "tres used in the job"
           },
           "user_id": {
-            "type": "string",
+            "type": "integer",
             "description": "user id the job runs as"
           },
           "user_name": {
@@ -6408,9 +6596,9 @@
             "description": "number of assigned job hosts"
           },
           "allocated_nodes": {
-            "type": "array",
-            "description": "node allocations",
-            "items": {
+            "type": "object",
+            "description": "node allocations (map with node indices as keys)",
+            "additionalProperties": {
               "$ref": "#/components/schemas/v0.0.36_node_allocation"
             }
           }
@@ -6519,8 +6707,9 @@
             "description": "Instruct Slurm to connect the batch script's standard output directly to the file name."
           },
           "deadline": {
-            "type": "string",
-            "description": "Remove the job if no ending is possible before this deadline (start > (deadline - time[-min]))."
+            "type": "integer",
+            "description": "Remove the job if no ending is possible before this deadline (start > (deadline - time[-min])). (Unix timestamp)",
+            "format": "int64"
           },
           "delay_boot": {
             "type": "integer",
@@ -6671,7 +6860,7 @@
             "description": "Request a specific partition for the resource allocation."
           },
           "priority": {
-            "type": "string",
+            "type": "integer",
             "description": "Request a specific job priority."
           },
           "qos": {
@@ -7511,15 +7700,15 @@
             "description": "administrator's arbitrary comment"
           },
           "array_job_id": {
-            "type": "string",
+            "type": "integer",
             "description": "job_id of a job array or 0 if N/A"
           },
           "array_task_id": {
-            "type": "string",
+            "type": "integer",
             "description": "task_id of a job array"
           },
           "array_max_tasks": {
-            "type": "string",
+            "type": "integer",
             "description": "Maximum number of running array tasks"
           },
           "array_task_string": {
@@ -7527,7 +7716,7 @@
             "description": "string expression of task IDs in this record"
           },
           "association_id": {
-            "type": "string",
+            "type": "integer",
             "description": "association id for job"
           },
           "batch_features": {
@@ -7590,8 +7779,9 @@
             "description": "cores per socket required by job"
           },
           "billable_tres": {
-            "type": "string",
-            "description": "billable TRES"
+            "type": "number",
+            "description": "billable TRES",
+            "format": "double"
           },
           "cpus_per_task": {
             "type": "string",
@@ -7614,19 +7804,21 @@
             "description": "semicolon delimited list of TRES=# values"
           },
           "deadline": {
-            "type": "string",
-            "description": "job start deadline "
+            "type": "integer",
+            "description": "job start deadline  (Unix timestamp)",
+            "format": "int64"
           },
           "delay_boot": {
-            "type": "string",
-            "description": "command to be executed"
+            "type": "integer",
+            "description": "command to be executed (Unix timestamp)",
+            "format": "int64"
           },
           "dependency": {
             "type": "string",
             "description": "synchronize job execution with other jobs"
           },
           "derived_exit_code": {
-            "type": "string",
+            "type": "integer",
             "description": "highest exit code of all job steps"
           },
           "eligible_time": {
@@ -7671,34 +7863,32 @@
             }
           },
           "group_id": {
-            "type": "string",
+            "type": "integer",
             "description": "group job submitted as"
           },
           "job_id": {
-            "type": "string",
+            "type": "integer",
             "description": "job ID"
-          },
-          "job_resources": {
-            "$ref": "#/components/schemas/v0.0.37_job_resources"
           },
           "job_state": {
             "type": "string",
             "description": "state of the job"
           },
           "last_sched_evaluation": {
-            "type": "string",
-            "description": "last time job was evaluated for scheduling"
+            "type": "integer",
+            "description": "last time job was evaluated for scheduling (Unix timestamp)",
+            "format": "int64"
           },
           "licenses": {
             "type": "string",
             "description": "licenses required by the job"
           },
           "max_cpus": {
-            "type": "string",
+            "type": "integer",
             "description": "maximum number of cpus usable by job"
           },
           "max_nodes": {
-            "type": "string",
+            "type": "integer",
             "description": "maximum number of nodes usable by job"
           },
           "mcs_label": {
@@ -7730,23 +7920,23 @@
             "description": "number of tasks to invoke on each socket"
           },
           "tasks_per_board": {
-            "type": "string",
+            "type": "integer",
             "description": "number of tasks to invoke on each board"
           },
           "cpus": {
-            "type": "string",
+            "type": "integer",
             "description": "minimum number of cpus required by job"
           },
           "node_count": {
-            "type": "string",
+            "type": "integer",
             "description": "minimum number of nodes required by job"
           },
           "tasks": {
-            "type": "string",
+            "type": "integer",
             "description": "requested task count"
           },
           "het_job_id": {
-            "type": "string",
+            "type": "integer",
             "description": "job ID of hetjob leader"
           },
           "het_job_id_set": {
@@ -7754,7 +7944,7 @@
             "description": "job IDs for all components"
           },
           "het_job_offset": {
-            "type": "string",
+            "type": "integer",
             "description": "HetJob component offset from leader"
           },
           "partition": {
@@ -7770,11 +7960,11 @@
             "description": "minimum real memory per cpu"
           },
           "minimum_cpus_per_node": {
-            "type": "string",
+            "type": "integer",
             "description": "minimum # CPUs per node"
           },
           "minimum_tmp_disk_per_node": {
-            "type": "string",
+            "type": "integer",
             "description": "minimum tmp disk per node"
           },
           "preempt_time": {
@@ -7788,7 +7978,7 @@
             "description": "time job ran prior to last suspend"
           },
           "priority": {
-            "type": "string",
+            "type": "integer",
             "description": "relative priority of the job"
           },
           "profile": {
@@ -7820,7 +8010,7 @@
             "description": "time of latest size change"
           },
           "restart_cnt": {
-            "type": "string",
+            "type": "integer",
             "description": "count of job restarts"
           },
           "resv_name": {
@@ -7828,7 +8018,7 @@
             "description": "reservation name"
           },
           "shared": {
-            "type": "string",
+            "type": "integer",
             "description": "type and if job can share nodes with other jobs"
           },
           "show_flags": {
@@ -7839,7 +8029,7 @@
             }
           },
           "sockets_per_board": {
-            "type": "string",
+            "type": "integer",
             "description": "sockets per board required by job"
           },
           "sockets_per_node": {
@@ -7886,12 +8076,14 @@
             "description": "slurmctld's arbitrary comment"
           },
           "time_limit": {
-            "type": "string",
-            "description": "maximum run time in minutes"
+            "type": "integer",
+            "description": "maximum run time in minutes (Unix timestamp)",
+            "format": "int64"
           },
           "time_minimum": {
-            "type": "string",
-            "description": "minimum run time in minutes"
+            "type": "integer",
+            "description": "minimum run time in minutes (Unix timestamp)",
+            "format": "int64"
           },
           "threads_per_core": {
             "type": "string",
@@ -7930,7 +8122,7 @@
             "description": "tres used in the job"
           },
           "user_id": {
-            "type": "string",
+            "type": "integer",
             "description": "user id the job runs as"
           },
           "user_name": {
@@ -7963,9 +8155,9 @@
             "description": "number of assigned job hosts"
           },
           "allocated_nodes": {
-            "type": "array",
-            "description": "node allocations",
-            "items": {
+            "type": "object",
+            "description": "node allocations (map with node indices as keys)",
+            "additionalProperties": {
               "$ref": "#/components/schemas/v0.0.37_node_allocation"
             }
           }
@@ -8075,8 +8267,9 @@
             "description": "Instruct Slurm to connect the batch script's standard output directly to the file name."
           },
           "deadline": {
-            "type": "string",
-            "description": "Remove the job if no ending is possible before this deadline (start > (deadline - time[-min]))."
+            "type": "integer",
+            "description": "Remove the job if no ending is possible before this deadline (start > (deadline - time[-min])). (Unix timestamp)",
+            "format": "int64"
           },
           "delay_boot": {
             "type": "integer",
@@ -8227,7 +8420,7 @@
             "description": "Request a specific partition for the resource allocation."
           },
           "priority": {
-            "type": "string",
+            "type": "integer",
             "description": "Request a specific job priority."
           },
           "qos": {

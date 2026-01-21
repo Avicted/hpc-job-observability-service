@@ -57,18 +57,18 @@ def main():
     )
     parser.add_argument(
         "--input",
-        default="config/slurm-openapi.json",
-        help="Input OpenAPI spec file (default: config/slurm-openapi.json)",
+        default="config/openapi/slurm/slurm-openapi.json",
+        help="Input OpenAPI spec file (default: config/openapi/slurm/slurm-openapi.json)",
     )
     parser.add_argument(
         "--output",
         default=None,
-        help="Output filtered spec file (default: config/slurm-openapi-{version}.json)",
+        help="Output filtered spec file (default: config/openapi/slurm/slurm-openapi-{version}.json)",
     )
     parser.add_argument(
         "--version",
-        default="v0.0.36",
-        help="API version to keep (default: v0.0.36)",
+        default="v0.0.37",
+        help="API version to keep (default: v0.0.37)",
     )
     
     args = parser.parse_args()

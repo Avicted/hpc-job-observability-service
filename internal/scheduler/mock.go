@@ -325,6 +325,10 @@ func int64Ptr(i int64) *int64 {
 	return &i
 }
 
+func strPtr(s string) *string {
+	return &s
+}
+
 func clamp(val, minVal, maxVal float64) float64 {
 	if val < minVal {
 		return minVal
