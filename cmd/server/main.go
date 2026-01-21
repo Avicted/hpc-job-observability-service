@@ -224,7 +224,11 @@ func initScheduler(cfg *Config) (scheduler.JobSource, error) {
 			APIVersion: cfg.SlurmAPIVersion,
 			AuthToken:  cfg.SlurmAuthToken,
 		}
-		return scheduler.NewSlurmJobSource(slurmCfg), nil
+		source, err := scheduler.NewSlurmJobSource(slurmCfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create slurm job source: %w", err)
+		}
+		return source, nil
 	default:
 		return nil, fmt.Errorf("unknown scheduler backend: %s", cfg.SchedulerBackend)
 	}

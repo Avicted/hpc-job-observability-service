@@ -1,0 +1,22 @@
+# oapi-codegen configuration for Slurm REST API client
+# This generates a runtime-free Go client from the Slurm OpenAPI spec
+# Run: go generate ./...
+#
+# Note: The original Slurm OpenAPI spec (slurm-openapi.json) contains multiple API versions.
+# We use a filtered spec (slurm-openapi-v0.0.36.json) that only includes v0.0.36 paths
+# to avoid duplicate operation ID conflicts. To support a different API version:
+# 1. Update the filter script in docs/development.md
+# 2. Regenerate: go generate ./internal/slurmclient/...
+
+package: slurmclient
+output: client.gen.go
+generate:
+  # Runtime-free client: generates typed request/response helpers
+  # without additional runtime dependencies
+  client: true
+  models: true
+  # Do not generate server stubs - we only need the client
+  std-http-server: false
+  embedded-spec: false
+output-options:
+  skip-prune: true

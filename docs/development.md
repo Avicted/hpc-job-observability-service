@@ -18,9 +18,12 @@ hpc-job-observability-service/
 │   └── mockserver/         # OpenAPI mock server
 │       └── main.go
 ├── config/                 # Configuration files
-│   ├── openapi.yaml        # OpenAPI 3.0 specification
+│   ├── openapi.yaml        # OpenAPI 3.0 specification (our API)
 │   ├── oapi-codegen-types.yaml
 │   ├── oapi-codegen-server.yaml
+│   ├── oapi-codegen-slurm-client.yaml  # Slurm client codegen config
+│   ├── slurm-openapi.json              # Full Slurm OpenAPI spec
+│   ├── slurm-openapi-v0.0.36.json      # Filtered Slurm spec (v0.0.36)
 │   └── prometheus.yml
 ├── docs/                   # Documentation
 │   ├── architecture.md
@@ -46,6 +49,9 @@ hpc-job-observability-service/
 │   │   ├── mock.go         # Mock job source
 │   │   ├── slurm.go        # Slurm job source
 │   │   └── *_test.go
+│   ├── slurmclient/        # Generated Slurm REST API client
+│   │   ├── generate.go
+│   │   └── client.gen.go
 │   ├── syncer/             # Job synchronization
 │   │   ├── syncer.go       # Syncs jobs from scheduler to storage
 │   │   └── syncer_test.go
@@ -343,7 +349,7 @@ This project follows API-first development. The OpenAPI specification is the sou
 
 ### Code Generation
 
-The project uses `oapi-codegen` to generate Go types and server interfaces from the OpenAPI spec.
+The project uses `oapi-codegen` to generate Go types and server interfaces from OpenAPI specs.
 
 **Install oapi-codegen:**
 
@@ -351,7 +357,7 @@ The project uses `oapi-codegen` to generate Go types and server interfaces from 
 go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 ```
 
-**Regenerate code:**
+**Regenerate all code:**
 
 ```bash
 go generate ./...
@@ -360,6 +366,60 @@ go generate ./...
 This runs the `//go:generate` directives in:
 - `internal/api/types/generate.go` - Generates API types
 - `internal/api/server/generate.go` - Generates server interface
+- `internal/slurmclient/generate.go` - Generates Slurm REST API client
+
+### Slurm Client Code Generation
+
+The project uses a runtime-free Go client generated from the official Slurm OpenAPI specification.
+This provides type-safe access to slurmrestd endpoints.
+
+**Files:**
+- `config/slurm-openapi.json` - Full Slurm OpenAPI spec (fetched from slurmrestd)
+- `config/slurm-openapi-v0.0.36.json` - Filtered spec (v0.0.36 paths only)
+- `config/oapi-codegen-slurm-client.yaml` - oapi-codegen configuration
+- `internal/slurmclient/client.gen.go` - Generated client code
+- `scripts/filter-slurm-openapi.py` - Script to filter spec to a single API version
+
+**To update the Slurm OpenAPI spec:**
+
+1. Start the Slurm container:
+   ```bash
+   docker-compose --profile slurm up -d slurm
+   ```
+
+2. Fetch the latest OpenAPI spec:
+   ```bash
+   curl -s http://localhost:6820/openapi/v3 > config/slurm-openapi.json
+   ```
+
+3. Filter to a single API version (to avoid duplicate operation IDs):
+   ```bash
+   ./scripts/filter-slurm-openapi.py --version v0.0.36
+   ```
+
+4. Regenerate the client:
+   ```bash
+   go generate ./internal/slurmclient/...
+   ```
+
+**To use a different API version:**
+
+```bash
+# Filter to a different version
+./scripts/filter-slurm-openapi.py --version v0.0.37
+
+# Update the generate.go to point to the new filtered spec
+# Then regenerate
+go generate ./internal/slurmclient/...
+```
+
+**Why runtime-free client?**
+
+The generated client uses oapi-codegen's runtime-free mode, which:
+- Generates typed request/response helpers without extra dependencies
+- Lets you control HTTP behavior, auth, retries, and middleware yourself
+- Keeps the dependency footprint minimal
+- Works well with the existing `SlurmJobSource` HTTP handling
 
 ### Running Tests
 
