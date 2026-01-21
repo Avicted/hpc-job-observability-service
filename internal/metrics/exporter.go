@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/avic/hpc-job-observability-service/internal/scheduler"
 	"github.com/avic/hpc-job-observability-service/internal/storage"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -14,7 +15,8 @@ import (
 
 // Exporter collects and exposes job metrics for Prometheus scraping.
 type Exporter struct {
-	store storage.Storage
+	store     storage.Storage
+	scheduler scheduler.JobSource // Optional: for fetching node info directly
 
 	// Job runtime gauge - shows current runtime of running jobs
 	// Labels: job_id, user, node (first node for multi-node jobs)
@@ -43,11 +45,11 @@ type Exporter struct {
 	lastCollectTime prometheus.Gauge
 
 	// Node-level metrics
-	// CPU usage gauge per node - aggregated from running jobs
+	// CPU usage gauge per node - from scheduler or aggregated from running jobs
 	// Labels: node
 	nodeCPUUsagePercent *prometheus.GaugeVec
 
-	// Memory usage gauge per node - aggregated from running jobs
+	// Memory usage gauge per node - from scheduler or aggregated from running jobs
 	// Labels: node
 	nodeMemoryUsageBytes *prometheus.GaugeVec
 
@@ -58,12 +60,35 @@ type Exporter struct {
 	// Number of jobs running on each node
 	// Labels: node
 	nodeJobCount *prometheus.GaugeVec
+
+	// Total memory on each node (from scheduler)
+	// Labels: node
+	nodeTotalMemoryBytes *prometheus.GaugeVec
+
+	// Total CPUs on each node (from scheduler)
+	// Labels: node
+	nodeTotalCPUs *prometheus.GaugeVec
+
+	// Node state (1 = up, 0 = down/drained)
+	// Labels: node, state
+	nodeState *prometheus.GaugeVec
+
+	// CPU load average on each node (from scheduler)
+	// Labels: node
+	nodeCPULoad *prometheus.GaugeVec
 }
 
 // NewExporter creates a new metrics exporter.
 func NewExporter(store storage.Storage) *Exporter {
+	return NewExporterWithScheduler(store, nil)
+}
+
+// NewExporterWithScheduler creates a new metrics exporter with scheduler support.
+// When a scheduler is provided, node metrics are fetched directly from it.
+func NewExporterWithScheduler(store storage.Storage, sched scheduler.JobSource) *Exporter {
 	e := &Exporter{
-		store: store,
+		store:     store,
+		scheduler: sched,
 
 		jobRuntimeSeconds: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -173,6 +198,46 @@ func NewExporter(store storage.Storage) *Exporter {
 			},
 			[]string{"node"},
 		),
+
+		nodeTotalMemoryBytes: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "node",
+				Name:      "total_memory_bytes",
+				Help:      "Total memory on the node in bytes",
+			},
+			[]string{"node"},
+		),
+
+		nodeTotalCPUs: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "node",
+				Name:      "total_cpus",
+				Help:      "Total CPUs on the node",
+			},
+			[]string{"node"},
+		),
+
+		nodeState: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "node",
+				Name:      "state",
+				Help:      "Node state (1 = active, 0 = inactive)",
+			},
+			[]string{"node", "state"},
+		),
+
+		nodeCPULoad: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "node",
+				Name:      "cpu_load",
+				Help:      "CPU load average on the node",
+			},
+			[]string{"node"},
+		),
 	}
 
 	return e
@@ -192,6 +257,10 @@ func (e *Exporter) Register(registry prometheus.Registerer) error {
 		e.nodeMemoryUsageBytes,
 		e.nodeGPUUsagePercent,
 		e.nodeJobCount,
+		e.nodeTotalMemoryBytes,
+		e.nodeTotalCPUs,
+		e.nodeState,
+		e.nodeCPULoad,
 	}
 
 	for _, c := range collectors {
@@ -220,6 +289,10 @@ func (e *Exporter) Collect(ctx context.Context) error {
 	e.nodeMemoryUsageBytes.Reset()
 	e.nodeGPUUsagePercent.Reset()
 	e.nodeJobCount.Reset()
+	e.nodeTotalMemoryBytes.Reset()
+	e.nodeTotalCPUs.Reset()
+	e.nodeState.Reset()
+	e.nodeCPULoad.Reset()
 
 	// Count jobs by state
 	stateCounts := map[storage.JobState]int{
@@ -291,7 +364,7 @@ func (e *Exporter) Collect(ctx context.Context) error {
 		}
 	}
 
-	// Set node-level metrics
+	// Set node-level metrics from job aggregation
 	for nodeName, stats := range nodeMetrics {
 		nodeLabel := prometheus.Labels{"node": nodeName}
 		e.nodeJobCount.With(nodeLabel).Set(float64(stats.jobCount))
@@ -304,6 +377,50 @@ func (e *Exporter) Collect(ctx context.Context) error {
 		// Average GPU if any GPU jobs
 		if stats.gpuCount > 0 {
 			e.nodeGPUUsagePercent.With(nodeLabel).Set(stats.gpuTotal / float64(stats.gpuCount))
+		}
+	}
+
+	// Fetch node info directly from scheduler if available
+	if e.scheduler != nil {
+		nodes, err := e.scheduler.ListNodes(ctx)
+		if err == nil && nodes != nil {
+			for _, node := range nodes {
+				nodeLabel := prometheus.Labels{"node": node.Name}
+
+				// Set node hardware info
+				e.nodeTotalCPUs.With(nodeLabel).Set(float64(node.CPUs))
+				e.nodeTotalMemoryBytes.With(nodeLabel).Set(float64(node.RealMemoryMB) * 1024 * 1024)
+				e.nodeCPULoad.With(nodeLabel).Set(node.CPULoad)
+
+				// Set node state (1 = active, 0 = inactive)
+				stateValue := 1.0
+				switch node.State {
+				case scheduler.NodeStateDown, scheduler.NodeStateDrained:
+					stateValue = 0.0
+				}
+				e.nodeState.With(prometheus.Labels{"node": node.Name, "state": string(node.State)}).Set(stateValue)
+
+				// If we have scheduler data for memory usage, use it (more accurate)
+				if node.AllocatedMemMB > 0 || node.FreeMemoryMB > 0 {
+					usedMemMB := node.RealMemoryMB - node.FreeMemoryMB
+					e.nodeMemoryUsageBytes.With(nodeLabel).Set(float64(usedMemMB) * 1024 * 1024)
+				}
+
+				// Calculate CPU usage from load if we don't have job-based data
+				if _, exists := nodeMetrics[node.Name]; !exists && node.CPULoad > 0 {
+					// Convert load average to approximate CPU percentage
+					cpuPercent := (node.CPULoad / float64(node.CPUs)) * 100
+					if cpuPercent > 100 {
+						cpuPercent = 100
+					}
+					e.nodeCPUUsagePercent.With(nodeLabel).Set(cpuPercent)
+				}
+
+				// Set job count from scheduler if available
+				if node.RunningJobs > 0 {
+					e.nodeJobCount.With(nodeLabel).Set(float64(node.RunningJobs))
+				}
+			}
 		}
 	}
 

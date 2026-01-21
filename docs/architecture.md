@@ -255,7 +255,7 @@ The original state is preserved in `scheduler.raw_state` for detailed analysis.
 
 ### Future Integration
 
-To integrate with a real SLURM cluster:
+To integrate with a real SLURM cluster: (Work in Progress)
 
 1. Configure the SLURM REST API endpoint (slurmrestd)
 2. Implement periodic job sync using `SlurmJobSource`

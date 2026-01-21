@@ -71,6 +71,36 @@ type MetricSample struct {
 	GPUUsage      *float64  `json:"gpu_usage,omitempty"`
 }
 
+// NodeState represents the state of a compute node.
+type NodeState string
+
+const (
+	NodeStateIdle      NodeState = "idle"
+	NodeStateAllocated NodeState = "allocated"
+	NodeStateMixed     NodeState = "mixed"
+	NodeStateDrained   NodeState = "drained"
+	NodeStateDown      NodeState = "down"
+	NodeStateUnknown   NodeState = "unknown"
+)
+
+// Node represents a compute node in the cluster.
+type Node struct {
+	Name           string    `json:"name"`
+	Hostname       string    `json:"hostname"`
+	State          NodeState `json:"state"`
+	CPUs           int       `json:"cpus"`
+	Cores          int       `json:"cores"`
+	Sockets        int       `json:"sockets"`
+	RealMemoryMB   int64     `json:"real_memory_mb"`
+	FreeMemoryMB   int64     `json:"free_memory_mb"`
+	CPULoad        float64   `json:"cpu_load"`       // Load average (e.g., 2.40 = 240 from Slurm)
+	AllocatedCPUs  int       `json:"allocated_cpus"` // CPUs currently allocated to jobs
+	AllocatedMemMB int64     `json:"allocated_mem_mb"`
+	RunningJobs    int       `json:"running_jobs"`
+	Features       []string  `json:"features,omitempty"`
+	Partitions     []string  `json:"partitions,omitempty"`
+}
+
 // JobSource defines the interface for fetching jobs from a scheduler.
 // Implementations can be created for different workload managers (SLURM, PBS, etc.)
 // or for mock/simulated job sources for testing.
@@ -92,6 +122,10 @@ type JobSource interface {
 
 	// SupportsMetrics returns true if this scheduler can provide metrics.
 	SupportsMetrics() bool
+
+	// ListNodes returns all compute nodes in the cluster.
+	// Returns nil if node listing is not supported.
+	ListNodes(ctx context.Context) ([]*Node, error)
 }
 
 // JobFilter contains optional filters for listing jobs.

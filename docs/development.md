@@ -41,6 +41,14 @@ hpc-job-observability-service/
 │   │   └── collector_test.go
 │   ├── metrics/            # Prometheus exporter
 │   │   └── exporter.go
+│   ├── scheduler/          # Scheduler abstraction layer
+│   │   ├── scheduler.go    # Interface and types
+│   │   ├── mock.go         # Mock job source
+│   │   ├── slurm.go        # Slurm job source
+│   │   └── *_test.go
+│   ├── syncer/             # Job synchronization
+│   │   ├── syncer.go       # Syncs jobs from scheduler to storage
+│   │   └── syncer_test.go
 │   └── storage/            # Database layer
 │       ├── storage.go      # Interface and types
 │       ├── sqlite.go       # SQLite implementation
@@ -95,6 +103,180 @@ docker-compose --profile mock up
 
 # Stop and clean up
 docker-compose down -v
+```
+
+## Slurm Integration Testing
+
+The project includes a complete Slurm cluster setup for integration testing. This allows you to test the `SlurmJobSource` against real Slurm services without installing Slurm on your host system.
+
+### Job Synchronization
+
+When using the `slurm` backend, the service automatically syncs jobs from the Slurm scheduler to the database:
+
+- **Sync Interval**: Jobs are synced every 30 seconds
+- **Initial Delay**: First sync occurs 5 seconds after startup
+- **Upsert Logic**: Jobs are created or updated based on their ID
+- **Demo Data**: When using `slurm` backend, the `-seed-demo` flag is ignored (jobs come from Slurm)
+
+When using the `mock` backend:
+- **No Syncer**: Jobs must be created manually or via demo data
+- **Demo Data**: The `-seed-demo` flag seeds 100 demo jobs
+
+### Architecture (WIP)
+
+The Slurm integration testing stack is **work in progress** and currently uses a
+single container that bundles:
+
+- **slurmctld** - Slurm controller daemon
+- **slurmd** - Compute daemon
+- **slurmdbd** - Database daemon for accounting
+- **slurmrestd** - REST API daemon (exposed on port 6820)
+
+This single-container setup is intended for local testing only and may change.
+
+### Quick Start
+
+```bash
+# Start the full stack with Slurm integration
+docker-compose --profile slurm up --build
+
+# Or start only the Slurm container (for testing scheduler module)
+docker-compose --profile slurm up slurm
+```
+
+### Environment Configuration
+
+When using Slurm, set these environment variables in your `.env` file:
+
+```bash
+# Required: Select slurm backend
+SCHEDULER_BACKEND=slurm
+
+# Required: Point to slurmrestd
+# Local/native runs: http://localhost:6820
+# Docker Compose:     http://slurm:6820 (container hostname)
+SLURM_BASE_URL=http://localhost:6820
+
+# Optional: API version (default: v0.0.36 for the test container)
+SLURM_API_VERSION=v0.0.36
+
+# Optional: Auth token (depends on slurmrestd auth config)
+SLURM_AUTH_TOKEN=
+```
+
+### Node Metrics (WIP)
+
+When running with the Slurm backend, node-level metrics are pulled from the
+Slurm nodes API and exported to Prometheus. This provides node load and capacity
+metrics even when no jobs are running, similar to the mock backend.
+
+Key metrics include:
+- `hpc_node_cpu_load`
+- `hpc_node_cpu_usage_percent`
+- `hpc_node_memory_usage_bytes`
+- `hpc_node_total_cpus`
+- `hpc_node_total_memory_bytes`
+- `hpc_node_state`
+
+### Running Unit Tests
+
+The existing unit tests for Slurm use `httptest.Server` to mock slurmrestd responses:
+
+```bash
+# Run all tests including Slurm unit tests
+go test ./...
+
+# Run only Slurm scheduler tests
+go test ./internal/scheduler/... -v
+
+# Run with coverage
+./scripts/coverage.sh
+```
+
+### Running Integration Tests
+
+With the Slurm stack running, you can submit real jobs and verify the integration:
+
+```bash
+# 1. Start Slurm stack
+docker-compose --profile slurm up -d
+
+# 2. Wait for services to be healthy
+docker-compose --profile slurm ps
+
+# 3. Submit a test job
+docker-compose exec slurm sbatch --wrap="echo 'Hello from Slurm'; sleep 30"
+
+# 4. Check job status via slurmrestd
+curl http://localhost:6820/slurm/v0.0.36/jobs/
+
+# 5. Verify node status
+docker-compose exec slurm sinfo
+
+# 6. Check job queue
+docker-compose exec slurm squeue
+
+# 7. View OpenAPI spec
+curl http://localhost:6820/openapi/v3 | head -100
+```
+
+### Testing the Service with Slurm
+
+To test the full integration (service + Slurm):
+
+```bash
+# Create .env with Slurm config
+cat > .env << 'EOF'
+SCHEDULER_BACKEND=slurm
+SLURM_BASE_URL=http://slurm:6820
+SLURM_API_VERSION=v0.0.36
+DATABASE_TYPE=postgres
+DATABASE_URL=postgres://hpc:hpc_password@postgres:5432/hpc_jobs?sslmode=disable
+EOF
+
+# Start everything
+docker-compose --profile slurm up --build
+
+# The app will now use SlurmJobSource instead of MockJobSource
+```
+
+### Stopping Slurm Services
+
+```bash
+# Stop all services including Slurm
+docker-compose --profile slurm down
+
+# Stop and remove volumes (clean slate)
+docker-compose --profile slurm down -v
+```
+
+### Troubleshooting Slurm Integration
+
+**Slurm container not starting:**
+```bash
+# Check logs
+docker-compose --profile slurm logs slurm
+
+# Verify services inside the container
+docker-compose exec slurm sinfo
+```
+
+**slurmrestd connection refused:**
+```bash
+# Check if slurmrestd is running
+docker-compose exec slurm ps aux | grep slurmrestd
+
+# Test the OpenAPI endpoint
+curl http://localhost:6820/openapi/v3 | head -20
+```
+
+**Jobs stuck in pending:**
+```bash
+# Check node status
+docker-compose exec slurm sinfo
+
+# Check reasons for pending
+docker-compose exec slurm squeue -t pending -o "%i %j %T %r"
 ```
 
 ## Development Workflow

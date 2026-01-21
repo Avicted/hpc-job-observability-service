@@ -100,6 +100,7 @@ type Storage interface {
 	CreateJob(ctx context.Context, job *Job) error
 	GetJob(ctx context.Context, id string) (*Job, error)
 	UpdateJob(ctx context.Context, job *Job) error
+	UpsertJob(ctx context.Context, job *Job) error
 	DeleteJob(ctx context.Context, id string) error
 	ListJobs(ctx context.Context, filter JobFilter) ([]*Job, int, error)
 	GetAllJobs(ctx context.Context) ([]*Job, error)
