@@ -109,7 +109,7 @@ DATABASE_TYPE=postgres DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=
 
 ```bash
 # Start the full stack with Slurm integration
-docker-compose --profile slurm up --build
+docker-compose --profile slurm up --build --force-recreate
 
 # Or start only the Slurm container (for testing scheduler module)
 docker-compose --profile slurm up slurm
@@ -166,7 +166,7 @@ When `SCHEDULER_BACKEND=slurm`, the service now waits (up to 60 seconds) for `sl
 If you see this error, ensure you started Docker Compose with the `slurm` profile and wait for the slurm container to be healthy:
 
 ```bash
-docker-compose --profile slurm up --build
+docker-compose --profile slurm up --build --force-recreate
 docker-compose --profile slurm ps
 ```
 
@@ -341,7 +341,7 @@ DATABASE_URL=postgres://hpc:hpc_password@postgres:5432/hpc_jobs?sslmode=disable
 EOF
 
 # Start everything
-docker-compose --profile slurm up --build
+docker-compose --profile slurm up --build --force-recreate
 
 # The app will now use SlurmJobSource instead of MockJobSource
 ```

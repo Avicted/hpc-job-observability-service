@@ -109,7 +109,7 @@ docker-compose --profile slurm down -v 2>/dev/null || true
 
 # Step 2: Build and start the stack
 log_info "Building and starting Docker Compose stack with Slurm profile..."
-docker-compose --profile slurm up --build -d
+docker-compose --profile slurm up --build --force-recreate -d
 
 # Step 3: Wait for services
 echo ""
