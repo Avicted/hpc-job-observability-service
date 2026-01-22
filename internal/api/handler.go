@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/avic/hpc-job-observability-service/internal/api/server"
-	"github.com/avic/hpc-job-observability-service/internal/api/types"
-	"github.com/avic/hpc-job-observability-service/internal/metrics"
-	"github.com/avic/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/api/server"
+	"github.com/Avicted/hpc-job-observability-service/internal/api/types"
+	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
+	"github.com/Avicted/hpc-job-observability-service/internal/storage"
 	"github.com/google/uuid"
 )
 

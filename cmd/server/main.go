@@ -16,12 +16,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/avic/hpc-job-observability-service/internal/api"
-	"github.com/avic/hpc-job-observability-service/internal/collector"
-	"github.com/avic/hpc-job-observability-service/internal/metrics"
-	"github.com/avic/hpc-job-observability-service/internal/scheduler"
-	"github.com/avic/hpc-job-observability-service/internal/storage"
-	"github.com/avic/hpc-job-observability-service/internal/syncer"
+	"github.com/Avicted/hpc-job-observability-service/internal/api"
+	"github.com/Avicted/hpc-job-observability-service/internal/collector"
+	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
+	"github.com/Avicted/hpc-job-observability-service/internal/scheduler"
+	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/syncer"
 	"github.com/joho/godotenv"
 )
 

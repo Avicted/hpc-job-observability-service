@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/avic/hpc-job-observability-service/internal/slurmclient"
+	"github.com/Avicted/hpc-job-observability-service/internal/slurmclient"
 )
 
 // mockSlurmClient implements SlurmClient for testing.

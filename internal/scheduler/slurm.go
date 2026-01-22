@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/avic/hpc-job-observability-service/internal/slurmclient"
+	"github.com/Avicted/hpc-job-observability-service/internal/slurmclient"
 )
 
 // SlurmConfig contains configuration for connecting to a Slurm REST API.
