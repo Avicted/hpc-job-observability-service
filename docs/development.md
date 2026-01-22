@@ -258,35 +258,41 @@ These tests:
 **Running E2E Tests:**
 
 ```bash
-# 1. Start the Slurm stack
-docker-compose --profile slurm up -d
+# 1. Start the Slurm stack (PostgreSQL + Slurm)
+docker-compose --profile slurm up -d postgres slurm
 
 # 2. Wait for services to be healthy (slurmrestd should be accessible)
 docker-compose --profile slurm ps
 curl -s http://localhost:6820/openapi/v3 | head -5
 
 # 3. Run E2E tests with the slurm_e2e build tag
-go test ./internal/api -tags=slurm_e2e -v
+# Use your DATABASE_URL from .env (default uses CHANGE_ME_IN_PRODUCTION password)
+DATABASE_URL="postgres://hpc:CHANGE_ME_IN_PRODUCTION@localhost:5432/hpc_jobs?sslmode=disable" \
+  go test ./internal/e2e/... -tags=slurm_e2e -v
 
 # 4. Run specific E2E test
-go test ./internal/api -tags=slurm_e2e -v -run TestSlurmE2E_JobSubmissionAndSync
+DATABASE_URL="postgres://hpc:CHANGE_ME_IN_PRODUCTION@localhost:5432/hpc_jobs?sslmode=disable" \
+  go test ./internal/e2e/... -tags=slurm_e2e -v -run TestSlurmE2E_JobSubmissionAndSync
 
 # 5. Stop Slurm when done
 docker-compose --profile slurm down
 ```
 
 **What the E2E tests cover:**
-- `TestSlurmE2E_RealSlurmConnection` - Verify connectivity to slurmrestd
-- `TestSlurmE2E_JobSubmissionAndSync` - Submit job, sync, verify in storage/API
-- `TestSlurmE2E_JobCompletion` - Full job lifecycle to completion
-- `TestSlurmE2E_MultipleJobs` - Concurrent job handling
-- `TestSlurmE2E_NodesList` - Listing Slurm nodes
-- `TestSlurmE2E_JobFiltering` - API filtering and pagination
-- `TestSlurmE2E_DataIntegrity` - Data consistency across layers
-- `TestSlurmE2E_SchedulerInfo` - Scheduler-specific metadata
-- `TestSlurmE2E_ContinuousSync` - Repeated sync stability
+- `TestSlurmE2E_SlurmConnectivity` - Verify connectivity to slurmrestd and list nodes
+- `TestSlurmE2E_AuditTableCreation` - Verify job_audit_events table schema
+- `TestSlurmE2E_JobSubmissionAndSync` - Submit job, sync, verify in storage
+- `TestSlurmE2E_AuditEventCreation` - Verify audit events with changed_by, source, correlation_id
+- `TestSlurmE2E_JobStateTransition` - Full job lifecycle (pending → running → completed)
+- `TestSlurmE2E_MultipleJobsSync` - Verify correlation IDs shared across sync batch
+- `TestSlurmE2E_SchedulerMetadataPreservation` - Verify scheduler metadata in DB and audit snapshot
+- `TestSlurmE2E_DataIntegrity` - Data consistency: Slurm → DB → Audit snapshot
+- `TestSlurmE2E_CancelledJobState` - Verify CANCELLED state mapping and audit trail
+- `TestSlurmE2E_FailedJobState` - Verify TIMEOUT/FAILED state mapping (takes ~60s)
+- `TestSlurmE2E_PendingJobState` - Verify PENDING state with resource constraints
+- `TestSlurmE2E_AllTerminalStates` - Verify completed and failed exit code mapping
 
-**Note:** E2E tests are skipped automatically if Slurm is not available,
+**Note:** E2E tests are skipped automatically if Slurm or PostgreSQL is not available,
 allowing `go test ./...` to run without Docker.
 
 ### Manual Integration Testing
