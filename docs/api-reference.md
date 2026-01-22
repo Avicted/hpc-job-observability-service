@@ -513,3 +513,29 @@ All errors return a JSON object:
 | not_found | 404 | Resource does not exist |
 | conflict | 409 | Resource already exists |
 | internal_error | 500 | Server error |
+
+
+### Example Requests
+
+```bash
+# Create a job
+curl -X POST http://localhost:8080/v1/jobs \
+  -H "Content-Type: application/json" \
+  -d '{"id": "job-001", "user": "researcher", "nodes": ["node-1", "node-2"]}'
+
+# Get job
+curl http://localhost:8080/v1/jobs/job-001
+
+# Record metrics
+curl -X POST http://localhost:8080/v1/jobs/job-001/metrics \
+  -H "Content-Type: application/json" \
+  -d '{"cpuUsage": 75.5, "memoryUsageMb": 4096, "gpuUsage": 50.0}'
+
+# Update job state
+curl -X PATCH http://localhost:8080/v1/jobs/job-001 \
+  -H "Content-Type: application/json" \
+  -d '{"state": "completed"}'
+
+# List jobs filtered by state
+curl "http://localhost:8080/v1/jobs?state=running&limit=10"
+```

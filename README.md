@@ -6,6 +6,7 @@ A microservice for tracking and monitoring HPC (High Performance Computing) job 
 
 ## Features
 
+- **Slurm Integration**: Native support for Slurm via its REST API
 - **Job Management**: Create, update, list, and delete HPC jobs
 - **Resource Metrics**: Track CPU, memory, and GPU usage over time
 - **Prometheus Integration**: Export metrics in Prometheus format with best practices
@@ -50,6 +51,7 @@ DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
 # Run with demo data (mock backend only)
 SEED_DEMO=true SCHEDULER_BACKEND=mock DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
 ```
+**Security Note:** Never commit `.env` files containing secrets to version control. The `.env` file is already in `.gitignore`.
 
 ### Running with Docker Compose
 
@@ -73,39 +75,7 @@ docker-compose --profile slurm up slurm
 # View app at http://localhost:8080
 ```
 
-#### Slurm readiness check
 
-When `SCHEDULER_BACKEND=slurm`, the service waits (up to 60 seconds) for `slurmrestd` to become reachable before starting. If it cannot reach `SLURM_BASE_URL`, the service exits with a clear error message. Ensure the stack is started with the `slurm` profile and wait for the slurm container to be healthy.
-
-#### Troubleshooting: demo data persists
-
-If you previously ran with the mock backend or `SEED_DEMO=true`, the PostgreSQL data is stored in the `postgres_data` volume. When you switch to `SCHEDULER_BACKEND=slurm`, you may still see old demo jobs until the volume is cleared.
-
-To reset to a clean database:
-
-```bash
-docker-compose down -v
-docker volume rm <project>_postgres_data  # only if it still exists
-docker-compose --profile slurm up --build --force-recreate
-```
-
-#### Troubleshooting: network not found
-
-If you see an error like “failed to set up container networking: network … not found”, a Compose-managed network was likely removed while containers still referenced it.
-
-Fix by recreating the stack and its network:
-
-```bash
-docker-compose down
-docker network rm <project>_hpc-network  # only if it still exists
-docker-compose --profile slurm up --build --force-recreate
-```
-
-Notes:
-- If you manually deleted the network, add `--force-recreate` to ensure containers are rebuilt against the new network.
-- Compose creates a project-scoped network named `<project>_hpc-network`.
-- Keep a consistent project name if you use `COMPOSE_PROJECT_NAME` or `-p`.
-- Avoid `docker start` on Compose-managed containers; use `docker-compose up` instead.
 
 ## Grafana Dashboards
 
@@ -123,58 +93,8 @@ The project ships with a pre-provisioned Grafana dashboard. Below are example vi
 
 ![Node metrics dashboard detail](docs/grafana_node_metrics_02.png)
 
-## API Endpoints
-
-All endpoints are versioned under `/v1`:
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/v1/health` | Health check |
-| GET | `/v1/jobs` | List all jobs (with filters) |
-| POST | `/v1/jobs` | Create a new job |
-| GET | `/v1/jobs/{jobId}` | Get job details |
-| PATCH | `/v1/jobs/{jobId}` | Update job |
-| DELETE | `/v1/jobs/{jobId}` | Delete job |
-| GET | `/v1/jobs/{jobId}/metrics` | Get job metrics history |
-| POST | `/v1/jobs/{jobId}/metrics` | Record new metrics |
-| GET | `/metrics` | Prometheus metrics endpoint |
-
-### Example Requests
-
-```bash
-# Create a job
-curl -X POST http://localhost:8080/v1/jobs \
-  -H "Content-Type: application/json" \
-  -d '{"id": "job-001", "user": "researcher", "nodes": ["node-1", "node-2"]}'
-
-# Get job
-curl http://localhost:8080/v1/jobs/job-001
-
-# Record metrics
-curl -X POST http://localhost:8080/v1/jobs/job-001/metrics \
-  -H "Content-Type: application/json" \
-  -d '{"cpuUsage": 75.5, "memoryUsageMb": 4096, "gpuUsage": 50.0}'
-
-# Update job state
-curl -X PATCH http://localhost:8080/v1/jobs/job-001 \
-  -H "Content-Type: application/json" \
-  -d '{"state": "completed"}'
-
-# List jobs filtered by state
-curl "http://localhost:8080/v1/jobs?state=running&limit=10"
-```
 
 ## Configuration
-
-### Environment Variables
-
-The service uses environment variables for configuration. For local development, copy `.env.example` to `.env` and customize:
-
-```bash
-cp .env.example .env
-```
-
-**Security Note:** Never commit `.env` files containing secrets to version control. The `.env` file is already in `.gitignore`.
 
 #### Server Configuration
 
@@ -204,99 +124,15 @@ cp .env.example .env
 
 Use the `SEED_DEMO` environment variable to seed demo data on startup (mock backend only).
 
-## Prometheus Metrics
-
-The service exports the following metrics:
-
-### Job-Level Metrics
-
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `hpc_job_runtime_seconds` | Gauge | job_id, user, node | Current job runtime in seconds |
-| `hpc_job_cpu_usage_percent` | Gauge | job_id, user, node | Current CPU usage percentage |
-| `hpc_job_memory_usage_bytes` | Gauge | job_id, user, node | Current memory usage in bytes |
-| `hpc_job_gpu_usage_percent` | Gauge | job_id, user, node | Current GPU usage percentage |
-| `hpc_job_state_total` | Gauge | state | Number of jobs in each state |
-| `hpc_job_total` | Counter | - | Total number of jobs created |
-
-### Node-Level Metrics
-
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `hpc_node_cpu_usage_percent` | Gauge | node | Average CPU usage on node (from running jobs) |
-| `hpc_node_memory_usage_bytes` | Gauge | node | Total memory usage on node (from running jobs) |
-| `hpc_node_gpu_usage_percent` | Gauge | node | Average GPU usage on node (from running jobs) |
-| `hpc_node_job_count` | Gauge | node | Number of running jobs on node |
-
-### Example Queries
-
-```promql
-# Average CPU usage across all running jobs
-avg(hpc_job_cpu_usage_percent)
-
-# Jobs using more than 80% CPU
-count(hpc_job_cpu_usage_percent > 80)
-
-# Job count by state
-hpc_job_state_total
-
-# Total jobs
-sum(hpc_job_state_total)
-
-# Node with highest CPU usage
-topk(5, hpc_node_cpu_usage_percent)
-
-# Total memory used across all nodes
-sum(hpc_node_memory_usage_bytes) / 1024 / 1024 / 1024
-
-# Nodes with more than 2 running jobs
-hpc_node_job_count > 2
-```
 
 ## Development
+- [Development Guide](docs/development.md)
 
-### Project Structure
-
-```
-hpc-job-observability-service/
-├── cmd/
-│   └── server/             # Main application entry point
-├── config/
-│   ├── openapi/            # OpenAPI specifications
-│   │   ├── service/        # Service API specs
-│   │   └── slurm/          # Slurm REST API specs
-│   ├── grafana/            # Grafana provisioning
-│   ├── slurm/              # Slurm container config
-│   └── prometheus.yml      # Prometheus scrape config
-├── docs/                   # Documentation
-│   ├── architecture.md     # System design
-│   ├── api-reference.md    # API documentation
-│   └── development.md      # Development guide
-├── internal/
-│   ├── api/                # HTTP handlers and generated code
-│   ├── collector/          # Background metric collector
-│   ├── e2e/                # End-to-end integration tests
-│   ├── metrics/            # Prometheus exporter
-│   ├── scheduler/          # Scheduler abstraction layer
-│   ├── slurmclient/        # Generated Slurm REST client
-│   ├── storage/            # Database layer (PostgreSQL)
-│   └── syncer/             # Job synchronization from Slurm
-├── scripts/                # Utility scripts
-├── docker-compose.yml
-└── Dockerfile
-```
-
-### Generate API Code
-
-```bash
-go generate ./...
-```
 
 ### Running Tests
 
 - [Unit testing](docs/development.md#running-unit-tests)
 - [End-to-end testing](docs/development.md#running-end-to-end-integration-tests)
-
 
 
 ## Scheduler Integration (SLURM)

@@ -66,8 +66,7 @@ hpc-job-observability-service/
 │       └── *_test.go
 ├── scripts/                                # Utility scripts
 │   ├── coverage.sh
-│   ├── filter-slurm-openapi.py
-│   └── verify-docker-stack.sh
+│   └── filter-slurm-openapi.py
 ├── Dockerfile
 ├── docker-compose.yml
 ├── go.mod
@@ -667,6 +666,28 @@ SELECT * FROM jobs;
 ```bash
 curl http://localhost:8080/metrics | grep hpc_
 ```
+
+The service exports the following metrics:
+
+### Job-Level Metrics
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `hpc_job_runtime_seconds` | Gauge | job_id, user, node | Current job runtime in seconds |
+| `hpc_job_cpu_usage_percent` | Gauge | job_id, user, node | Current CPU usage percentage |
+| `hpc_job_memory_usage_bytes` | Gauge | job_id, user, node | Current memory usage in bytes |
+| `hpc_job_gpu_usage_percent` | Gauge | job_id, user, node | Current GPU usage percentage |
+| `hpc_job_state_total` | Gauge | state | Number of jobs in each state |
+| `hpc_job_total` | Counter | - | Total number of jobs created |
+
+### Node-Level Metrics
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `hpc_node_cpu_usage_percent` | Gauge | node | Average CPU usage on node (from running jobs) |
+| `hpc_node_memory_usage_bytes` | Gauge | node | Total memory usage on node (from running jobs) |
+| `hpc_node_gpu_usage_percent` | Gauge | node | Average GPU usage on node (from running jobs) |
+| `hpc_node_job_count` | Gauge | node | Number of running jobs on node |
 
 ## Release Process
 
