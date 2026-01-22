@@ -1,6 +1,6 @@
 # Contributing to HPC Job Observability Service
 
-Thank you for your interest in contributing to this project! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to this project. This document provides guidelines and information for contributors.
 
 ## Getting Started
 
@@ -39,15 +39,15 @@ go test ./...
 
 This project follows API-first development. To make API changes:
 
-1. Edit `config/openapi.yaml`
+1. Edit `config/openapi/service/openapi.yaml`
 2. Regenerate code: `go generate ./...`
-3. Update handler implementation
+3. Update handler implementation in `internal/api/handler.go`
 4. Update tests and documentation
 
 ### Testing
 
 ```bash
-# Run all tests
+# Run all unit tests
 go test ./...
 
 # Run with coverage
@@ -55,13 +55,18 @@ go test ./...
 
 # Run linter
 golangci-lint run
+
+# Run E2E tests (requires Docker)
+docker-compose --profile slurm up -d postgres slurm
+DATABASE_URL="postgres://hpc:CHANGE_ME_IN_PRODUCTION@localhost:5432/hpc_jobs?sslmode=disable" \
+  go test ./internal/e2e/... -tags=slurm_e2e -v
 ```
 
 All tests must pass before submitting a pull request.
 
 ## Pull Request Process
 
-1. Update documentation if you're changing functionality
+1. Update documentation if you are changing functionality
 2. Add or update tests as appropriate
 3. Ensure all tests pass and linting is clean
 4. Update the README if needed

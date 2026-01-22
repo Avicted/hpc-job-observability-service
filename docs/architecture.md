@@ -86,6 +86,29 @@ The storage layer provides a PostgreSQL-backed implementation that supports:
 - Metrics recording and retrieval
 - Automatic schema migrations
 - Retention-based cleanup
+- Audit event logging
+
+### Audit System
+
+The storage layer includes a comprehensive audit system that tracks all job changes:
+
+**Audit Table Schema:**
+| Column | Type | Description |
+|--------|------|-------------|
+| id | bigint | Primary key |
+| job_id | text | Job identifier |
+| change_type | text | Type of change (upsert, update, delete) |
+| changed_at | timestamp | When the change occurred |
+| changed_by | text | Who made the change (syncer, collector, api) |
+| source | text | Data source (slurm, mock, api) |
+| correlation_id | text | Groups related operations |
+| job_snapshot | jsonb | Complete job state at change time |
+
+**Correlation IDs:**
+- A single UUID is generated for each sync batch
+- All jobs processed in that batch share the same correlation ID
+- Enables tracing and debugging of related operations
+- Useful for auditing and distributed tracing
 
 ### Metrics Exporter
 
@@ -232,23 +255,24 @@ type SchedulerInfo struct {
 External scheduler states are mapped to the API's 5-state model:
 
 | Normalized | SLURM States |
-|------------|--------------|
-| pending | PENDING, CONFIGURING, SUSPENDED |
-| running | RUNNING, COMPLETING |
+|------------|-----------------------------------------------------------|
+| pending | PENDING, CONFIGURING, REQUEUED, RESIZING, SUSPENDED, RESV_DEL_HOLD, REQUEUE_FED, REQUEUE_HOLD, SPECIAL_EXIT |
+| running | RUNNING, COMPLETING, SIGNALING, STAGE_OUT |
 | completed | COMPLETED |
-| failed | FAILED, TIMEOUT, NODE_FAIL, OUT_OF_MEMORY |
-| cancelled | CANCELLED, PREEMPTED |
+| failed | FAILED, BOOT_FAIL, DEADLINE, NODE_FAIL, OUT_OF_MEMORY, TIMEOUT |
+| cancelled | CANCELLED, PREEMPTED, REVOKED |
 
 The original state is preserved in `scheduler.raw_state` for detailed analysis.
 
-### Future Integration
+### SLURM Integration
 
-To integrate with a real SLURM cluster: (Work in Progress)
+The service integrates with SLURM clusters via slurmrestd:
 
-1. Configure the SLURM REST API endpoint (slurmrestd)
-2. Implement periodic job sync using `SlurmJobSource`
+1. Configure the SLURM REST API endpoint via `SLURM_BASE_URL`
+2. The syncer periodically fetches jobs from Slurm (default: every 30 seconds)
 3. Jobs are automatically normalized to the API model
 4. Existing endpoints and Prometheus metrics work unchanged
+5. Audit events track all job changes with correlation IDs for traceability
 
 ## Configuration
 

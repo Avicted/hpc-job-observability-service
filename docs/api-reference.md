@@ -264,8 +264,8 @@ When creating or retrieving jobs, the `scheduler` field contains metadata from t
 When integrating with SLURM, job states are normalized to the API's 5-state model:
 
 | Normalized State | SLURM States |
-|------------------|--------------|
-| `pending` | PENDING, CONFIGURING, REQUEUED, RESIZING, SUSPENDED |
+|------------------|-----------------------------------------------------------|
+| `pending` | PENDING, CONFIGURING, REQUEUED, RESIZING, SUSPENDED, RESV_DEL_HOLD, REQUEUE_FED, REQUEUE_HOLD, SPECIAL_EXIT |
 | `running` | RUNNING, COMPLETING, SIGNALING, STAGE_OUT |
 | `completed` | COMPLETED |
 | `failed` | FAILED, BOOT_FAIL, DEADLINE, NODE_FAIL, OUT_OF_MEMORY, TIMEOUT |

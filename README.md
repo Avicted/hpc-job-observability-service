@@ -174,7 +174,7 @@ The service uses environment variables for configuration. For local development,
 cp .env.example .env
 ```
 
-> ⚠️ **Security Note**: Never commit `.env` files containing secrets to version control. The `.env` file is already in `.gitignore`.
+**Security Note:** Never commit `.env` files containing secrets to version control. The `.env` file is already in `.gitignore`.
 
 #### Server Configuration
 
@@ -258,21 +258,30 @@ hpc_node_job_count > 2
 ### Project Structure
 
 ```
+hpc-job-observability-service/
 ├── cmd/
-│   ├── server/           # Main application
-├── config/               # Configuration files
-│   ├── openapi.yaml      # OpenAPI 3.0 specification
-│   ├── prometheus.yml    # Prometheus scrape config
-│   └── oapi-codegen-*.yaml
-├── docs/                 # Documentation
-│   ├── architecture.md   # System design
-│   ├── api-reference.md  # API documentation
-│   └── development.md    # Development guide
+│   └── server/             # Main application entry point
+├── config/
+│   ├── openapi/            # OpenAPI specifications
+│   │   ├── service/        # Service API specs
+│   │   └── slurm/          # Slurm REST API specs
+│   ├── grafana/            # Grafana provisioning
+│   ├── slurm/              # Slurm container config
+│   └── prometheus.yml      # Prometheus scrape config
+├── docs/                   # Documentation
+│   ├── architecture.md     # System design
+│   ├── api-reference.md    # API documentation
+│   └── development.md      # Development guide
 ├── internal/
-│   ├── api/              # HTTP handlers and generated code
-│   ├── storage/          # Database layer (PostgreSQL)
-│   ├── collector/        # Background metric collector
-│   └── metrics/          # Prometheus exporter
+│   ├── api/                # HTTP handlers and generated code
+│   ├── collector/          # Background metric collector
+│   ├── e2e/                # End-to-end integration tests
+│   ├── metrics/            # Prometheus exporter
+│   ├── scheduler/          # Scheduler abstraction layer
+│   ├── slurmclient/        # Generated Slurm REST client
+│   ├── storage/            # Database layer (PostgreSQL)
+│   └── syncer/             # Job synchronization from Slurm
+├── scripts/                # Utility scripts
 ├── docker-compose.yml
 └── Dockerfile
 ```
@@ -285,19 +294,10 @@ go generate ./...
 
 ### Running Tests
 
-```bash
-go test ./...
-./scripts/coverage.sh
-```
+- [Unit testing](docs/development.md#Running-Unit-Tests)
+- [End-to-end testing](docs/development.md#Running-End-to-End-Tests)
 
-The coverage script excludes non-testable packages (cmd/* and generated API server/types) from coverage totals.
-The current test coverage is 80.3%.
 
-To run the concurrent job stress test:
-
-```bash
-STRESS_TEST=1 go test ./internal/storage -run TestStressConcurrentJobs
-```
 
 ## Scheduler Integration (SLURM)
 

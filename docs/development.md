@@ -13,56 +13,58 @@ This document covers development setup, workflows, and guidelines for contributi
 ```
 hpc-job-observability-service/
 ├── cmd/
-│   ├── server/             # Main application entry point
+│   ├── server/                             # Main application entry point
 │   │   └── main.go
-├── config/                 # Configuration files
-│   ├── openapi/            # OpenAPI specifications
-│   │   ├── service/        # Our service API
-│   │   │   ├── openapi.yaml            # OpenAPI 3.0 specification
+├── config/                                 # Configuration files
+│   ├── openapi/                            # OpenAPI specifications
+│   │   ├── service/                        # Our service API
+│   │   │   ├── openapi.yaml                # OpenAPI 3.0 specification
 │   │   │   ├── oapi-codegen-server.yaml
 │   │   │   └── oapi-codegen-types.yaml
-│   │   └── slurm/          # Slurm REST API
+│   │   └── slurm/                          # Slurm REST API
 │   │       ├── slurm-openapi.json          # Full Slurm OpenAPI spec
 │   │       ├── slurm-openapi-v0.0.37.json  # Filtered spec (v0.0.37)
 │   │       └── oapi-codegen-slurm-client.yaml
-│   ├── grafana/            # Grafana dashboards
-│   ├── slurm/              # Slurm container config
+│   ├── grafana/                            # Grafana dashboards
+│   ├── slurm/                              # Slurm container config
 │   └── prometheus.yml
-├── docs/                   # Documentation
+├── docs/                                   # Documentation
 │   ├── architecture.md
 │   ├── api-reference.md
 │   └── development.md
 ├── internal/
 │   ├── api/
-│   │   ├── types/          # Generated API types
+│   │   ├── types/                          # Generated API types
 │   │   │   ├── generate.go
 │   │   │   └── types.gen.go
-│   │   ├── server/         # Generated server interface
+│   │   ├── server/                         # Generated server interface
 │   │   │   ├── generate.go
 │   │   │   └── server.gen.go
-│   │   ├── handler.go      # API handler implementation
+│   │   ├── handler.go                      # API handler implementation
 │   │   └── handler_test.go
-│   ├── collector/          # Background metric collector
+│   ├── collector/                          # Background metric collector
 │   │   ├── collector.go
 │   │   └── collector_test.go
-│   ├── metrics/            # Prometheus exporter
+│   ├── e2e/                                # End-to-end integration tests
+│   │   └── slurm_e2e_test.go
+│   ├── metrics/                            # Prometheus exporter
 │   │   └── exporter.go
-│   ├── scheduler/          # Scheduler abstraction layer
-│   │   ├── scheduler.go    # Interface and types
-│   │   ├── mock.go         # Mock job source
-│   │   ├── slurm.go        # Slurm job source
+│   ├── scheduler/                          # Scheduler abstraction layer
+│   │   ├── scheduler.go                    # Interface and types
+│   │   ├── mock.go                         # Mock job source
+│   │   ├── slurm.go                        # Slurm job source
 │   │   └── *_test.go
-│   ├── slurmclient/        # Generated Slurm REST API client
+│   ├── slurmclient/                        # Generated Slurm REST API client
 │   │   ├── generate.go
 │   │   └── client.gen.go
-│   ├── syncer/             # Job synchronization
-│   │   ├── syncer.go       # Syncs jobs from scheduler to storage
+│   ├── syncer/                             # Job synchronization
+│   │   ├── syncer.go                       # Syncs jobs from scheduler to storage
 │   │   └── syncer_test.go
-│   └── storage/            # Database layer
-│       ├── storage.go      # Interface and types
-│       ├── postgres.go     # PostgreSQL implementation
-│       └── storage_test.go
-├── scripts/                # Utility scripts
+│   └── storage/                            # Database layer
+│       ├── storage.go                      # Interface and types
+│       ├── postgres.go                     # PostgreSQL implementation
+│       └── *_test.go
+├── scripts/                                # Utility scripts
 │   ├── coverage.sh
 │   ├── filter-slurm-openapi.py
 │   └── verify-docker-stack.sh
@@ -173,17 +175,16 @@ When using the `mock` backend:
 - **No Syncer**: Jobs must be created manually or via demo data
 - **Demo Data**: Set `SEED_DEMO=true` to seed 100 demo jobs
 
-### Architecture (WIP)
+### Architecture
 
-The Slurm integration testing stack is **work in progress** and currently uses a
-single container that bundles:
+The Slurm integration testing stack uses a single container that bundles:
 
 - **slurmctld** - Slurm controller daemon
 - **slurmd** - Compute daemon
 - **slurmdbd** - Database daemon for accounting
 - **slurmrestd** - REST API daemon (exposed on port 6820)
 
-This single-container setup is intended for local testing only and may change.
+This single-container setup is intended for local development and testing.
 
 ### Quick Start
 
@@ -213,7 +214,7 @@ SLURM_API_VERSION=v0.0.37
 SLURM_AUTH_TOKEN=
 ```
 
-### Node Metrics (WIP)
+### Node Metrics
 
 When running with the Slurm backend, node-level metrics are pulled from the
 Slurm nodes API and exported to Prometheus. This provides node load and capacity
@@ -226,6 +227,36 @@ Key metrics include:
 - `hpc_node_total_cpus`
 - `hpc_node_total_memory_bytes`
 - `hpc_node_state`
+
+### Audit System
+
+All job changes are logged to the `job_audit_events` table for traceability:
+
+| Column | Description |
+|--------|-------------|
+| job_id | Job identifier |
+| change_type | Type of change (upsert, update, delete) |
+| changed_at | Timestamp of the change |
+| changed_by | Source of change (syncer, collector, api) |
+| source | Data source (slurm, mock) |
+| correlation_id | Groups related operations |
+| job_snapshot | Complete job state as JSONB |
+
+**Correlation IDs** group all jobs processed in a single sync batch. This enables:
+- Tracing which jobs were synced together
+- Debugging sync issues
+- Auditing and compliance
+
+Query audit events:
+```sql
+-- View recent audit events
+SELECT job_id, change_type, changed_by, correlation_id, changed_at
+FROM job_audit_events ORDER BY changed_at DESC LIMIT 20;
+
+-- Find all jobs in a sync batch
+SELECT * FROM job_audit_events
+WHERE correlation_id = '<uuid>';
+```
 
 ### Running Unit Tests
 
@@ -485,9 +516,9 @@ go test ./... -v
 
 # View coverage report
 go tool cover -html=coverage.out
+```
 
 The coverage script excludes cmd/* and generated API server/types packages from totals.
-```
 
 ### Linting
 
