@@ -134,48 +134,24 @@ func (s *PostgresStorage) insertJobAuditEvent(ctx context.Context, tx *sql.Tx, j
 	return err
 }
 
-func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id string) (*Job, error) {
-	job := &Job{}
-	var nodesStr string
-	var endTime sql.NullTime
-	var gpuUsage sql.NullFloat64
+// scanJobRow scans a database row into a Job struct, handling all nullable fields.
+// This helper eliminates duplicated null-checking code across query methods.
+func scanJobRow(job *Job, nodesStr string, nodeCount sql.NullInt64, endTime sql.NullTime, gpuUsage sql.NullFloat64,
+	externalJobID, schedulerType, rawState, partition, account, qos, stateReason sql.NullString,
+	submitTime, lastSampleAt sql.NullTime,
+	priority, exitCode, timeLimitMins sql.NullInt64,
+	requestedCPUs, allocatedCPUs, requestedMemMB, allocatedMemMB sql.NullInt64,
+	requestedGPUs, allocatedGPUs sql.NullInt64,
+	clusterName, schedulerInstance, ingestVersion sql.NullString,
+	sampleCount sql.NullInt64,
+	avgCPU, maxCPU, avgGPU, maxGPU sql.NullFloat64,
+	maxMem sql.NullInt64) {
 
-	var nodeCount sql.NullInt64
-	var externalJobID, schedulerType, rawState, partition, account, qos, stateReason sql.NullString
-	var submitTime, lastSampleAt sql.NullTime
-	var priority, exitCode, timeLimitMins sql.NullInt64
-	var requestedCPUs, allocatedCPUs, requestedMemMB, allocatedMemMB sql.NullInt64
-	var requestedGPUs, allocatedGPUs sql.NullInt64
-	var clusterName, schedulerInstance, ingestVersion sql.NullString
-	var sampleCount sql.NullInt64
-	var avgCPU, maxCPU, avgGPU, maxGPU sql.NullFloat64
-	var maxMem sql.NullInt64
-
-	err := tx.QueryRowContext(ctx, `
-		SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,
-		       cpu_usage, memory_usage_mb, gpu_usage,
-		       external_job_id, scheduler_type, raw_state, partition, account, qos, priority, submit_time, exit_code, state_reason, time_limit_minutes,
-		       requested_cpus, allocated_cpus, requested_memory_mb, allocated_memory_mb, requested_gpus, allocated_gpus,
-		       cluster_name, scheduler_instance, ingest_version,
-		       last_sample_at, sample_count, avg_cpu_usage, max_cpu_usage, max_memory_usage_mb, avg_gpu_usage, max_gpu_usage,
-		       created_at, updated_at
-		FROM jobs WHERE id = $1
-	`, id).Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &job.State, &job.StartTime, &endTime,
-		&job.RuntimeSeconds, &job.CPUUsage, &job.MemoryUsageMB, &gpuUsage,
-		&externalJobID, &schedulerType, &rawState, &partition, &account, &qos, &priority, &submitTime, &exitCode, &stateReason, &timeLimitMins,
-		&requestedCPUs, &allocatedCPUs, &requestedMemMB, &allocatedMemMB, &requestedGPUs, &allocatedGPUs,
-		&clusterName, &schedulerInstance, &ingestVersion,
-		&lastSampleAt, &sampleCount, &avgCPU, &maxCPU, &maxMem, &avgGPU, &maxGPU,
-		&job.CreatedAt, &job.UpdatedAt)
-
-	if err == sql.ErrNoRows {
-		return nil, ErrJobNotFound
+	if nodesStr != "" {
+		job.Nodes = strings.Split(nodesStr, ",")
+	} else {
+		job.Nodes = []string{}
 	}
-	if err != nil {
-		return nil, err
-	}
-
-	job.Nodes = strings.Split(nodesStr, ",")
 	if nodeCount.Valid {
 		job.NodeCount = int(nodeCount.Int64)
 	}
@@ -272,6 +248,59 @@ func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id strin
 			job.Scheduler.TimeLimitMins = &limit
 		}
 	}
+}
+
+func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id string) (*Job, error) {
+	job := &Job{}
+	var nodesStr string
+	var endTime sql.NullTime
+	var gpuUsage sql.NullFloat64
+
+	var nodeCount sql.NullInt64
+	var externalJobID, schedulerType, rawState, partition, account, qos, stateReason sql.NullString
+	var submitTime, lastSampleAt sql.NullTime
+	var priority, exitCode, timeLimitMins sql.NullInt64
+	var requestedCPUs, allocatedCPUs, requestedMemMB, allocatedMemMB sql.NullInt64
+	var requestedGPUs, allocatedGPUs sql.NullInt64
+	var clusterName, schedulerInstance, ingestVersion sql.NullString
+	var sampleCount sql.NullInt64
+	var avgCPU, maxCPU, avgGPU, maxGPU sql.NullFloat64
+	var maxMem sql.NullInt64
+
+	err := tx.QueryRowContext(ctx, `
+		SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,
+		       cpu_usage, memory_usage_mb, gpu_usage,
+		       external_job_id, scheduler_type, raw_state, partition, account, qos, priority, submit_time, exit_code, state_reason, time_limit_minutes,
+		       requested_cpus, allocated_cpus, requested_memory_mb, allocated_memory_mb, requested_gpus, allocated_gpus,
+		       cluster_name, scheduler_instance, ingest_version,
+		       last_sample_at, sample_count, avg_cpu_usage, max_cpu_usage, max_memory_usage_mb, avg_gpu_usage, max_gpu_usage,
+		       created_at, updated_at
+		FROM jobs WHERE id = $1
+	`, id).Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &job.State, &job.StartTime, &endTime,
+		&job.RuntimeSeconds, &job.CPUUsage, &job.MemoryUsageMB, &gpuUsage,
+		&externalJobID, &schedulerType, &rawState, &partition, &account, &qos, &priority, &submitTime, &exitCode, &stateReason, &timeLimitMins,
+		&requestedCPUs, &allocatedCPUs, &requestedMemMB, &allocatedMemMB, &requestedGPUs, &allocatedGPUs,
+		&clusterName, &schedulerInstance, &ingestVersion,
+		&lastSampleAt, &sampleCount, &avgCPU, &maxCPU, &maxMem, &avgGPU, &maxGPU,
+		&job.CreatedAt, &job.UpdatedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, ErrJobNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	scanJobRow(job, nodesStr, nodeCount, endTime, gpuUsage,
+		externalJobID, schedulerType, rawState, partition, account, qos, stateReason,
+		submitTime, lastSampleAt,
+		priority, exitCode, timeLimitMins,
+		requestedCPUs, allocatedCPUs, requestedMemMB, allocatedMemMB,
+		requestedGPUs, allocatedGPUs,
+		clusterName, schedulerInstance, ingestVersion,
+		sampleCount,
+		avgCPU, maxCPU, avgGPU, maxGPU,
+		maxMem)
 
 	return job, nil
 }
@@ -411,103 +440,16 @@ func (s *PostgresStorage) GetJob(ctx context.Context, id string) (*Job, error) {
 		return nil, err
 	}
 
-	job.Nodes = strings.Split(nodesStr, ",")
-	if nodeCount.Valid {
-		job.NodeCount = int(nodeCount.Int64)
-	}
-	if endTime.Valid {
-		job.EndTime = &endTime.Time
-	}
-	if gpuUsage.Valid {
-		job.GPUUsage = &gpuUsage.Float64
-	}
-	if requestedCPUs.Valid {
-		job.RequestedCPUs = requestedCPUs.Int64
-	}
-	if allocatedCPUs.Valid {
-		job.AllocatedCPUs = allocatedCPUs.Int64
-	}
-	if requestedMemMB.Valid {
-		job.RequestedMemMB = requestedMemMB.Int64
-	}
-	if allocatedMemMB.Valid {
-		job.AllocatedMemMB = allocatedMemMB.Int64
-	}
-	if requestedGPUs.Valid {
-		job.RequestedGPUs = requestedGPUs.Int64
-	}
-	if allocatedGPUs.Valid {
-		job.AllocatedGPUs = allocatedGPUs.Int64
-	}
-	if clusterName.Valid {
-		job.ClusterName = clusterName.String
-	}
-	if schedulerInstance.Valid {
-		job.SchedulerInst = schedulerInstance.String
-	}
-	if ingestVersion.Valid {
-		job.IngestVersion = ingestVersion.String
-	}
-	if lastSampleAt.Valid {
-		job.LastSampleAt = &lastSampleAt.Time
-	}
-	if sampleCount.Valid {
-		job.SampleCount = sampleCount.Int64
-	}
-	if avgCPU.Valid {
-		job.AvgCPUUsage = avgCPU.Float64
-	}
-	if maxCPU.Valid {
-		job.MaxCPUUsage = maxCPU.Float64
-	}
-	if maxMem.Valid {
-		job.MaxMemUsageMB = maxMem.Int64
-	}
-	if avgGPU.Valid {
-		job.AvgGPUUsage = avgGPU.Float64
-	}
-	if maxGPU.Valid {
-		job.MaxGPUUsage = maxGPU.Float64
-	}
-	if externalJobID.Valid || rawState.Valid || partition.Valid || account.Valid || qos.Valid || submitTime.Valid || priority.Valid || exitCode.Valid || stateReason.Valid || timeLimitMins.Valid || schedulerType.Valid {
-		job.Scheduler = &SchedulerInfo{}
-		if schedulerType.Valid {
-			job.Scheduler.Type = SchedulerType(schedulerType.String)
-		}
-		if externalJobID.Valid {
-			job.Scheduler.ExternalJobID = externalJobID.String
-		}
-		if rawState.Valid {
-			job.Scheduler.RawState = rawState.String
-		}
-		if partition.Valid {
-			job.Scheduler.Partition = partition.String
-		}
-		if account.Valid {
-			job.Scheduler.Account = account.String
-		}
-		if qos.Valid {
-			job.Scheduler.QoS = qos.String
-		}
-		if submitTime.Valid {
-			job.Scheduler.SubmitTime = &submitTime.Time
-		}
-		if priority.Valid {
-			p := priority.Int64
-			job.Scheduler.Priority = &p
-		}
-		if exitCode.Valid {
-			code := int(exitCode.Int64)
-			job.Scheduler.ExitCode = &code
-		}
-		if stateReason.Valid {
-			job.Scheduler.StateReason = stateReason.String
-		}
-		if timeLimitMins.Valid {
-			limit := int(timeLimitMins.Int64)
-			job.Scheduler.TimeLimitMins = &limit
-		}
-	}
+	scanJobRow(job, nodesStr, nodeCount, endTime, gpuUsage,
+		externalJobID, schedulerType, rawState, partition, account, qos, stateReason,
+		submitTime, lastSampleAt,
+		priority, exitCode, timeLimitMins,
+		requestedCPUs, allocatedCPUs, requestedMemMB, allocatedMemMB,
+		requestedGPUs, allocatedGPUs,
+		clusterName, schedulerInstance, ingestVersion,
+		sampleCount,
+		avgCPU, maxCPU, avgGPU, maxGPU,
+		maxMem)
 
 	return job, nil
 }
@@ -878,103 +820,17 @@ func (s *PostgresStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Jo
 			return nil, 0, err
 		}
 
-		job.Nodes = strings.Split(nodesStr, ",")
-		if nodeCount.Valid {
-			job.NodeCount = int(nodeCount.Int64)
-		}
-		if endTime.Valid {
-			job.EndTime = &endTime.Time
-		}
-		if gpuUsage.Valid {
-			job.GPUUsage = &gpuUsage.Float64
-		}
-		if requestedCPUs.Valid {
-			job.RequestedCPUs = requestedCPUs.Int64
-		}
-		if allocatedCPUs.Valid {
-			job.AllocatedCPUs = allocatedCPUs.Int64
-		}
-		if requestedMemMB.Valid {
-			job.RequestedMemMB = requestedMemMB.Int64
-		}
-		if allocatedMemMB.Valid {
-			job.AllocatedMemMB = allocatedMemMB.Int64
-		}
-		if requestedGPUs.Valid {
-			job.RequestedGPUs = requestedGPUs.Int64
-		}
-		if allocatedGPUs.Valid {
-			job.AllocatedGPUs = allocatedGPUs.Int64
-		}
-		if clusterName.Valid {
-			job.ClusterName = clusterName.String
-		}
-		if schedulerInstance.Valid {
-			job.SchedulerInst = schedulerInstance.String
-		}
-		if ingestVersion.Valid {
-			job.IngestVersion = ingestVersion.String
-		}
-		if lastSampleAt.Valid {
-			job.LastSampleAt = &lastSampleAt.Time
-		}
-		if sampleCount.Valid {
-			job.SampleCount = sampleCount.Int64
-		}
-		if avgCPU.Valid {
-			job.AvgCPUUsage = avgCPU.Float64
-		}
-		if maxCPU.Valid {
-			job.MaxCPUUsage = maxCPU.Float64
-		}
-		if maxMem.Valid {
-			job.MaxMemUsageMB = maxMem.Int64
-		}
-		if avgGPU.Valid {
-			job.AvgGPUUsage = avgGPU.Float64
-		}
-		if maxGPU.Valid {
-			job.MaxGPUUsage = maxGPU.Float64
-		}
-		if externalJobID.Valid || rawState.Valid || partition.Valid || account.Valid || qos.Valid || submitTime.Valid || priority.Valid || exitCode.Valid || stateReason.Valid || timeLimitMins.Valid || schedulerType.Valid {
-			job.Scheduler = &SchedulerInfo{}
-			if schedulerType.Valid {
-				job.Scheduler.Type = SchedulerType(schedulerType.String)
-			}
-			if externalJobID.Valid {
-				job.Scheduler.ExternalJobID = externalJobID.String
-			}
-			if rawState.Valid {
-				job.Scheduler.RawState = rawState.String
-			}
-			if partition.Valid {
-				job.Scheduler.Partition = partition.String
-			}
-			if account.Valid {
-				job.Scheduler.Account = account.String
-			}
-			if qos.Valid {
-				job.Scheduler.QoS = qos.String
-			}
-			if submitTime.Valid {
-				job.Scheduler.SubmitTime = &submitTime.Time
-			}
-			if priority.Valid {
-				p := priority.Int64
-				job.Scheduler.Priority = &p
-			}
-			if exitCode.Valid {
-				code := int(exitCode.Int64)
-				job.Scheduler.ExitCode = &code
-			}
-			if stateReason.Valid {
-				job.Scheduler.StateReason = stateReason.String
-			}
-			if timeLimitMins.Valid {
-				limit := int(timeLimitMins.Int64)
-				job.Scheduler.TimeLimitMins = &limit
-			}
-		}
+		scanJobRow(job, nodesStr, nodeCount, endTime, gpuUsage,
+			externalJobID, schedulerType, rawState, partition, account, qos, stateReason,
+			submitTime, lastSampleAt,
+			priority, exitCode, timeLimitMins,
+			requestedCPUs, allocatedCPUs, requestedMemMB, allocatedMemMB,
+			requestedGPUs, allocatedGPUs,
+			clusterName, schedulerInstance, ingestVersion,
+			sampleCount,
+			avgCPU, maxCPU, avgGPU, maxGPU,
+			maxMem)
+
 		jobs = append(jobs, job)
 	}
 
@@ -1025,103 +881,17 @@ func (s *PostgresStorage) GetAllJobs(ctx context.Context) ([]*Job, error) {
 			return nil, err
 		}
 
-		job.Nodes = strings.Split(nodesStr, ",")
-		if nodeCount.Valid {
-			job.NodeCount = int(nodeCount.Int64)
-		}
-		if endTime.Valid {
-			job.EndTime = &endTime.Time
-		}
-		if gpuUsage.Valid {
-			job.GPUUsage = &gpuUsage.Float64
-		}
-		if requestedCPUs.Valid {
-			job.RequestedCPUs = requestedCPUs.Int64
-		}
-		if allocatedCPUs.Valid {
-			job.AllocatedCPUs = allocatedCPUs.Int64
-		}
-		if requestedMemMB.Valid {
-			job.RequestedMemMB = requestedMemMB.Int64
-		}
-		if allocatedMemMB.Valid {
-			job.AllocatedMemMB = allocatedMemMB.Int64
-		}
-		if requestedGPUs.Valid {
-			job.RequestedGPUs = requestedGPUs.Int64
-		}
-		if allocatedGPUs.Valid {
-			job.AllocatedGPUs = allocatedGPUs.Int64
-		}
-		if clusterName.Valid {
-			job.ClusterName = clusterName.String
-		}
-		if schedulerInstance.Valid {
-			job.SchedulerInst = schedulerInstance.String
-		}
-		if ingestVersion.Valid {
-			job.IngestVersion = ingestVersion.String
-		}
-		if lastSampleAt.Valid {
-			job.LastSampleAt = &lastSampleAt.Time
-		}
-		if sampleCount.Valid {
-			job.SampleCount = sampleCount.Int64
-		}
-		if avgCPU.Valid {
-			job.AvgCPUUsage = avgCPU.Float64
-		}
-		if maxCPU.Valid {
-			job.MaxCPUUsage = maxCPU.Float64
-		}
-		if maxMem.Valid {
-			job.MaxMemUsageMB = maxMem.Int64
-		}
-		if avgGPU.Valid {
-			job.AvgGPUUsage = avgGPU.Float64
-		}
-		if maxGPU.Valid {
-			job.MaxGPUUsage = maxGPU.Float64
-		}
-		if externalJobID.Valid || rawState.Valid || partition.Valid || account.Valid || qos.Valid || submitTime.Valid || priority.Valid || exitCode.Valid || stateReason.Valid || timeLimitMins.Valid || schedulerType.Valid {
-			job.Scheduler = &SchedulerInfo{}
-			if schedulerType.Valid {
-				job.Scheduler.Type = SchedulerType(schedulerType.String)
-			}
-			if externalJobID.Valid {
-				job.Scheduler.ExternalJobID = externalJobID.String
-			}
-			if rawState.Valid {
-				job.Scheduler.RawState = rawState.String
-			}
-			if partition.Valid {
-				job.Scheduler.Partition = partition.String
-			}
-			if account.Valid {
-				job.Scheduler.Account = account.String
-			}
-			if qos.Valid {
-				job.Scheduler.QoS = qos.String
-			}
-			if submitTime.Valid {
-				job.Scheduler.SubmitTime = &submitTime.Time
-			}
-			if priority.Valid {
-				p := priority.Int64
-				job.Scheduler.Priority = &p
-			}
-			if exitCode.Valid {
-				code := int(exitCode.Int64)
-				job.Scheduler.ExitCode = &code
-			}
-			if stateReason.Valid {
-				job.Scheduler.StateReason = stateReason.String
-			}
-			if timeLimitMins.Valid {
-				limit := int(timeLimitMins.Int64)
-				job.Scheduler.TimeLimitMins = &limit
-			}
-		}
+		scanJobRow(job, nodesStr, nodeCount, endTime, gpuUsage,
+			externalJobID, schedulerType, rawState, partition, account, qos, stateReason,
+			submitTime, lastSampleAt,
+			priority, exitCode, timeLimitMins,
+			requestedCPUs, allocatedCPUs, requestedMemMB, allocatedMemMB,
+			requestedGPUs, allocatedGPUs,
+			clusterName, schedulerInstance, ingestVersion,
+			sampleCount,
+			avgCPU, maxCPU, avgGPU, maxGPU,
+			maxMem)
+
 		jobs = append(jobs, job)
 	}
 

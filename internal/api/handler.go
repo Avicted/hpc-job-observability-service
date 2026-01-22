@@ -275,46 +275,51 @@ func (s *Server) DeleteJob(w http.ResponseWriter, r *http.Request, jobId server.
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) auditInfoFromRequest(w http.ResponseWriter, r *http.Request) (*storage.JobAuditInfo, bool) {
-	changedBy := strings.TrimSpace(r.Header.Get("X-Changed-By"))
-	source := strings.TrimSpace(r.Header.Get("X-Source"))
-	correlationID := strings.TrimSpace(r.Header.Get("X-Correlation-Id"))
+// validateAuditInfo validates the required audit fields and generates a correlation ID if needed.
+// Returns the validated values and whether validation was successful.
+func (s *Server) validateAuditInfo(w http.ResponseWriter, changedBy, source, correlationID string) (string, string, string, bool) {
+	changedBy = strings.TrimSpace(changedBy)
+	source = strings.TrimSpace(source)
+	correlationID = strings.TrimSpace(correlationID)
 
 	if changedBy == "" {
 		s.writeError(w, http.StatusBadRequest, "validation_error", "X-Changed-By header is required")
-		return nil, false
+		return "", "", "", false
 	}
 	if source == "" {
 		s.writeError(w, http.StatusBadRequest, "validation_error", "X-Source header is required")
-		return nil, false
+		return "", "", "", false
 	}
 	if correlationID == "" {
 		correlationID = uuid.NewString()
 	}
 	w.Header().Set("X-Correlation-Id", correlationID)
+	return changedBy, source, correlationID, true
+}
+
+func (s *Server) auditInfoFromRequest(w http.ResponseWriter, r *http.Request) (*storage.JobAuditInfo, bool) {
+	changedBy := r.Header.Get("X-Changed-By")
+	source := r.Header.Get("X-Source")
+	correlationID := r.Header.Get("X-Correlation-Id")
+
+	changedBy, source, correlationID, ok := s.validateAuditInfo(w, changedBy, source, correlationID)
+	if !ok {
+		return nil, false
+	}
 
 	return storage.NewAuditInfoWithCorrelation(changedBy, source, correlationID), true
 }
 
 func (s *Server) auditInfoFromParams(w http.ResponseWriter, changedBy string, source string, correlationID *string) (*storage.JobAuditInfo, bool) {
-	changedBy = strings.TrimSpace(changedBy)
-	source = strings.TrimSpace(source)
-	if changedBy == "" {
-		s.writeError(w, http.StatusBadRequest, "validation_error", "X-Changed-By header is required")
-		return nil, false
-	}
-	if source == "" {
-		s.writeError(w, http.StatusBadRequest, "validation_error", "X-Source header is required")
-		return nil, false
-	}
 	finalCorrelationID := ""
 	if correlationID != nil {
-		finalCorrelationID = strings.TrimSpace(*correlationID)
+		finalCorrelationID = *correlationID
 	}
-	if finalCorrelationID == "" {
-		finalCorrelationID = uuid.NewString()
+
+	changedBy, source, finalCorrelationID, ok := s.validateAuditInfo(w, changedBy, source, finalCorrelationID)
+	if !ok {
+		return nil, false
 	}
-	w.Header().Set("X-Correlation-Id", finalCorrelationID)
 
 	return storage.NewAuditInfoWithCorrelation(changedBy, source, finalCorrelationID), true
 }

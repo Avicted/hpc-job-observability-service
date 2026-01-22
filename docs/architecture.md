@@ -185,7 +185,7 @@ The collector runs as a background goroutine that:
 
 The service follows API-first development:
 
-1. OpenAPI specification defines the contract (`config/openapi.yaml`)
+1. OpenAPI specification defines the contract (`config/openapi/service/openapi.yaml`)
 2. Code generation produces types and interfaces (`oapi-codegen`)
 3. Handlers implement the generated interface
 4. Changes start with the spec, then regenerate
