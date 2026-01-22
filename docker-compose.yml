@@ -15,6 +15,7 @@ services:
       - DATABASE_URL=postgres://${POSTGRES_USER:-hpc}:${POSTGRES_PASSWORD:-hpc_password}@postgres:5432/${POSTGRES_DB:-hpc_jobs}?sslmode=disable
       - METRICS_RETENTION_DAYS=${METRICS_RETENTION_DAYS:-7}
       - SCHEDULER_BACKEND=${SCHEDULER_BACKEND:-mock}
+      - SEED_DEMO=${SEED_DEMO:-false}
       # Use Docker container name for Slurm when running in Docker
       # Override SLURM_BASE_URL from .env to use container networking
       - SLURM_BASE_URL=http://slurm:6820
