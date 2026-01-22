@@ -1,22 +1,44 @@
 # Slurm Integration Guide
 
-This guide explains how to configure Slurm to integrate with the HPC Job Observability Service for real-time job monitoring using cgroups and lifecycle events.
+This guide explains how to configure Slurm to integrate with the HPC Job Observability Service.
 
 ## Overview
 
-The observability service receives job lifecycle events from Slurm's prolog and epilog scripts, then monitors running jobs using cgroup metrics. This approach provides:
+The service uses an event-based architecture where Slurm prolog and epilog scripts notify the service of job lifecycle events. The collector then monitors running jobs using Linux cgroups v2.
 
-- **Real-time metrics**: CPU, memory, and GPU usage from actual resource usage
-- **No API polling**: Events are pushed from Slurm, reducing overhead
-- **Accurate resource accounting**: Uses Linux cgroups v2 for precise measurements
-- **GPU support**: Vendor-agnostic support for NVIDIA and AMD GPUs
+**Data Flow:**
+1. Job starts: Prolog script sends `POST /v1/events/job-started`
+2. Job runs: Collector periodically reads cgroup metrics
+3. Job ends: Epilog script sends `POST /v1/events/job-finished` with exit code/signal
+
+**Benefits:**
+- Real-time job tracking without API polling
+- Accurate state detection via exit codes and signals
+- Precise resource accounting via cgroups v2
+- GPU support for NVIDIA and AMD
 
 ## Prerequisites
 
-1. Slurm 21.08+ with cgroup v2 support
-2. Linux kernel 5.0+ with cgroup v2 enabled
-3. For GPU monitoring: `nvidia-smi` (NVIDIA) or `rocm-smi` (AMD)
-4. Network access from compute nodes to the observability service
+- Slurm 21.08+ with cgroup v2 support
+- Linux kernel 5.0+ with cgroup v2 enabled
+- Network access from compute nodes to the observability service
+- For GPU monitoring: `nvidia-smi` (NVIDIA) or `rocm-smi` (AMD)
+
+## Service Configuration
+
+Set these environment variables for the observability service:
+
+```bash
+# Select Slurm backend
+SCHEDULER_BACKEND=slurm
+
+# Slurm REST API endpoint (for node metrics)
+SLURM_BASE_URL=http://slurm:6820
+SLURM_API_VERSION=v0.0.37
+
+# Database connection
+DATABASE_URL=postgres://hpc:password@postgres:5432/hpc_jobs?sslmode=disable
+```
 
 ## Slurm Configuration
 
@@ -171,7 +193,7 @@ export SLURM_NODEID=0
 /etc/slurm/prolog.d/50-observability.sh
 
 # Check if event was received
-curl http://localhost:8080/api/v1/jobs/99999
+curl http://localhost:8080/v1/jobs/slurm-99999
 
 # Run epilog
 export SLURM_JOB_EXIT_CODE=0
@@ -185,7 +207,7 @@ export SLURM_JOB_EXIT_CODE=0
 docker-compose logs observability-service
 
 # Check for received events
-curl http://localhost:8080/api/v1/jobs | jq
+curl http://localhost:8080/v1/jobs | jq
 ```
 
 ## GPU Monitoring
@@ -292,7 +314,7 @@ The observability service exposes metrics at `/metrics`:
 
 1. Test connectivity from compute nodes:
    ```bash
-   curl -v http://observability-service:8080/api/v1/health
+   curl -v http://observability-service:8080/v1/health
    ```
 
 2. Check firewall rules allow outbound connections

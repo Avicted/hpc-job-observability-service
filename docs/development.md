@@ -13,61 +13,33 @@ This document covers development setup, workflows, and guidelines for contributi
 ```
 hpc-job-observability-service/
 ├── cmd/
-│   ├── server/                             # Main application entry point
-│   │   └── main.go
+│   └── server/                             # Main application entry point
 ├── config/                                 # Configuration files
 │   ├── openapi/                            # OpenAPI specifications
-│   │   ├── service/                        # Our service API
-│   │   │   ├── openapi.yaml                # OpenAPI 3.0 specification
-│   │   │   ├── oapi-codegen-server.yaml
-│   │   │   └── oapi-codegen-types.yaml
-│   │   └── slurm/                          # Slurm REST API
-│   │       ├── slurm-openapi.json          # Full Slurm OpenAPI spec
-│   │       ├── slurm-openapi-v0.0.37.json  # Filtered spec (v0.0.37)
-│   │       └── oapi-codegen-slurm-client.yaml
+│   │   ├── service/                        # Service API spec
+│   │   └── slurm/                          # Slurm REST API spec
 │   ├── grafana/                            # Grafana dashboards
 │   ├── slurm/                              # Slurm container config
-│   └── prometheus.yml
+│   └── prometheus/                         # Prometheus config
 ├── docs/                                   # Documentation
-│   ├── architecture.md
-│   ├── api-reference.md
-│   └── development.md
 ├── internal/
-│   ├── api/
-│   │   ├── types/                          # Generated API types
-│   │   │   ├── generate.go
-│   │   │   └── types.gen.go
-│   │   ├── server/                         # Generated server interface
-│   │   │   ├── generate.go
-│   │   │   └── server.gen.go
-│   │   ├── handler.go                      # API handler implementation
-│   │   └── handler_test.go
+│   ├── api/                                # HTTP handlers and generated types
+│   ├── cgroup/                             # Linux cgroups v2 metric collection
 │   ├── collector/                          # Background metric collector
-│   │   ├── collector.go
-│   │   └── collector_test.go
 │   ├── e2e/                                # End-to-end integration tests
-│   │   └── slurm_e2e_test.go
+│   ├── gpu/                                # NVIDIA/AMD GPU metric collection
 │   ├── metrics/                            # Prometheus exporter
-│   │   └── exporter.go
 │   ├── scheduler/                          # Scheduler abstraction layer
-│   │   ├── scheduler.go                    # Interface and types
-│   │   ├── mock.go                         # Mock job source
-│   │   ├── slurm.go                        # Slurm job source
-│   │   └── *_test.go
 │   ├── slurmclient/                        # Generated Slurm REST API client
-│   │   ├── generate.go
-│   │   └── client.gen.go
-│   └── storage/                            # Database layer
-│       ├── storage.go                      # Interface and types
-│       ├── postgres.go                     # PostgreSQL implementation
-│       └── *_test.go
+│   └── storage/                            # Database layer (PostgreSQL)
 ├── scripts/                                # Utility scripts
+│   ├── slurm/                              # Prolog/epilog scripts
 │   ├── coverage.sh
-│   └── filter-slurm-openapi.py
+│   ├── filter-slurm-openapi.py
+│   └── fix-slurm-openapi-types.py
 ├── Dockerfile
 ├── docker-compose.yml
 ├── go.mod
-├── go.sum
 └── README.md
 ```
 
@@ -160,16 +132,21 @@ docker-compose --profile slurm ps
 
 ### Job Lifecycle Events
 
-When using the `slurm` backend, jobs are tracked via prolog/epilog lifecycle events:
+With the Slurm backend, jobs are tracked via prolog/epilog lifecycle events:
 
-- **Prolog Script**: Creates jobs in database when they start (`/v1/events/job-started`)
-- **Epilog Script**: Updates job state when they finish (`/v1/events/job-finished`)
-- **Real-time**: No polling delay - jobs appear instantly when they start
-- **Accurate States**: Exit codes and signals are captured for correct state mapping
+| Event | Endpoint | When | Action |
+|-------|----------|------|--------|
+| Job Started | `POST /v1/events/job-started` | Prolog runs | Creates job with RUNNING state |
+| Job Finished | `POST /v1/events/job-finished` | Epilog runs | Updates job with final state |
 
-When using the `mock` backend:
-- **Manual Creation**: Jobs must be created via API or demo data
-- **Demo Data**: Set `SEED_DEMO=true` to seed 100 demo jobs
+State determination:
+- Signal 9 (SIGKILL) or 15 (SIGTERM) = cancelled
+- Exit code non-zero = failed
+- Exit code 0 = completed
+
+With the mock backend:
+- Jobs are created manually via API or demo data
+- Set `SEED_DEMO=true` to seed 100 demo jobs
 
 ### Architecture
 
@@ -233,13 +210,19 @@ All job changes are logged to the `job_audit_events` table for traceability:
 | job_id | Job identifier |
 | change_type | Type of change (create, update, delete) |
 | changed_at | Timestamp of the change |
-| changed_by | Source of change (slurm-prolog, slurm-epilog, collector, api) |
-| source | Data source (lifecycle-event, metrics, api) |
+| changed_by | Actor making the change |
+| source | Data source |
 | correlation_id | Groups related operations |
 | job_snapshot | Complete job state as JSONB |
 
+**changed_by values:**
+- `slurm-prolog` - Job created by prolog script
+- `slurm-epilog` - Job updated by epilog script
+- `collector` - Metrics updated by collector
+- `api` - Manual change via REST API
+
 **Correlation IDs** group related operations for traceability. This enables:
-- Tracing job lifecycle events (prolog → epilog → collector)
+- Tracing job lifecycle events (prolog to epilog to collector)
 - Debugging job state issues
 - Auditing and compliance
 

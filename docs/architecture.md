@@ -215,7 +215,27 @@ The collector runs as a background goroutine that:
 
 ## Data Flow
 
-### Job Creation
+### Job Creation (Event-Based)
+
+In production with Slurm, jobs are created via prolog events:
+
+1. Slurm starts a job on a compute node
+2. Prolog script sends `POST /v1/events/job-started` with job details
+3. Handler creates job record with `running` state
+4. Prometheus metrics updated
+5. Response confirms event processed
+
+### Job Completion (Event-Based)
+
+1. Job finishes execution on compute node
+2. Epilog script sends `POST /v1/events/job-finished` with exit code and signal
+3. Handler determines final state (completed/failed/cancelled)
+4. Job record updated with end time and final state
+5. Prometheus metrics updated
+
+### Manual Job Creation
+
+For testing or non-Slurm use cases:
 
 1. Client sends `POST /v1/jobs` with job details
 2. Handler validates request
@@ -332,12 +352,12 @@ The original state is preserved in `scheduler.raw_state` for detailed analysis.
 
 The service integrates with SLURM clusters via prolog/epilog lifecycle events:
 
-1. Configure the SLURM REST API endpoint via `SLURM_BASE_URL` (for node metrics)
-2. Install prolog/epilog scripts on compute nodes
-3. Prolog creates jobs via `/v1/events/job-started` when jobs start
-4. Epilog updates jobs via `/v1/events/job-finished` when jobs complete
-5. Exit codes and signals are captured for accurate state mapping
-6. Audit events track all changes with correlation IDs
+1. Install prolog/epilog scripts on compute nodes
+2. Prolog creates jobs via `POST /v1/events/job-started` when jobs start
+3. Epilog updates jobs via `POST /v1/events/job-finished` when jobs complete
+4. Exit codes and signals are captured for accurate state mapping
+5. Audit events track all changes with correlation IDs
+6. Optional: Configure `SLURM_BASE_URL` for node metrics via Slurm REST API
 
 ## Configuration
 

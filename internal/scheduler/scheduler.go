@@ -113,16 +113,26 @@ type Node struct {
 // JobSource defines the interface for fetching jobs from a scheduler.
 // Implementations can be created for different workload managers (SLURM, PBS, etc.)
 // or for mock/simulated job sources for testing.
+//
+// NOTE: With the event-based architecture (prolog/epilog scripts), the primary
+// production workflow does NOT use ListJobs/GetJob for job synchronization.
+// Instead, jobs are created/updated via lifecycle events from Slurm scripts.
+// These methods remain for:
+//   - Testing and debugging Slurm API connectivity
+//   - Optional administrative queries
+//   - Future features that may need direct Slurm access
 type JobSource interface {
 	// Type returns the scheduler type identifier.
 	Type() SchedulerType
 
 	// ListJobs returns all jobs matching the given filter.
 	// The filter may specify state, user, time range, etc.
+	// NOTE: Not used in production event-based workflow; useful for testing/debugging.
 	ListJobs(ctx context.Context, filter JobFilter) ([]*Job, error)
 
 	// GetJob returns a specific job by its ID.
 	// Returns nil and no error if the job is not found.
+	// NOTE: Not used in production event-based workflow; useful for testing/debugging.
 	GetJob(ctx context.Context, id string) (*Job, error)
 
 	// GetJobMetrics returns recent metrics samples for a job.

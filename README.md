@@ -6,26 +6,34 @@ A microservice for tracking and monitoring HPC (High Performance Computing) job 
 
 ## Features
 
-- **Slurm Integration**: Event-based integration via prolog/epilog scripts and REST API
-- **Job Lifecycle Events**: Real-time job creation and completion notifications
-- **Resource Metrics**: Track CPU, memory, and GPU usage over time via cgroups
-- **Prometheus Integration**: Export metrics in Prometheus format with best practices
-- **Database Support**: PostgreSQL storage backend with full audit trail
-- **Demo Data**: Seed sample data for testing and demonstration
-- **Configurable Retention**: Automatic cleanup of old metrics
+- **Slurm Integration**: Event-based integration via prolog/epilog scripts
+- **Real-time Job Tracking**: Jobs created instantly when Slurm starts them
+- **Accurate State Detection**: Exit codes and signals captured for correct state mapping
+- **Resource Metrics**: CPU, memory, and GPU usage collected via Linux cgroups v2
+- **Prometheus Export**: Metrics in Prometheus format for Grafana dashboards
+- **PostgreSQL Storage**: Persistent storage with full audit trail
+- **GPU Support**: NVIDIA and AMD GPU metrics via vendor tools
+- **Demo Mode**: Mock backend with sample data for testing
 
 ## Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   HPC Cluster   │────▶│  Observability  │────▶│   Prometheus    │
-│  (Slurm + Jobs) │     │    Service      │     │   + Grafana     │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                       │
-        │ Events:               ▼
-        │ • prolog (start)  ┌─────────────────┐
-        │ • epilog (finish) │   PostgreSQL    │
-        └──────────────────▶└─────────────────┘
+┌─────────────────┐                          ┌─────────────────┐
+│   HPC Cluster   │   Lifecycle Events       │   Prometheus    │
+│  (Slurm Jobs)   │ ─────────────────────┐   │   + Grafana     │
+└─────────────────┘                      │   └────────┬────────┘
+        │                                │            │ scrape
+        │ prolog: job-started            ▼            ▼
+        │ epilog: job-finished    ┌─────────────────────────┐
+        │ collector: metrics      │  Observability Service  │
+        └────────────────────────▶│     (Go + REST API)     │
+                                  └───────────┬─────────────┘
+                                              │
+                                              ▼
+                                  ┌─────────────────────────┐
+                                  │      PostgreSQL         │
+                                  │  (jobs, metrics, audit) │
+                                  └─────────────────────────┘
 ```
 
 ## Quick Start
@@ -135,16 +143,24 @@ Use the `SEED_DEMO` environment variable to seed demo data on startup (mock back
 - [End-to-end testing](docs/development.md#running-end-to-end-integration-tests)
 
 
-## Scheduler Integration (SLURM)
+## Slurm Integration
 
-The service uses an **event-based architecture** for Slurm integration:
-- **Prolog script**: Creates jobs when they start (`/v1/events/job-started`)
-- **Epilog script**: Updates jobs when they complete (`/v1/events/job-finished`)
-- **Collector**: Gathers real-time metrics from running jobs via cgroups
+The service uses an event-based architecture for Slurm integration:
 
-For detailed integration documentation, see:
-- [Slurm Integration Guide](docs/slurm-integration.md) - Step-by-step setup
-- [Architecture - Scheduler Integration](docs/architecture.md#scheduler-integration)
+| Component | Endpoint | Purpose |
+|-----------|----------|--------|
+| Prolog script | `POST /v1/events/job-started` | Creates job when Slurm starts it |
+| Epilog script | `POST /v1/events/job-finished` | Updates job with exit code/signal |
+| Collector | `POST /v1/jobs/{id}/metrics` | Records CPU/memory/GPU metrics |
+
+State detection uses exit codes and signals:
+- Exit code 0 = completed
+- Exit code non-zero = failed
+- Signal 9 (SIGKILL) or 15 (SIGTERM) = cancelled
+
+For detailed setup instructions, see:
+- [Slurm Integration Guide](docs/slurm-integration.md)
+- [Architecture](docs/architecture.md#scheduler-integration)
 
 ## Documentation
 
