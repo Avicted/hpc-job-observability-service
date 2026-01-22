@@ -22,6 +22,65 @@ if ! grep -q "AccountingStorageHost" /etc/slurm/slurm.conf; then
     echo "AccountingStorageHost=localhost" >> /etc/slurm/slurm.conf
 fi
 
+# Configure Prolog and Epilog scripts for job lifecycle events
+# These scripts notify the observability service when jobs start/finish
+echo "==> Configuring prolog/epilog scripts..."
+
+# Create directories for prolog/epilog scripts (writable location)
+PROLOG_DIR=/opt/slurm/prolog.d
+EPILOG_DIR=/opt/slurm/epilog.d
+mkdir -p "$PROLOG_DIR" "$EPILOG_DIR"
+
+# Create log directory for prolog/epilog
+mkdir -p /var/log/slurm
+chmod 755 /var/log/slurm
+
+# Create environment config file for prolog/epilog scripts
+# This passes the Docker environment variables to the scripts
+cat > /etc/slurm/observability.conf << EOF
+# HPC Job Observability Service configuration
+# This file is sourced by prolog/epilog scripts
+OBSERVABILITY_API_URL="${OBSERVABILITY_API_URL:-http://localhost:8080}"
+OBSERVABILITY_TIMEOUT="${OBSERVABILITY_TIMEOUT:-5}"
+EOF
+chmod 644 /etc/slurm/observability.conf
+echo "Created observability config at /etc/slurm/observability.conf"
+echo "  OBSERVABILITY_API_URL=$OBSERVABILITY_API_URL"
+
+# Copy mounted scripts to writable location and make executable
+if [ -f /etc/slurm/prolog.d/50-observability.sh ]; then
+    # Add config sourcing to the beginning of the script
+    echo '#!/bin/bash' > "$PROLOG_DIR/50-observability.sh"
+    echo '# Source configuration' >> "$PROLOG_DIR/50-observability.sh"
+    echo '[ -f /etc/slurm/observability.conf ] && source /etc/slurm/observability.conf' >> "$PROLOG_DIR/50-observability.sh"
+    echo '' >> "$PROLOG_DIR/50-observability.sh"
+    # Append the rest of the script (skipping the shebang if present)
+    tail -n +2 /etc/slurm/prolog.d/50-observability.sh >> "$PROLOG_DIR/50-observability.sh"
+    chmod +x "$PROLOG_DIR/50-observability.sh"
+    echo "Copied prolog script to $PROLOG_DIR/50-observability.sh"
+fi
+
+if [ -f /etc/slurm/epilog.d/50-observability.sh ]; then
+    # Add config sourcing to the beginning of the script
+    echo '#!/bin/bash' > "$EPILOG_DIR/50-observability.sh"
+    echo '# Source configuration' >> "$EPILOG_DIR/50-observability.sh"
+    echo '[ -f /etc/slurm/observability.conf ] && source /etc/slurm/observability.conf' >> "$EPILOG_DIR/50-observability.sh"
+    echo '' >> "$EPILOG_DIR/50-observability.sh"
+    # Append the rest of the script (skipping the shebang if present)
+    tail -n +2 /etc/slurm/epilog.d/50-observability.sh >> "$EPILOG_DIR/50-observability.sh"
+    chmod +x "$EPILOG_DIR/50-observability.sh"
+    echo "Copied epilog script to $EPILOG_DIR/50-observability.sh"
+fi
+
+# Add Prolog/Epilog configuration to slurm.conf
+# Point to the writable location where scripts are copied
+if ! grep -q "^Prolog=" /etc/slurm/slurm.conf; then
+    echo "# Job lifecycle event scripts" >> /etc/slurm/slurm.conf
+    echo "Prolog=$PROLOG_DIR/*" >> /etc/slurm/slurm.conf
+    echo "Epilog=$EPILOG_DIR/*" >> /etc/slurm/slurm.conf
+    echo "Added Prolog/Epilog configuration to slurm.conf"
+fi
+
 echo "Configured slurm.conf for host=$HOSTNAME, cpus=$CPUS, memory=${MEMORY}MB"
 
 # Create slurmdbd.conf if it doesn't exist

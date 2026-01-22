@@ -56,6 +56,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/jobs/{jobId}/metrics", wrapper.GetJobMetrics)
 	mux.HandleFunc("POST /v1/jobs/{jobId}/metrics", wrapper.RecordJobMetrics)
 
+	// Job lifecycle event endpoints (for Slurm prolog/epilog scripts)
+	mux.HandleFunc("POST /v1/events/job-started", wrapper.JobStartedEvent)
+	mux.HandleFunc("POST /v1/events/job-finished", wrapper.JobFinishedEvent)
+
 	// Prometheus metrics endpoint
 	mux.Handle("GET /metrics", s.exporter.Handler())
 
@@ -635,6 +639,243 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, data interface{}) 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
+}
+
+// JobStartedEvent implements ServerInterface.JobStartedEvent
+// This endpoint receives job started events from Slurm prolog scripts.
+// It is idempotent - duplicate events are handled safely.
+func (s *Server) JobStartedEvent(w http.ResponseWriter, r *http.Request) {
+	var event types.JobStartedEvent
+	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+		return
+	}
+
+	// Validate required fields
+	if event.JobId == "" {
+		s.writeError(w, http.StatusBadRequest, "validation_error", "job_id is required")
+		return
+	}
+	if event.User == "" {
+		s.writeError(w, http.StatusBadRequest, "validation_error", "user is required")
+		return
+	}
+	if len(event.NodeList) == 0 {
+		s.writeError(w, http.StatusBadRequest, "validation_error", "node_list is required")
+		return
+	}
+
+	// Check if job already exists (idempotency)
+	existingJob, err := s.store.GetJob(r.Context(), event.JobId)
+	if err == nil {
+		// Job exists - return success but indicate it was a duplicate
+		resp := types.JobEventResponse{
+			JobId:   event.JobId,
+			Status:  types.Skipped,
+			Message: ptrString("Job already registered"),
+		}
+		s.writeJSON(w, http.StatusOK, resp)
+		return
+	} else if err != storage.ErrJobNotFound {
+		s.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	_ = existingJob // unused
+
+	// Parse GPU vendor
+	gpuVendor := storage.GPUVendorNone
+	if event.GpuVendor != nil {
+		gpuVendor = storage.GPUVendor(*event.GpuVendor)
+	}
+
+	// Create the job from the event
+	job := &storage.Job{
+		ID:        event.JobId,
+		User:      event.User,
+		Nodes:     event.NodeList,
+		NodeCount: len(event.NodeList),
+		State:     storage.JobStateRunning,
+		StartTime: event.Timestamp,
+		Audit:     storage.NewAuditInfo("slurm-prolog", "lifecycle-event"),
+
+		// Cgroup and GPU info from the event
+		CgroupPath: derefString(event.CgroupPath),
+		GPUVendor:  gpuVendor,
+		GPUDevices: derefStringSlice(event.GpuDevices),
+	}
+
+	// Set GPU count
+	if event.GpuAllocation != nil {
+		job.GPUCount = *event.GpuAllocation
+		job.AllocatedGPUs = int64(*event.GpuAllocation)
+		job.RequestedGPUs = int64(*event.GpuAllocation)
+	}
+
+	// Set CPU allocation
+	if event.CpuAllocation != nil {
+		job.AllocatedCPUs = int64(*event.CpuAllocation)
+		job.RequestedCPUs = int64(*event.CpuAllocation)
+	}
+
+	// Set memory allocation
+	if event.MemoryAllocationMb != nil {
+		job.AllocatedMemMB = int64(*event.MemoryAllocationMb)
+		job.RequestedMemMB = int64(*event.MemoryAllocationMb)
+	}
+
+	// Set scheduler info
+	job.Scheduler = &storage.SchedulerInfo{
+		Type:          storage.SchedulerTypeSlurm,
+		ExternalJobID: event.JobId,
+	}
+	if event.Partition != nil {
+		job.Scheduler.Partition = *event.Partition
+	}
+	if event.Account != nil {
+		job.Scheduler.Account = *event.Account
+	}
+
+	// Set cluster metadata
+	job.ClusterName = "default"
+	job.SchedulerInst = "slurm"
+	job.IngestVersion = "prolog-v1"
+
+	if err := s.store.CreateJob(r.Context(), job); err != nil {
+		if err == storage.ErrJobAlreadyExists {
+			// Race condition - job was created between our check and create
+			resp := types.JobEventResponse{
+				JobId:   event.JobId,
+				Status:  types.Skipped,
+				Message: ptrString("Job already registered (race condition)"),
+			}
+			s.writeJSON(w, http.StatusOK, resp)
+			return
+		}
+		s.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	// Update Prometheus metrics
+	s.exporter.IncrementJobsTotal()
+
+	resp := types.JobEventResponse{
+		JobId:   event.JobId,
+		Status:  types.Created,
+		Message: ptrString("Job registered successfully"),
+	}
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
+// JobFinishedEvent implements ServerInterface.JobFinishedEvent
+// This endpoint receives job finished events from Slurm epilog scripts.
+// It is idempotent - duplicate events are handled safely.
+func (s *Server) JobFinishedEvent(w http.ResponseWriter, r *http.Request) {
+	var event types.JobFinishedEvent
+	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+		return
+	}
+
+	// Validate required fields
+	if event.JobId == "" {
+		s.writeError(w, http.StatusBadRequest, "validation_error", "job_id is required")
+		return
+	}
+
+	// Get the existing job
+	job, err := s.store.GetJob(r.Context(), event.JobId)
+	if err != nil {
+		if err == storage.ErrJobNotFound {
+			s.writeError(w, http.StatusNotFound, "not_found", "Job not found")
+			return
+		}
+		s.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	// Check if job is already in terminal state (idempotency)
+	if job.State.IsTerminal() {
+		resp := types.JobEventResponse{
+			JobId:   event.JobId,
+			Status:  types.Skipped,
+			Message: ptrString("Job already in terminal state"),
+		}
+		s.writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
+	// Map final state from the event
+	finalState := mapJobState(event.FinalState)
+	if finalState == "" {
+		s.writeError(w, http.StatusBadRequest, "validation_error", "Invalid final_state")
+		return
+	}
+
+	// Update job state
+	job.State = finalState
+	job.EndTime = &event.Timestamp
+	job.RuntimeSeconds = event.Timestamp.Sub(job.StartTime).Seconds()
+	job.Audit = storage.NewAuditInfo("slurm-epilog", "lifecycle-event")
+
+	// Set exit code if provided
+	if event.ExitCode != nil {
+		if job.Scheduler == nil {
+			job.Scheduler = &storage.SchedulerInfo{
+				Type:          storage.SchedulerTypeSlurm,
+				ExternalJobID: event.JobId,
+			}
+		}
+		job.Scheduler.ExitCode = event.ExitCode
+	}
+
+	if err := s.store.UpdateJob(r.Context(), job); err != nil {
+		s.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	resp := types.JobEventResponse{
+		JobId:   event.JobId,
+		Status:  types.Updated,
+		Message: ptrString("Job finished successfully"),
+	}
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
+// Helper functions for event handling
+
+func ptrString(s string) *string {
+	return &s
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func derefStringSlice(s *[]string) []string {
+	if s == nil {
+		return nil
+	}
+	return *s
+}
+
+func mapJobState(state types.JobState) storage.JobState {
+	switch state {
+	case types.Pending:
+		return storage.JobStatePending
+	case types.Running:
+		return storage.JobStateRunning
+	case types.Completed:
+		return storage.JobStateCompleted
+	case types.Failed:
+		return storage.JobStateFailed
+	case types.Cancelled:
+		return storage.JobStateCancelled
+	default:
+		return ""
+	}
 }
 
 func (s *Server) writeError(w http.ResponseWriter, status int, errCode, message string) {

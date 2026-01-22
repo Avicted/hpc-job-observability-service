@@ -47,6 +47,16 @@ const (
 	SchedulerTypeSlurm SchedulerType = "slurm"
 )
 
+// GPUVendor identifies the GPU vendor for a job.
+type GPUVendor string
+
+const (
+	GPUVendorNone   GPUVendor = "none"
+	GPUVendorNvidia GPUVendor = "nvidia"
+	GPUVendorAMD    GPUVendor = "amd"
+	GPUVendorMixed  GPUVendor = "mixed" // For jobs spanning nodes with different GPU vendors
+)
+
 // SchedulerInfo contains metadata from the external scheduler.
 type SchedulerInfo struct {
 	Type          SchedulerType          `json:"type"`
@@ -72,37 +82,42 @@ type JobAuditInfo struct {
 
 // Job represents a batch job with its metadata and current resource usage.
 type Job struct {
-	ID             string         `json:"id"`
-	User           string         `json:"user"`
-	Nodes          []string       `json:"nodes"`
-	NodeCount      int            `json:"node_count,omitempty"`
-	State          JobState       `json:"state"`
-	StartTime      time.Time      `json:"start_time"`
-	EndTime        *time.Time     `json:"end_time,omitempty"`
-	RuntimeSeconds float64        `json:"runtime_seconds,omitempty"`
-	CPUUsage       float64        `json:"cpu_usage"`
-	MemoryUsageMB  int64          `json:"memory_usage_mb"`
-	GPUUsage       *float64       `json:"gpu_usage,omitempty"`
-	RequestedCPUs  int64          `json:"requested_cpus,omitempty"`
-	AllocatedCPUs  int64          `json:"allocated_cpus,omitempty"`
-	RequestedMemMB int64          `json:"requested_memory_mb,omitempty"`
-	AllocatedMemMB int64          `json:"allocated_memory_mb,omitempty"`
-	RequestedGPUs  int64          `json:"requested_gpus,omitempty"`
-	AllocatedGPUs  int64          `json:"allocated_gpus,omitempty"`
-	ClusterName    string         `json:"cluster_name,omitempty"`
-	SchedulerInst  string         `json:"scheduler_instance,omitempty"`
-	IngestVersion  string         `json:"ingest_version,omitempty"`
-	LastSampleAt   *time.Time     `json:"last_sample_at,omitempty"`
-	SampleCount    int64          `json:"sample_count,omitempty"`
-	AvgCPUUsage    float64        `json:"avg_cpu_usage,omitempty"`
-	MaxCPUUsage    float64        `json:"max_cpu_usage,omitempty"`
-	MaxMemUsageMB  int64          `json:"max_memory_usage_mb,omitempty"`
-	AvgGPUUsage    float64        `json:"avg_gpu_usage,omitempty"`
-	MaxGPUUsage    float64        `json:"max_gpu_usage,omitempty"`
-	Scheduler      *SchedulerInfo `json:"scheduler,omitempty"`
-	Audit          *JobAuditInfo  `json:"audit,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
+	ID             string     `json:"id"`
+	User           string     `json:"user"`
+	Nodes          []string   `json:"nodes"`
+	NodeCount      int        `json:"node_count,omitempty"`
+	State          JobState   `json:"state"`
+	StartTime      time.Time  `json:"start_time"`
+	EndTime        *time.Time `json:"end_time,omitempty"`
+	RuntimeSeconds float64    `json:"runtime_seconds,omitempty"`
+	CPUUsage       float64    `json:"cpu_usage"`
+	MemoryUsageMB  int64      `json:"memory_usage_mb"`
+	GPUUsage       *float64   `json:"gpu_usage,omitempty"`
+	RequestedCPUs  int64      `json:"requested_cpus,omitempty"`
+	AllocatedCPUs  int64      `json:"allocated_cpus,omitempty"`
+	RequestedMemMB int64      `json:"requested_memory_mb,omitempty"`
+	AllocatedMemMB int64      `json:"allocated_memory_mb,omitempty"`
+	RequestedGPUs  int64      `json:"requested_gpus,omitempty"`
+	AllocatedGPUs  int64      `json:"allocated_gpus,omitempty"`
+	ClusterName    string     `json:"cluster_name,omitempty"`
+	SchedulerInst  string     `json:"scheduler_instance,omitempty"`
+	IngestVersion  string     `json:"ingest_version,omitempty"`
+	LastSampleAt   *time.Time `json:"last_sample_at,omitempty"`
+	SampleCount    int64      `json:"sample_count,omitempty"`
+	AvgCPUUsage    float64    `json:"avg_cpu_usage,omitempty"`
+	MaxCPUUsage    float64    `json:"max_cpu_usage,omitempty"`
+	MaxMemUsageMB  int64      `json:"max_memory_usage_mb,omitempty"`
+	AvgGPUUsage    float64    `json:"avg_gpu_usage,omitempty"`
+	MaxGPUUsage    float64    `json:"max_gpu_usage,omitempty"`
+	// Cgroup and GPU fields for real resource tracking
+	CgroupPath string         `json:"cgroup_path,omitempty"` // Path to job's cgroup (e.g., /sys/fs/cgroup/slurm/job_123)
+	GPUCount   int            `json:"gpu_count,omitempty"`   // Number of GPUs allocated to this job
+	GPUVendor  GPUVendor      `json:"gpu_vendor,omitempty"`  // GPU vendor (nvidia, amd, mixed, none)
+	GPUDevices []string       `json:"gpu_devices,omitempty"` // GPU device IDs (e.g., ["GPU-abc123", "GPU-def456"])
+	Scheduler  *SchedulerInfo `json:"scheduler,omitempty"`
+	Audit      *JobAuditInfo  `json:"audit,omitempty"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
 }
 
 // JobSnapshot represents a full snapshot of job data for audit logging.
@@ -134,6 +149,10 @@ type JobSnapshot struct {
 	MaxMemUsageMB  int64          `json:"max_memory_usage_mb,omitempty"`
 	AvgGPUUsage    float64        `json:"avg_gpu_usage,omitempty"`
 	MaxGPUUsage    float64        `json:"max_gpu_usage,omitempty"`
+	CgroupPath     string         `json:"cgroup_path,omitempty"`
+	GPUCount       int            `json:"gpu_count,omitempty"`
+	GPUVendor      GPUVendor      `json:"gpu_vendor,omitempty"`
+	GPUDevices     []string       `json:"gpu_devices,omitempty"`
 	Scheduler      *SchedulerInfo `json:"scheduler,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
@@ -293,6 +312,10 @@ func buildJobSnapshot(job *Job) *JobSnapshot {
 		MaxMemUsageMB:  job.MaxMemUsageMB,
 		AvgGPUUsage:    job.AvgGPUUsage,
 		MaxGPUUsage:    job.MaxGPUUsage,
+		CgroupPath:     job.CgroupPath,
+		GPUCount:       job.GPUCount,
+		GPUVendor:      job.GPUVendor,
+		GPUDevices:     append([]string(nil), job.GPUDevices...),
 		Scheduler:      job.Scheduler,
 		CreatedAt:      job.CreatedAt,
 		UpdatedAt:      job.UpdatedAt,

@@ -47,7 +47,7 @@ The HPC Job Observability Service is a microservice designed to track and monito
 │  │          Collector              │  │                                 │    │
 │  │                                 │  │                                 │    │
 │  │   - Periodic metric sampling    │◀─│   Background Goroutine          │    │
-│  │   - Resource simulation (demo)  │  │                                 │    │
+│  │   - Cgroup/GPU metrics          │  │                                 │    │
 │  └─────────────────────────────────┘  └─────────────────────────────────┘    │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -163,14 +163,14 @@ The storage layer includes a comprehensive audit system that tracks all job chan
 | job_id | text | Job identifier |
 | change_type | text | Type of change (upsert, update, delete) |
 | changed_at | timestamp | When the change occurred |
-| changed_by | text | Who made the change (syncer, collector, api) |
+| changed_by | text | Who made the change (slurm-prolog, slurm-epilog, collector, api) |
 | source | text | Data source (slurm, mock, api) |
 | correlation_id | text | Groups related operations |
 | job_snapshot | jsonb | Complete job state at change time |
 
 **Correlation IDs:**
-- A single UUID is generated for each sync batch
-- All jobs processed in that batch share the same correlation ID
+- A single UUID is generated for each job lifecycle operation
+- All events for the same job share correlation IDs from the originating source
 - Enables tracing and debugging of related operations
 - Useful for auditing and distributed tracing
 
@@ -215,7 +215,27 @@ The collector runs as a background goroutine that:
 
 ## Data Flow
 
-### Job Creation
+### Job Creation (Event-Based)
+
+In production with Slurm, jobs are created via prolog events:
+
+1. Slurm starts a job on a compute node
+2. Prolog script sends `POST /v1/events/job-started` with job details
+3. Handler creates job record with `running` state
+4. Prometheus metrics updated
+5. Response confirms event processed
+
+### Job Completion (Event-Based)
+
+1. Job finishes execution on compute node
+2. Epilog script sends `POST /v1/events/job-finished` with exit code and signal
+3. Handler determines final state (completed/failed/cancelled)
+4. Job record updated with end time and final state
+5. Prometheus metrics updated
+
+### Manual Job Creation
+
+For testing or non-Slurm use cases:
 
 1. Client sends `POST /v1/jobs` with job details
 2. Handler validates request
@@ -330,13 +350,14 @@ The original state is preserved in `scheduler.raw_state` for detailed analysis.
 
 ### SLURM Integration
 
-The service integrates with SLURM clusters via slurmrestd:
+The service integrates with SLURM clusters via prolog/epilog lifecycle events:
 
-1. Configure the SLURM REST API endpoint via `SLURM_BASE_URL`
-2. The syncer periodically fetches jobs from Slurm (default: every 30 seconds)
-3. Jobs are automatically normalized to the API model
-4. Existing endpoints and Prometheus metrics work unchanged
-5. Audit events track all job changes with correlation IDs for traceability
+1. Install prolog/epilog scripts on compute nodes
+2. Prolog creates jobs via `POST /v1/events/job-started` when jobs start
+3. Epilog updates jobs via `POST /v1/events/job-finished` when jobs complete
+4. Exit codes and signals are captured for accurate state mapping
+5. Audit events track all changes with correlation IDs
+6. Optional: Configure `SLURM_BASE_URL` for node metrics via Slurm REST API
 
 ## Configuration
 

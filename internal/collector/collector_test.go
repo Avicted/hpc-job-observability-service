@@ -117,8 +117,8 @@ func TestNew(t *testing.T) {
 	if collector.exporter != exporter {
 		t.Error("expected exporter to be set")
 	}
-	if collector.interval != 30*time.Second {
-		t.Errorf("expected interval 30s, got %v", collector.interval)
+	if collector.config.Interval != 30*time.Second {
+		t.Errorf("expected interval 30s, got %v", collector.config.Interval)
 	}
 }
 
@@ -131,8 +131,8 @@ func TestNewWithInterval(t *testing.T) {
 	if collector == nil {
 		t.Fatal("expected non-nil collector")
 	}
-	if collector.interval != interval {
-		t.Errorf("expected interval %v, got %v", interval, collector.interval)
+	if collector.config.Interval != interval {
+		t.Errorf("expected interval %v, got %v", interval, collector.config.Interval)
 	}
 }
 

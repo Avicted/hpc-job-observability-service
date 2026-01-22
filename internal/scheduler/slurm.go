@@ -228,11 +228,22 @@ func (s *SlurmJobSource) requestEditors() []slurmclient.RequestEditorFn {
 func (s *SlurmJobSource) convertJob(sj *slurmclient.V0037JobResponseProperties) *Job {
 	jobID := fmt.Sprintf("%d", derefInt(sj.JobId))
 
+	// Get initial state from the state mapper
+	rawState := derefStr(sj.JobState)
+	state := s.stateMapper.NormalizeState(rawState)
+
+	// Slurm reports COMPLETED for jobs that finished execution, even with non-zero exit codes.
+	// We need to check the exit code to determine if the job actually failed.
+	exitCode := sj.ExitCode
+	if state == JobStateCompleted && exitCode != nil && *exitCode != 0 {
+		state = JobStateFailed
+	}
+
 	job := &Job{
 		ID:    jobID,
 		User:  s.extractUser(sj),
 		Nodes: parseNodeList(derefStr(sj.Nodes)),
-		State: s.stateMapper.NormalizeState(derefStr(sj.JobState)),
+		State: state,
 	}
 
 	// Node count

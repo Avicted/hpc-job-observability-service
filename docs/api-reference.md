@@ -218,6 +218,112 @@ All fields are optional. Only provided fields are updated.
 
 ---
 
+## Job Lifecycle Events
+
+These endpoints are used by Slurm prolog/epilog scripts to notify the service of job lifecycle events.
+
+### Job Started Event
+
+Notify the service that a job has started running.
+
+```
+POST /v1/events/job-started
+```
+
+**Request Body**
+
+```json
+{
+  "job_id": "12345",
+  "user": "alice",
+  "node_list": ["node-01", "node-02"],
+  "cpu_allocation": 16,
+  "gpu_allocation": 2,
+  "gpu_vendor": "nvidia",
+  "gpu_devices": ["GPU-abc123", "GPU-def456"],
+  "cgroup_path": "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_12345",
+  "timestamp": "2026-01-22T10:00:00Z"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| job_id | string | yes | Slurm job ID |
+| user | string | yes | Job owner |
+| node_list | array | yes | List of allocated nodes |
+| cpu_allocation | integer | no | Number of allocated CPUs |
+| gpu_allocation | integer | no | Number of allocated GPUs |
+| gpu_vendor | string | no | GPU vendor: `nvidia` or `amd` |
+| gpu_devices | array | no | GPU device IDs/UUIDs |
+| cgroup_path | string | no | Job's cgroup v2 path for metric collection |
+| timestamp | string | no | Event timestamp (ISO 8601) |
+
+**Response** (200 OK)
+
+```json
+{
+  "status": "processed",
+  "job_id": "slurm-12345",
+  "message": "Job started event recorded"
+}
+```
+
+---
+
+### Job Finished Event
+
+Notify the service that a job has finished.
+
+```
+POST /v1/events/job-finished
+```
+
+**Request Body**
+
+```json
+{
+  "job_id": "12345",
+  "final_state": "completed",
+  "exit_code": 0,
+  "signal": 0,
+  "timestamp": "2026-01-22T12:30:00Z"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| job_id | string | yes | Slurm job ID |
+| final_state | string | no | Final job state (completed, failed, cancelled) |
+| exit_code | integer | no | Job exit code (non-zero indicates failure) |
+| signal | integer | no | Signal number (15=SIGTERM, 9=SIGKILL → cancelled) |
+| timestamp | string | no | Event timestamp (ISO 8601) |
+
+**State Determination Logic**
+
+The service determines the final job state using:
+1. If `signal` is 9 (SIGKILL) or 15 (SIGTERM): state = `cancelled`
+2. If `exit_code` is non-zero: state = `failed`
+3. Otherwise: state = `completed`
+
+**Response** (200 OK)
+
+```json
+{
+  "status": "processed",
+  "job_id": "slurm-12345",
+  "message": "Job finished event recorded"
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | validation_error | Invalid event payload |
+| 404 | not_found | Job not found (prolog event not received) |
+
+---
+
 ## Scheduler Integration
 
 The API is designed to support integration with external HPC workload managers like SLURM. Jobs can include optional scheduler metadata that preserves information from the source system.

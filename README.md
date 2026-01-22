@@ -2,30 +2,38 @@
 
 A microservice for tracking and monitoring HPC (High Performance Computing) job resource utilization with Prometheus metrics export.
 
-> This project is a proof of concept for building an observability service for HPC job schedulers like Slurm. It provides a RESTful API to manage jobs and record resource usage metrics (CPU, memory, GPU) over time. The service exports metrics in Prometheus format for easy integration with monitoring systems.
+> This service integrates with Slurm via prolog/epilog scripts to provide real-time job tracking and resource monitoring. It collects CPU, memory, and GPU metrics from running jobs using Linux cgroups v2, stores historical data in PostgreSQL, and exports metrics in Prometheus format for Grafana dashboards.
 
 ## Features
 
-- **Slurm Integration**: Native support for Slurm via its REST API
-- **Job Management**: Create, update, list, and delete HPC jobs
-- **Resource Metrics**: Track CPU, memory, and GPU usage over time
-- **Prometheus Integration**: Export metrics in Prometheus format with best practices
-- **Database Support**: PostgreSQL storage backend
-- **Demo Data**: Seed sample data for testing and demonstration
-- **Configurable Retention**: Automatic cleanup of old metrics
+- **Slurm Integration**: Event-based integration via prolog/epilog scripts
+- **Real-time Job Tracking**: Jobs created instantly when Slurm starts them
+- **Accurate State Detection**: Exit codes and signals captured for correct state mapping
+- **Resource Metrics**: CPU, memory, and GPU usage collected via Linux cgroups v2
+- **Prometheus Export**: Metrics in Prometheus format for Grafana dashboards
+- **PostgreSQL Storage**: Persistent storage with full audit trail
+- **GPU Support**: NVIDIA and AMD GPU metrics via vendor tools
+- **Demo Mode**: Mock backend with sample data for testing
 
 ## Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   HPC Cluster   │────▶│  Observability  │────▶│   Prometheus    │
-│   Schedulers    │     │    Service      │     │   + Grafana     │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                               │
-                               ▼
-                        ┌─────────────────┐
-                        │   PostgreSQL    │
-                        └─────────────────┘
+┌─────────────────┐                          ┌─────────────────┐
+│   HPC Cluster   │   Lifecycle Events       │   Prometheus    │
+│  (Slurm Jobs)   │ ─────────────────────┐   │   + Grafana     │
+└─────────────────┘                      │   └────────┬────────┘
+        │                                │            │ scrape
+        │ prolog: job-started            ▼            ▼
+        │ epilog: job-finished    ┌─────────────────────────┐
+        │ collector: metrics      │  Observability Service  │
+        └────────────────────────▶│     (Go + REST API)     │
+                                  └───────────┬─────────────┘
+                                              │
+                                              ▼
+                                  ┌─────────────────────────┐
+                                  │      PostgreSQL         │
+                                  │  (jobs, metrics, audit) │
+                                  └─────────────────────────┘
 ```
 
 ## Quick Start
@@ -135,9 +143,24 @@ Use the `SEED_DEMO` environment variable to seed demo data on startup (mock back
 - [End-to-end testing](docs/development.md#running-end-to-end-integration-tests)
 
 
-## Scheduler Integration (SLURM)
+## Slurm Integration
 
-For detailed integration documentation, see [Architecture - Scheduler Integration](docs/architecture.md#scheduler-integration).
+The service uses an event-based architecture for Slurm integration:
+
+| Component | Endpoint | Purpose |
+|-----------|----------|--------|
+| Prolog script | `POST /v1/events/job-started` | Creates job when Slurm starts it |
+| Epilog script | `POST /v1/events/job-finished` | Updates job with exit code/signal |
+| Collector | `POST /v1/jobs/{id}/metrics` | Records CPU/memory/GPU metrics |
+
+State detection uses exit codes and signals:
+- Exit code 0 = completed
+- Exit code non-zero = failed
+- Signal 9 (SIGKILL) or 15 (SIGTERM) = cancelled
+
+For detailed setup instructions, see:
+- [Slurm Integration Guide](docs/slurm-integration.md)
+- [Architecture](docs/architecture.md#scheduler-integration)
 
 ## Documentation
 
