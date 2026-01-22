@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/avic/hpc-job-observability-service/internal/metrics"
-	"github.com/avic/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
+	"github.com/Avicted/hpc-job-observability-service/internal/storage"
 )
 
 // mockStorage implements storage.Storage for testing.

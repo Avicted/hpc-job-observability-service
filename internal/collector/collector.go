@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/avic/hpc-job-observability-service/internal/metrics"
-	"github.com/avic/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
+	"github.com/Avicted/hpc-job-observability-service/internal/storage"
 )
 
 // Collector periodically collects and updates job metrics.

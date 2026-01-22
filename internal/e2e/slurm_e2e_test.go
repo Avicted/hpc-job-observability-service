@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/avic/hpc-job-observability-service/internal/scheduler"
-	"github.com/avic/hpc-job-observability-service/internal/storage"
-	"github.com/avic/hpc-job-observability-service/internal/syncer"
+	"github.com/Avicted/hpc-job-observability-service/internal/scheduler"
+	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/syncer"
 	_ "github.com/lib/pq"
 )
 

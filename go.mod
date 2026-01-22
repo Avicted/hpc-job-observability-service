@@ -1,4 +1,4 @@
-module github.com/avic/hpc-job-observability-service
+module github.com/Avicted/hpc-job-observability-service
 
 go 1.25.5
 

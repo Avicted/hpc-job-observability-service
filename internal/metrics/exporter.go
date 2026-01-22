@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/avic/hpc-job-observability-service/internal/scheduler"
-	"github.com/avic/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/scheduler"
+	"github.com/Avicted/hpc-job-observability-service/internal/storage"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
