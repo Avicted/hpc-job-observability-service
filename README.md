@@ -31,7 +31,7 @@ A microservice for tracking and monitoring HPC (High Performance Computing) job 
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.22+
 - Docker and Docker Compose (optional)
 
 ### Running Locally

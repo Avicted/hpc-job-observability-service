@@ -4,7 +4,7 @@ This document covers development setup, workflows, and guidelines for contributi
 
 ## Prerequisites
 
-- Go 1.25 or later
+- Go 1.22 or later
 - Docker and Docker Compose (for integration testing)
 - oapi-codegen (for API code generation)
 
@@ -138,7 +138,7 @@ Fix by recreating the stack and its network:
 ```bash
 docker-compose down
 docker network rm <project>_hpc-network  # only if it still exists
-docker-compose --profile slurm up --build
+docker-compose --profile slurm up --build --force-recreate
 ```
 
 Notes:
@@ -419,7 +419,7 @@ This project follows API-first development. The OpenAPI specification is the sou
 
 **To make API changes:**
 
-1. Edit `config/openapi.yaml`
+1. Edit `config/openapi/service/openapi.yaml`
 2. Regenerate code:
    ```bash
    go generate ./...
