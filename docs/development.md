@@ -478,7 +478,13 @@ This provides type-safe access to slurmrestd endpoints.
    ./scripts/filter-slurm-openapi.py --version v0.0.37
    ```
 
-4. Regenerate the client:
+4. Fix known type mismatches in the filtered spec (use this whenever updating the Slurm spec):
+    ```bash
+    ./scripts/fix-slurm-openapi-types.py \
+      --input config/openapi/slurm/slurm-openapi-v0.0.37.json
+    ```
+
+5. Regenerate the client:
    ```bash
    go generate ./internal/slurmclient/...
    ```
