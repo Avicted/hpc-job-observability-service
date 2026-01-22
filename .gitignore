@@ -1,6 +1,8 @@
 # Binaries
 server
 
+.github/
+
 !cmd/**/*
 !internal/api/server/
 

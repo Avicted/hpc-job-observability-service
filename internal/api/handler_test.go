@@ -1,0 +1,1389 @@
+package api
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/avic/hpc-job-observability-service/internal/api/server"
+	"github.com/avic/hpc-job-observability-service/internal/api/types"
+	"github.com/avic/hpc-job-observability-service/internal/metrics"
+	"github.com/avic/hpc-job-observability-service/internal/storage"
+)
+
+// mockStorage implements storage.Storage for testing.
+type mockStorage struct {
+	jobs    map[string]*storage.Job
+	samples map[string][]*storage.MetricSample
+
+	createErr  error
+	getErr     error
+	updateErr  error
+	deleteErr  error
+	listErr    error
+	recordErr  error
+	metricsErr error
+}
+
+func newMockStorage() *mockStorage {
+	return &mockStorage{
+		jobs:    make(map[string]*storage.Job),
+		samples: make(map[string][]*storage.MetricSample),
+	}
+}
+
+func (m *mockStorage) CreateJob(ctx context.Context, job *storage.Job) error {
+	if m.createErr != nil {
+		return m.createErr
+	}
+	if _, exists := m.jobs[job.ID]; exists {
+		return storage.ErrJobAlreadyExists
+	}
+	job.CreatedAt = time.Now()
+	job.UpdatedAt = time.Now()
+	m.jobs[job.ID] = job
+	return nil
+}
+
+func (m *mockStorage) GetJob(ctx context.Context, id string) (*storage.Job, error) {
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
+	job, exists := m.jobs[id]
+	if !exists {
+		return nil, storage.ErrJobNotFound
+	}
+	return job, nil
+}
+
+func (m *mockStorage) UpdateJob(ctx context.Context, job *storage.Job) error {
+	if m.updateErr != nil {
+		return m.updateErr
+	}
+	if _, exists := m.jobs[job.ID]; !exists {
+		return storage.ErrJobNotFound
+	}
+	job.UpdatedAt = time.Now()
+	m.jobs[job.ID] = job
+	return nil
+}
+
+func (m *mockStorage) UpsertJob(ctx context.Context, job *storage.Job) error {
+	job.UpdatedAt = time.Now()
+	if _, exists := m.jobs[job.ID]; !exists {
+		job.CreatedAt = time.Now()
+	}
+	m.jobs[job.ID] = job
+	return nil
+}
+
+func (m *mockStorage) DeleteJob(ctx context.Context, id string) error {
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
+	if _, exists := m.jobs[id]; !exists {
+		return storage.ErrJobNotFound
+	}
+	delete(m.jobs, id)
+	return nil
+}
+
+func (m *mockStorage) ListJobs(ctx context.Context, filter storage.JobFilter) ([]*storage.Job, int, error) {
+	if m.listErr != nil {
+		return nil, 0, m.listErr
+	}
+	var result []*storage.Job
+	for _, job := range m.jobs {
+		if filter.State != nil && job.State != *filter.State {
+			continue
+		}
+		if filter.User != nil && job.User != *filter.User {
+			continue
+		}
+		result = append(result, job)
+	}
+	return result, len(result), nil
+}
+
+func (m *mockStorage) GetAllJobs(ctx context.Context) ([]*storage.Job, error) {
+	var result []*storage.Job
+	for _, job := range m.jobs {
+		result = append(result, job)
+	}
+	return result, nil
+}
+
+func (m *mockStorage) RecordMetrics(ctx context.Context, sample *storage.MetricSample) error {
+	if m.recordErr != nil {
+		return m.recordErr
+	}
+	m.samples[sample.JobID] = append(m.samples[sample.JobID], sample)
+	return nil
+}
+
+func (m *mockStorage) GetJobMetrics(ctx context.Context, jobID string, filter storage.MetricsFilter) ([]*storage.MetricSample, int, error) {
+	if m.metricsErr != nil {
+		return nil, 0, m.metricsErr
+	}
+	if _, exists := m.jobs[jobID]; !exists {
+		return nil, 0, storage.ErrJobNotFound
+	}
+	s := m.samples[jobID]
+	return s, len(s), nil
+}
+
+func (m *mockStorage) GetLatestMetrics(ctx context.Context, jobID string) (*storage.MetricSample, error) {
+	s := m.samples[jobID]
+	if len(s) == 0 {
+		return nil, nil
+	}
+	return s[len(s)-1], nil
+}
+
+func (m *mockStorage) DeleteMetricsBefore(cutoff time.Time) error {
+	return nil
+}
+
+func (m *mockStorage) Migrate() error {
+	return nil
+}
+
+func (m *mockStorage) Close() error {
+	return nil
+}
+
+func (m *mockStorage) SeedDemoData() error {
+	return nil
+}
+
+func setupTestServer(store storage.Storage) *Server {
+	exporter := metrics.NewExporter(store)
+	return NewServer(store, exporter)
+}
+
+func TestNewServer(t *testing.T) {
+	store := newMockStorage()
+	exporter := metrics.NewExporter(store)
+	srv := NewServer(store, exporter)
+
+	if srv == nil {
+		t.Fatal("expected non-nil server")
+	}
+	if srv.store != store {
+		t.Error("expected store to be set")
+	}
+	if srv.exporter != exporter {
+		t.Error("expected exporter to be set")
+	}
+}
+
+func TestGetHealth(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
+	rec := httptest.NewRecorder()
+
+	srv.GetHealth(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp types.HealthResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != types.Healthy {
+		t.Errorf("expected status 'healthy', got %s", resp.Status)
+	}
+	if resp.Version == nil || *resp.Version != "1.0.0" {
+		t.Error("expected version to be 1.0.0")
+	}
+}
+
+func TestCreateJob_Success(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	reqBody := types.CreateJobRequest{
+		Id:    "test-job-1",
+		User:  "testuser",
+		Nodes: []string{"node-1", "node-2"},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	params := server.CreateJobParams{
+		XChangedBy: "api",
+		XSource:    "test",
+	}
+	srv.CreateJob(rec, req, params)
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp types.Job
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Id != "test-job-1" {
+		t.Errorf("expected job ID 'test-job-1', got %s", resp.Id)
+	}
+	if resp.User != "testuser" {
+		t.Errorf("expected user 'testuser', got %s", resp.User)
+	}
+	if len(resp.Nodes) != 2 {
+		t.Errorf("expected 2 nodes, got %d", len(resp.Nodes))
+	}
+	if resp.State != types.Running {
+		t.Errorf("expected state 'running', got %s", resp.State)
+	}
+}
+
+func TestCreateJob_MissingAuditHeaders(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	reqBody := types.CreateJobRequest{
+		Id:    "test-job-1",
+		User:  "testuser",
+		Nodes: []string{"node-1"},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	params := server.CreateJobParams{
+		XChangedBy: "",
+		XSource:    "test",
+	}
+	srv.CreateJob(rec, req, params)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+
+	var errResp types.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errResp.Error != "validation_error" {
+		t.Errorf("expected 'validation_error', got %s", errResp.Error)
+	}
+}
+
+func TestCreateJob_MissingRequiredFields(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	tests := []struct {
+		name    string
+		req     types.CreateJobRequest
+		wantMsg string
+	}{
+		{
+			name:    "missing job ID",
+			req:     types.CreateJobRequest{User: "user", Nodes: []string{"node-1"}},
+			wantMsg: "Job ID is required",
+		},
+		{
+			name:    "missing user",
+			req:     types.CreateJobRequest{Id: "job-1", Nodes: []string{"node-1"}},
+			wantMsg: "User is required",
+		},
+		{
+			name:    "missing nodes",
+			req:     types.CreateJobRequest{Id: "job-1", User: "user"},
+			wantMsg: "At least one node is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.req)
+			req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			params := server.CreateJobParams{XChangedBy: "api", XSource: "test"}
+			srv.CreateJob(rec, req, params)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("expected status 400, got %d", rec.Code)
+			}
+
+			var errResp types.ErrorResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &errResp); err != nil {
+				t.Fatalf("failed to decode error response: %v", err)
+			}
+			if errResp.Message != tt.wantMsg {
+				t.Errorf("expected message %q, got %q", tt.wantMsg, errResp.Message)
+			}
+		})
+	}
+}
+
+func TestCreateJob_Duplicate(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["test-job-1"] = &storage.Job{ID: "test-job-1", User: "user", Nodes: []string{"node-1"}}
+
+	reqBody := types.CreateJobRequest{
+		Id:    "test-job-1",
+		User:  "testuser",
+		Nodes: []string{"node-1"},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	params := server.CreateJobParams{XChangedBy: "api", XSource: "test"}
+	srv.CreateJob(rec, req, params)
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("expected status 409, got %d", rec.Code)
+	}
+}
+
+func TestCreateJob_InvalidJSON(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader([]byte("invalid json")))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	params := server.CreateJobParams{XChangedBy: "api", XSource: "test"}
+	srv.CreateJob(rec, req, params)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestGetJob_Success(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	startTime := time.Now().Add(-1 * time.Hour)
+	store.jobs["test-job-1"] = &storage.Job{
+		ID:            "test-job-1",
+		User:          "testuser",
+		Nodes:         []string{"node-1"},
+		State:         storage.JobStateRunning,
+		StartTime:     startTime,
+		CPUUsage:      50.5,
+		MemoryUsageMB: 2048,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/test-job-1", nil)
+	rec := httptest.NewRecorder()
+
+	srv.GetJob(rec, req, "test-job-1")
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp types.Job
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Id != "test-job-1" {
+		t.Errorf("expected job ID 'test-job-1', got %s", resp.Id)
+	}
+	if resp.State != types.Running {
+		t.Errorf("expected state 'running', got %s", resp.State)
+	}
+	if resp.CpuUsage == nil || *resp.CpuUsage != 50.5 {
+		t.Errorf("expected CPU usage 50.5, got %v", resp.CpuUsage)
+	}
+}
+
+func TestGetJob_NotFound(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/nonexistent", nil)
+	rec := httptest.NewRecorder()
+
+	srv.GetJob(rec, req, "nonexistent")
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", rec.Code)
+	}
+}
+
+func TestListJobs_Success(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["job-1"] = &storage.Job{ID: "job-1", User: "alice", Nodes: []string{"node-1"}, State: storage.JobStateRunning}
+	store.jobs["job-2"] = &storage.Job{ID: "job-2", User: "bob", Nodes: []string{"node-2"}, State: storage.JobStateCompleted}
+	store.jobs["job-3"] = &storage.Job{ID: "job-3", User: "alice", Nodes: []string{"node-1"}, State: storage.JobStateRunning}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs", nil)
+	rec := httptest.NewRecorder()
+
+	params := server.ListJobsParams{}
+	srv.ListJobs(rec, req, params)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp types.JobListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Total != 3 {
+		t.Errorf("expected 3 jobs, got %d", resp.Total)
+	}
+}
+
+func TestListJobs_FilterByState(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["job-1"] = &storage.Job{ID: "job-1", User: "alice", Nodes: []string{"node-1"}, State: storage.JobStateRunning}
+	store.jobs["job-2"] = &storage.Job{ID: "job-2", User: "bob", Nodes: []string{"node-2"}, State: storage.JobStateCompleted}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs?state=running", nil)
+	rec := httptest.NewRecorder()
+
+	state := server.JobState("running")
+	params := server.ListJobsParams{State: &state}
+	srv.ListJobs(rec, req, params)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp types.JobListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Total != 1 {
+		t.Errorf("expected 1 job, got %d", resp.Total)
+	}
+}
+
+func TestListJobs_FilterByUser(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["job-1"] = &storage.Job{ID: "job-1", User: "alice", Nodes: []string{"node-1"}, State: storage.JobStateRunning}
+	store.jobs["job-2"] = &storage.Job{ID: "job-2", User: "bob", Nodes: []string{"node-2"}, State: storage.JobStateRunning}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs?user=alice", nil)
+	rec := httptest.NewRecorder()
+
+	user := "alice"
+	params := server.ListJobsParams{User: &user}
+	srv.ListJobs(rec, req, params)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp types.JobListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Total != 1 {
+		t.Errorf("expected 1 job, got %d", resp.Total)
+	}
+}
+
+func TestListJobs_Pagination(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	for i := 0; i < 10; i++ {
+		id := "job-" + string(rune('0'+i))
+		store.jobs[id] = &storage.Job{ID: id, User: "user", Nodes: []string{"node"}, State: storage.JobStateRunning}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs?limit=5&offset=3", nil)
+	rec := httptest.NewRecorder()
+
+	limit := 5
+	offset := 3
+	params := server.ListJobsParams{Limit: &limit, Offset: &offset}
+	srv.ListJobs(rec, req, params)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp types.JobListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Limit != 5 {
+		t.Errorf("expected limit 5, got %d", resp.Limit)
+	}
+	if resp.Offset != 3 {
+		t.Errorf("expected offset 3, got %d", resp.Offset)
+	}
+}
+
+func TestListJobs_Error(t *testing.T) {
+	store := newMockStorage()
+	store.listErr = errors.New("database error")
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs", nil)
+	rec := httptest.NewRecorder()
+
+	params := server.ListJobsParams{}
+	srv.ListJobs(rec, req, params)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
+func TestUpdateJob_Success(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["test-job-1"] = &storage.Job{
+		ID:        "test-job-1",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	}
+
+	state := types.JobState("completed")
+	cpuUsage := 75.5
+	memUsage := 4096
+	reqBody := types.UpdateJobRequest{
+		State:         &state,
+		CpuUsage:      &cpuUsage,
+		MemoryUsageMb: &memUsage,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/test-job-1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	params := server.UpdateJobParams{XChangedBy: "api", XSource: "test"}
+	srv.UpdateJob(rec, req, "test-job-1", params)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp types.Job
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.State != types.Completed {
+		t.Errorf("expected state 'completed', got %s", resp.State)
+	}
+	if resp.CpuUsage == nil || *resp.CpuUsage != 75.5 {
+		t.Errorf("expected CPU usage 75.5, got %v", resp.CpuUsage)
+	}
+}
+
+func TestUpdateJob_NotFound(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	state := types.JobState("completed")
+	reqBody := types.UpdateJobRequest{State: &state}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/nonexistent", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	params := server.UpdateJobParams{XChangedBy: "api", XSource: "test"}
+	srv.UpdateJob(rec, req, "nonexistent", params)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", rec.Code)
+	}
+}
+
+func TestUpdateJob_InvalidState(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["test-job-1"] = &storage.Job{
+		ID:        "test-job-1",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	}
+
+	state := types.JobState("invalid_state")
+	reqBody := types.UpdateJobRequest{State: &state}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/test-job-1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	params := server.UpdateJobParams{XChangedBy: "api", XSource: "test"}
+	srv.UpdateJob(rec, req, "test-job-1", params)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestUpdateJob_InvalidJSON(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["test-job-1"] = &storage.Job{
+		ID:        "test-job-1",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	}
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/test-job-1", bytes.NewReader([]byte("invalid json")))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	params := server.UpdateJobParams{XChangedBy: "api", XSource: "test"}
+	srv.UpdateJob(rec, req, "test-job-1", params)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestDeleteJob_Success(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["test-job-1"] = &storage.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
+
+	req := httptest.NewRequest(http.MethodDelete, "/v1/jobs/test-job-1", nil)
+	rec := httptest.NewRecorder()
+
+	params := server.DeleteJobParams{XChangedBy: "api", XSource: "test"}
+	srv.DeleteJob(rec, req, "test-job-1", params)
+
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("expected status 204, got %d", rec.Code)
+	}
+
+	if _, exists := store.jobs["test-job-1"]; exists {
+		t.Error("expected job to be deleted")
+	}
+}
+
+func TestDeleteJob_NotFound(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodDelete, "/v1/jobs/nonexistent", nil)
+	rec := httptest.NewRecorder()
+
+	params := server.DeleteJobParams{XChangedBy: "api", XSource: "test"}
+	srv.DeleteJob(rec, req, "nonexistent", params)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", rec.Code)
+	}
+}
+
+func TestGetJobMetrics_Success(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["test-job-1"] = &storage.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
+	store.samples["test-job-1"] = []*storage.MetricSample{
+		{JobID: "test-job-1", Timestamp: time.Now().Add(-5 * time.Minute), CPUUsage: 50.0, MemoryUsageMB: 2048},
+		{JobID: "test-job-1", Timestamp: time.Now().Add(-3 * time.Minute), CPUUsage: 60.0, MemoryUsageMB: 2560},
+		{JobID: "test-job-1", Timestamp: time.Now(), CPUUsage: 55.0, MemoryUsageMB: 2300},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/test-job-1/metrics", nil)
+	rec := httptest.NewRecorder()
+
+	params := server.GetJobMetricsParams{}
+	srv.GetJobMetrics(rec, req, "test-job-1", params)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp types.JobMetricsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.JobId != "test-job-1" {
+		t.Errorf("expected job ID 'test-job-1', got %s", resp.JobId)
+	}
+	if resp.Total != 3 {
+		t.Errorf("expected 3 samples, got %d", resp.Total)
+	}
+	if len(resp.Samples) != 3 {
+		t.Errorf("expected 3 samples, got %d", len(resp.Samples))
+	}
+}
+
+func TestGetJobMetrics_NotFound(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/nonexistent/metrics", nil)
+	rec := httptest.NewRecorder()
+
+	params := server.GetJobMetricsParams{}
+	srv.GetJobMetrics(rec, req, "nonexistent", params)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", rec.Code)
+	}
+}
+
+func TestRecordJobMetrics_Success(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["test-job-1"] = &storage.Job{
+		ID:        "test-job-1",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	}
+
+	reqBody := types.RecordMetricsRequest{
+		CpuUsage:      75.5,
+		MemoryUsageMb: 4096,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/test-job-1/metrics", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Changed-By", "api")
+	req.Header.Set("X-Source", "test")
+	rec := httptest.NewRecorder()
+
+	srv.RecordJobMetrics(rec, req, "test-job-1")
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp types.MetricSample
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.CpuUsage != 75.5 {
+		t.Errorf("expected CPU usage 75.5, got %f", resp.CpuUsage)
+	}
+	if resp.MemoryUsageMb != 4096 {
+		t.Errorf("expected memory usage 4096, got %d", resp.MemoryUsageMb)
+	}
+
+	if len(store.samples["test-job-1"]) != 1 {
+		t.Errorf("expected 1 metric sample, got %d", len(store.samples["test-job-1"]))
+	}
+}
+
+func TestRecordJobMetrics_NotFound(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	reqBody := types.RecordMetricsRequest{
+		CpuUsage:      75.5,
+		MemoryUsageMb: 4096,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/nonexistent/metrics", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Changed-By", "api")
+	req.Header.Set("X-Source", "test")
+	rec := httptest.NewRecorder()
+
+	srv.RecordJobMetrics(rec, req, "nonexistent")
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", rec.Code)
+	}
+}
+
+func TestRecordJobMetrics_ValidationErrors(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["test-job-1"] = &storage.Job{
+		ID:        "test-job-1",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	}
+
+	tests := []struct {
+		name    string
+		req     types.RecordMetricsRequest
+		wantMsg string
+	}{
+		{
+			name:    "CPU usage too high",
+			req:     types.RecordMetricsRequest{CpuUsage: 150, MemoryUsageMb: 1024},
+			wantMsg: "CPU usage must be between 0 and 100",
+		},
+		{
+			name:    "CPU usage negative",
+			req:     types.RecordMetricsRequest{CpuUsage: -10, MemoryUsageMb: 1024},
+			wantMsg: "CPU usage must be between 0 and 100",
+		},
+		{
+			name:    "Memory usage negative",
+			req:     types.RecordMetricsRequest{CpuUsage: 50, MemoryUsageMb: -100},
+			wantMsg: "Memory usage must be non-negative",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.req)
+			req := httptest.NewRequest(http.MethodPost, "/v1/jobs/test-job-1/metrics", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-Changed-By", "api")
+			req.Header.Set("X-Source", "test")
+			rec := httptest.NewRecorder()
+
+			srv.RecordJobMetrics(rec, req, "test-job-1")
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("expected status 400, got %d", rec.Code)
+			}
+
+			var errResp types.ErrorResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &errResp); err != nil {
+				t.Fatalf("failed to decode error response: %v", err)
+			}
+			if errResp.Message != tt.wantMsg {
+				t.Errorf("expected message %q, got %q", tt.wantMsg, errResp.Message)
+			}
+		})
+	}
+}
+
+func TestRecordJobMetrics_MissingAuditHeaders(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["test-job-1"] = &storage.Job{
+		ID:        "test-job-1",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	}
+
+	reqBody := types.RecordMetricsRequest{
+		CpuUsage:      75.5,
+		MemoryUsageMb: 4096,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/test-job-1/metrics", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.RecordJobMetrics(rec, req, "test-job-1")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestRoutes(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	handler := srv.Routes()
+	if handler == nil {
+		t.Fatal("expected non-nil handler")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+}
+
+func TestStorageJobToAPI_WithSchedulerInfo(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	submitTime := time.Now().Add(-1 * time.Hour)
+	priority := int64(100)
+	exitCode := 0
+	timeLimitMins := 60
+	gpuUsage := 85.5
+
+	job := &storage.Job{
+		ID:             "test-job-1",
+		User:           "testuser",
+		Nodes:          []string{"node-1", "node-2"},
+		NodeCount:      2,
+		State:          storage.JobStateCompleted,
+		StartTime:      time.Now().Add(-30 * time.Minute),
+		RuntimeSeconds: 1800,
+		CPUUsage:       75.5,
+		MemoryUsageMB:  4096,
+		GPUUsage:       &gpuUsage,
+		RequestedCPUs:  4,
+		AllocatedCPUs:  4,
+		RequestedMemMB: 8192,
+		AllocatedMemMB: 8192,
+		RequestedGPUs:  1,
+		AllocatedGPUs:  1,
+		ClusterName:    "cluster1",
+		SchedulerInst:  "slurm1",
+		IngestVersion:  "v1",
+		SampleCount:    10,
+		AvgCPUUsage:    65.0,
+		MaxCPUUsage:    80.0,
+		MaxMemUsageMB:  5000,
+		AvgGPUUsage:    70.0,
+		MaxGPUUsage:    90.0,
+		Scheduler: &storage.SchedulerInfo{
+			Type:          storage.SchedulerTypeSlurm,
+			ExternalJobID: "12345",
+			RawState:      "COMPLETED",
+			SubmitTime:    &submitTime,
+			Partition:     "gpu",
+			Account:       "project1",
+			QoS:           "normal",
+			Priority:      &priority,
+			ExitCode:      &exitCode,
+			StateReason:   "None",
+			TimeLimitMins: &timeLimitMins,
+			Extra:         map[string]interface{}{"custom": "value"},
+		},
+	}
+
+	resp := srv.storageJobToAPI(job)
+
+	if resp.Id != "test-job-1" {
+		t.Errorf("expected ID 'test-job-1', got %s", resp.Id)
+	}
+	if resp.Scheduler == nil {
+		t.Fatal("expected scheduler info")
+	}
+	if resp.Scheduler.Type == nil || *resp.Scheduler.Type != types.Slurm {
+		t.Error("expected scheduler type 'slurm'")
+	}
+	if resp.Scheduler.ExternalJobId == nil || *resp.Scheduler.ExternalJobId != "12345" {
+		t.Error("expected external job ID '12345'")
+	}
+	if resp.Scheduler.Partition == nil || *resp.Scheduler.Partition != "gpu" {
+		t.Error("expected partition 'gpu'")
+	}
+	if resp.NodeCount == nil || *resp.NodeCount != 2 {
+		t.Error("expected node count 2")
+	}
+	if resp.RuntimeSeconds == nil || *resp.RuntimeSeconds != 1800 {
+		t.Error("expected runtime 1800")
+	}
+}
+
+func TestApiSchedulerToStorage(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	result := srv.apiSchedulerToStorage(nil)
+	if result != nil {
+		t.Error("expected nil result for nil input")
+	}
+
+	schedType := types.Slurm
+	externalJobID := "12345"
+	rawState := "RUNNING"
+	partition := "gpu"
+	account := "project1"
+	qos := "normal"
+	priority := int64(100)
+	exitCode := 1
+	stateReason := "Resources"
+	timeLimitMins := 120
+	submitTime := time.Now()
+
+	apiSched := &types.SchedulerInfo{
+		Type:             &schedType,
+		ExternalJobId:    &externalJobID,
+		RawState:         &rawState,
+		SubmitTime:       &submitTime,
+		Partition:        &partition,
+		Account:          &account,
+		Qos:              &qos,
+		Priority:         &priority,
+		ExitCode:         &exitCode,
+		StateReason:      &stateReason,
+		TimeLimitMinutes: &timeLimitMins,
+		Extra:            &map[string]interface{}{"key": "value"},
+	}
+
+	result = srv.apiSchedulerToStorage(apiSched)
+
+	if result.Type != storage.SchedulerTypeSlurm {
+		t.Errorf("expected type 'slurm', got %s", result.Type)
+	}
+	if result.ExternalJobID != "12345" {
+		t.Errorf("expected external job ID '12345', got %s", result.ExternalJobID)
+	}
+	if result.Partition != "gpu" {
+		t.Errorf("expected partition 'gpu', got %s", result.Partition)
+	}
+	if result.Priority == nil || *result.Priority != 100 {
+		t.Error("expected priority 100")
+	}
+}
+
+func TestIsValidState(t *testing.T) {
+	validStates := []storage.JobState{
+		storage.JobStatePending,
+		storage.JobStateRunning,
+		storage.JobStateCompleted,
+		storage.JobStateFailed,
+		storage.JobStateCancelled,
+	}
+
+	for _, state := range validStates {
+		if !isValidState(state) {
+			t.Errorf("expected state %s to be valid", state)
+		}
+	}
+
+	invalidStates := []storage.JobState{"invalid", "unknown", ""}
+	for _, state := range invalidStates {
+		if isValidState(state) {
+			t.Errorf("expected state %s to be invalid", state)
+		}
+	}
+}
+
+func TestHandleError(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+
+	srv.handleError(rec, req, errors.New("test error"))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+
+	var errResp types.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errResp.Error != "invalid_request" {
+		t.Errorf("expected error 'invalid_request', got %s", errResp.Error)
+	}
+}
+
+func TestCreateJob_StorageError(t *testing.T) {
+	store := newMockStorage()
+	store.createErr = errors.New("database error")
+	srv := setupTestServer(store)
+
+	reqBody := types.CreateJobRequest{
+		Id:    "test-job-1",
+		User:  "testuser",
+		Nodes: []string{"node-1"},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	params := server.CreateJobParams{XChangedBy: "api", XSource: "test"}
+	srv.CreateJob(rec, req, params)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
+func TestGetJob_StorageError(t *testing.T) {
+	store := newMockStorage()
+	store.getErr = errors.New("database error")
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/test-job-1", nil)
+	rec := httptest.NewRecorder()
+
+	srv.GetJob(rec, req, "test-job-1")
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
+func TestUpdateJob_GPUUsage(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["test-job-1"] = &storage.Job{
+		ID:        "test-job-1",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	}
+
+	gpuUsage := 85.5
+	reqBody := types.UpdateJobRequest{
+		GpuUsage: &gpuUsage,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/test-job-1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	params := server.UpdateJobParams{XChangedBy: "api", XSource: "test"}
+	srv.UpdateJob(rec, req, "test-job-1", params)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp types.Job
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.GpuUsage == nil || *resp.GpuUsage != 85.5 {
+		t.Errorf("expected GPU usage 85.5, got %v", resp.GpuUsage)
+	}
+}
+
+func TestRecordJobMetrics_WithGPU(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["test-job-1"] = &storage.Job{
+		ID:        "test-job-1",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	}
+
+	gpuUsage := 90.0
+	reqBody := types.RecordMetricsRequest{
+		CpuUsage:      75.5,
+		MemoryUsageMb: 4096,
+		GpuUsage:      &gpuUsage,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/test-job-1/metrics", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Changed-By", "api")
+	req.Header.Set("X-Source", "test")
+	rec := httptest.NewRecorder()
+
+	srv.RecordJobMetrics(rec, req, "test-job-1")
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp types.MetricSample
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.GpuUsage == nil || *resp.GpuUsage != 90.0 {
+		t.Errorf("expected GPU usage 90.0, got %v", resp.GpuUsage)
+	}
+}
+
+func TestDeleteJob_StorageError(t *testing.T) {
+	store := newMockStorage()
+	store.deleteErr = errors.New("database error")
+	store.jobs["test-job-1"] = &storage.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodDelete, "/v1/jobs/test-job-1", nil)
+	rec := httptest.NewRecorder()
+
+	params := server.DeleteJobParams{XChangedBy: "api", XSource: "test"}
+	srv.DeleteJob(rec, req, "test-job-1", params)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
+func TestUpdateJob_StorageError(t *testing.T) {
+	store := newMockStorage()
+	store.updateErr = errors.New("database error")
+	store.jobs["test-job-1"] = &storage.Job{
+		ID:        "test-job-1",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	}
+	srv := setupTestServer(store)
+
+	state := types.JobState("completed")
+	reqBody := types.UpdateJobRequest{State: &state}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/test-job-1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	params := server.UpdateJobParams{XChangedBy: "api", XSource: "test"}
+	srv.UpdateJob(rec, req, "test-job-1", params)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
+func TestGetJobMetrics_WithFilters(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	store.jobs["test-job-1"] = &storage.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
+	store.samples["test-job-1"] = []*storage.MetricSample{
+		{JobID: "test-job-1", Timestamp: time.Now(), CPUUsage: 50.0, MemoryUsageMB: 2048},
+	}
+
+	startTime := time.Now().Add(-1 * time.Hour)
+	endTime := time.Now()
+	limit := 100
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/test-job-1/metrics", nil)
+	rec := httptest.NewRecorder()
+
+	params := server.GetJobMetricsParams{
+		StartTime: &startTime,
+		EndTime:   &endTime,
+		Limit:     &limit,
+	}
+	srv.GetJobMetrics(rec, req, "test-job-1", params)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+}
+
+func TestGetJobMetrics_StorageError(t *testing.T) {
+	store := newMockStorage()
+	store.metricsErr = errors.New("database error")
+	store.jobs["test-job-1"] = &storage.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/test-job-1/metrics", nil)
+	rec := httptest.NewRecorder()
+
+	params := server.GetJobMetricsParams{}
+	srv.GetJobMetrics(rec, req, "test-job-1", params)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
+func TestRecordJobMetrics_StorageError(t *testing.T) {
+	store := newMockStorage()
+	store.recordErr = errors.New("database error")
+	store.jobs["test-job-1"] = &storage.Job{
+		ID:        "test-job-1",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	}
+	srv := setupTestServer(store)
+
+	reqBody := types.RecordMetricsRequest{
+		CpuUsage:      75.5,
+		MemoryUsageMb: 4096,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/test-job-1/metrics", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Changed-By", "api")
+	req.Header.Set("X-Source", "test")
+	rec := httptest.NewRecorder()
+
+	srv.RecordJobMetrics(rec, req, "test-job-1")
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
+func TestRecordJobMetrics_InvalidJSON(t *testing.T) {
+	store := newMockStorage()
+	store.jobs["test-job-1"] = &storage.Job{
+		ID:        "test-job-1",
+		User:      "testuser",
+		Nodes:     []string{"node-1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now(),
+	}
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/test-job-1/metrics", bytes.NewReader([]byte("invalid")))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Changed-By", "api")
+	req.Header.Set("X-Source", "test")
+	rec := httptest.NewRecorder()
+
+	srv.RecordJobMetrics(rec, req, "test-job-1")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+}

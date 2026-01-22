@@ -294,8 +294,8 @@ go generate ./...
 
 ### Running Tests
 
-- [Unit testing](docs/development.md#Running-Unit-Tests)
-- [End-to-end testing](docs/development.md#Running-End-to-End-Tests)
+- [Unit testing](docs/development.md#running-unit-tests)
+- [End-to-end testing](docs/development.md#running-end-to-end-integration-tests)
 
 
 
