@@ -147,7 +147,11 @@ func scanJobRow(job *Job, nodesStr string, nodeCount sql.NullInt64, endTime sql.
 	avgCPU, maxCPU, avgGPU, maxGPU sql.NullFloat64,
 	maxMem sql.NullInt64) {
 
-	job.Nodes = strings.Split(nodesStr, ",")
+	if nodesStr != "" {
+		job.Nodes = strings.Split(nodesStr, ",")
+	} else {
+		job.Nodes = []string{}
+	}
 	if nodeCount.Valid {
 		job.NodeCount = int(nodeCount.Int64)
 	}
