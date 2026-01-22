@@ -7,11 +7,26 @@ import (
 	"time"
 )
 
+// Defines values for GPUVendor.
+const (
+	Amd    GPUVendor = "amd"
+	Mixed  GPUVendor = "mixed"
+	None   GPUVendor = "none"
+	Nvidia GPUVendor = "nvidia"
+)
+
 // Defines values for HealthResponseStatus.
 const (
 	Degraded  HealthResponseStatus = "degraded"
 	Healthy   HealthResponseStatus = "healthy"
 	Unhealthy HealthResponseStatus = "unhealthy"
+)
+
+// Defines values for JobEventResponseStatus.
+const (
+	Created JobEventResponseStatus = "created"
+	Skipped JobEventResponseStatus = "skipped"
+	Updated JobEventResponseStatus = "updated"
 )
 
 // Defines values for JobState.
@@ -56,6 +71,9 @@ type ErrorResponse struct {
 	// Message Human-readable error message
 	Message string `json:"message"`
 }
+
+// GPUVendor GPU vendor type
+type GPUVendor string
 
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
@@ -160,6 +178,39 @@ type Job struct {
 	User string `json:"user"`
 }
 
+// JobEventResponse defines model for JobEventResponse.
+type JobEventResponse struct {
+	// JobId Job identifier
+	JobId string `json:"job_id"`
+
+	// Message Optional message with details
+	Message *string `json:"message,omitempty"`
+
+	// Status Result of processing the event
+	Status JobEventResponseStatus `json:"status"`
+}
+
+// JobEventResponseStatus Result of processing the event
+type JobEventResponseStatus string
+
+// JobFinishedEvent Event emitted by Slurm epilog script when a job finishes
+type JobFinishedEvent struct {
+	// ExitCode Job exit code
+	ExitCode *int `json:"exit_code,omitempty"`
+
+	// FinalState Current state of the job
+	FinalState JobState `json:"final_state"`
+
+	// JobId Slurm job ID
+	JobId string `json:"job_id"`
+
+	// Signal Signal that killed the job (if applicable)
+	Signal *int `json:"signal,omitempty"`
+
+	// Timestamp Event timestamp
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // JobListResponse defines model for JobListResponse.
 type JobListResponse struct {
 	Jobs []Job `json:"jobs"`
@@ -182,6 +233,45 @@ type JobMetricsResponse struct {
 
 	// Total Total number of samples returned
 	Total int `json:"total"`
+}
+
+// JobStartedEvent Event emitted by Slurm prolog script when a job starts
+type JobStartedEvent struct {
+	// Account Slurm account name
+	Account *string `json:"account,omitempty"`
+
+	// CgroupPath Path to the job's cgroup
+	CgroupPath *string `json:"cgroup_path,omitempty"`
+
+	// CpuAllocation Number of CPUs allocated
+	CpuAllocation *int `json:"cpu_allocation,omitempty"`
+
+	// GpuAllocation Number of GPUs allocated
+	GpuAllocation *int `json:"gpu_allocation,omitempty"`
+
+	// GpuDevices GPU device identifiers (UUIDs or card IDs)
+	GpuDevices *[]string `json:"gpu_devices,omitempty"`
+
+	// GpuVendor GPU vendor type
+	GpuVendor *GPUVendor `json:"gpu_vendor,omitempty"`
+
+	// JobId Slurm job ID
+	JobId string `json:"job_id"`
+
+	// MemoryAllocationMb Memory allocated in MB
+	MemoryAllocationMb *int `json:"memory_allocation_mb,omitempty"`
+
+	// NodeList List of nodes allocated to the job
+	NodeList []string `json:"node_list"`
+
+	// Partition Slurm partition name
+	Partition *string `json:"partition,omitempty"`
+
+	// Timestamp Event timestamp
+	Timestamp time.Time `json:"timestamp"`
+
+	// User User who submitted the job
+	User string `json:"user"`
 }
 
 // JobState Current state of the job
@@ -345,6 +435,12 @@ type GetJobMetricsParams struct {
 	// Limit Maximum number of samples to return
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
+
+// JobFinishedEventJSONRequestBody defines body for JobFinishedEvent for application/json ContentType.
+type JobFinishedEventJSONRequestBody = JobFinishedEvent
+
+// JobStartedEventJSONRequestBody defines body for JobStartedEvent for application/json ContentType.
+type JobStartedEventJSONRequestBody = JobStartedEvent
 
 // CreateJobJSONRequestBody defines body for CreateJob for application/json ContentType.
 type CreateJobJSONRequestBody = CreateJobRequest

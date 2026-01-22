@@ -104,6 +104,7 @@ services:
   # - slurmd (compute daemon)
   # - slurmdbd (database daemon)  
   # - slurmrestd (REST API on port 6820)
+  # - prolog/epilog scripts for job lifecycle events
   slurm:
     build:
       context: ./config/slurm
@@ -113,10 +114,21 @@ services:
     ports:
       - "6820:6820"
     privileged: true  # Required for slurmd cgroup management
+    environment:
+      # Point prolog/epilog scripts to the observability service
+      - OBSERVABILITY_API_URL=http://app:8080
+      - OBSERVABILITY_TIMEOUT=10
+    volumes:
+      # Mount prolog/epilog scripts for job lifecycle events
+      - ./scripts/slurm/prolog.sh:/etc/slurm/prolog.d/50-observability.sh:ro
+      - ./scripts/slurm/epilog.sh:/etc/slurm/epilog.d/50-observability.sh:ro
     networks:
       - hpc-network
     profiles:
       - slurm
+    # Note: No depends_on for app - Slurm starts independently.
+    # The app waits for Slurm (waitForSlurmReady), avoiding circular dependency.
+    # Prolog/epilog scripts handle the case where app isn't ready yet.
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:6820/openapi/v3"]
       interval: 10s

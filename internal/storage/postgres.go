@@ -79,6 +79,11 @@ func (s *PostgresStorage) Migrate() error {
 		max_memory_usage_mb BIGINT DEFAULT 0,
 		avg_gpu_usage DOUBLE PRECISION DEFAULT 0,
 		max_gpu_usage DOUBLE PRECISION DEFAULT 0,
+		-- Cgroup and GPU tracking fields for real resource monitoring
+		cgroup_path TEXT,
+		gpu_count INTEGER DEFAULT 0,
+		gpu_vendor TEXT,
+		gpu_devices TEXT,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
@@ -119,7 +124,25 @@ func (s *PostgresStorage) Migrate() error {
 	`
 
 	_, err := s.db.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Apply schema migrations for new columns
+	migrations := []string{
+		`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS cgroup_path TEXT`,
+		`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS gpu_count INTEGER DEFAULT 0`,
+		`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS gpu_vendor TEXT`,
+		`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS gpu_devices TEXT`,
+	}
+
+	for _, migration := range migrations {
+		if _, err := s.db.Exec(migration); err != nil {
+			// Ignore errors for already existing columns (different PostgreSQL versions may differ)
+		}
+	}
+
+	return nil
 }
 
 func (s *PostgresStorage) insertJobAuditEvent(ctx context.Context, tx *sql.Tx, job *Job, changeType string, changedAt time.Time, audit *JobAuditInfo) error {
@@ -266,6 +289,8 @@ func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id strin
 	var sampleCount sql.NullInt64
 	var avgCPU, maxCPU, avgGPU, maxGPU sql.NullFloat64
 	var maxMem sql.NullInt64
+	var cgroupPath, gpuVendor, gpuDevicesStr sql.NullString
+	var gpuCount sql.NullInt64
 
 	err := tx.QueryRowContext(ctx, `
 		SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,
@@ -274,6 +299,7 @@ func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id strin
 		       requested_cpus, allocated_cpus, requested_memory_mb, allocated_memory_mb, requested_gpus, allocated_gpus,
 		       cluster_name, scheduler_instance, ingest_version,
 		       last_sample_at, sample_count, avg_cpu_usage, max_cpu_usage, max_memory_usage_mb, avg_gpu_usage, max_gpu_usage,
+		       cgroup_path, gpu_count, gpu_vendor, gpu_devices,
 		       created_at, updated_at
 		FROM jobs WHERE id = $1
 	`, id).Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &job.State, &job.StartTime, &endTime,
@@ -282,6 +308,7 @@ func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id strin
 		&requestedCPUs, &allocatedCPUs, &requestedMemMB, &allocatedMemMB, &requestedGPUs, &allocatedGPUs,
 		&clusterName, &schedulerInstance, &ingestVersion,
 		&lastSampleAt, &sampleCount, &avgCPU, &maxCPU, &maxMem, &avgGPU, &maxGPU,
+		&cgroupPath, &gpuCount, &gpuVendor, &gpuDevicesStr,
 		&job.CreatedAt, &job.UpdatedAt)
 
 	if err == sql.ErrNoRows {
@@ -301,6 +328,20 @@ func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id strin
 		sampleCount,
 		avgCPU, maxCPU, avgGPU, maxGPU,
 		maxMem)
+
+	// Handle cgroup and GPU fields
+	if cgroupPath.Valid {
+		job.CgroupPath = cgroupPath.String
+	}
+	if gpuCount.Valid {
+		job.GPUCount = int(gpuCount.Int64)
+	}
+	if gpuVendor.Valid {
+		job.GPUVendor = GPUVendor(gpuVendor.String)
+	}
+	if gpuDevicesStr.Valid && gpuDevicesStr.String != "" {
+		job.GPUDevices = strings.Split(gpuDevicesStr.String, ",")
+	}
 
 	return job, nil
 }
@@ -367,6 +408,7 @@ func (s *PostgresStorage) CreateJob(ctx context.Context, job *Job) (err error) {
 	}
 
 	nodesStr := strings.Join(job.Nodes, ",")
+	gpuDevicesStr := strings.Join(job.GPUDevices, ",")
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO jobs (
 			id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,
@@ -375,15 +417,17 @@ func (s *PostgresStorage) CreateJob(ctx context.Context, job *Job) (err error) {
 			requested_cpus, allocated_cpus, requested_memory_mb, allocated_memory_mb, requested_gpus, allocated_gpus,
 			cluster_name, scheduler_instance, ingest_version,
 			last_sample_at, sample_count, avg_cpu_usage, max_cpu_usage, max_memory_usage_mb, avg_gpu_usage, max_gpu_usage,
+			cgroup_path, gpu_count, gpu_vendor, gpu_devices,
 			created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44)
 	`, job.ID, job.User, nodesStr, job.NodeCount, job.State, job.StartTime, job.EndTime, job.RuntimeSeconds,
 		job.CPUUsage, job.MemoryUsageMB, job.GPUUsage,
 		externalJobID, schedulerType, rawState, partition, account, qos, priority, submitTime, exitCode, stateReason, timeLimitMins,
 		job.RequestedCPUs, job.AllocatedCPUs, job.RequestedMemMB, job.AllocatedMemMB, job.RequestedGPUs, job.AllocatedGPUs,
 		job.ClusterName, job.SchedulerInst, job.IngestVersion,
 		job.LastSampleAt, job.SampleCount, job.AvgCPUUsage, job.MaxCPUUsage, job.MaxMemUsageMB, job.AvgGPUUsage, job.MaxGPUUsage,
+		job.CgroupPath, job.GPUCount, string(job.GPUVendor), gpuDevicesStr,
 		job.CreatedAt, job.UpdatedAt)
 	if err != nil {
 		return err
@@ -415,6 +459,8 @@ func (s *PostgresStorage) GetJob(ctx context.Context, id string) (*Job, error) {
 	var sampleCount sql.NullInt64
 	var avgCPU, maxCPU, avgGPU, maxGPU sql.NullFloat64
 	var maxMem sql.NullInt64
+	var cgroupPath, gpuVendor, gpuDevicesStr sql.NullString
+	var gpuCount sql.NullInt64
 
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,
@@ -423,6 +469,7 @@ func (s *PostgresStorage) GetJob(ctx context.Context, id string) (*Job, error) {
 		       requested_cpus, allocated_cpus, requested_memory_mb, allocated_memory_mb, requested_gpus, allocated_gpus,
 		       cluster_name, scheduler_instance, ingest_version,
 		       last_sample_at, sample_count, avg_cpu_usage, max_cpu_usage, max_memory_usage_mb, avg_gpu_usage, max_gpu_usage,
+		       cgroup_path, gpu_count, gpu_vendor, gpu_devices,
 		       created_at, updated_at
 		FROM jobs WHERE id = $1
 	`, id).Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &job.State, &job.StartTime, &endTime,
@@ -431,6 +478,7 @@ func (s *PostgresStorage) GetJob(ctx context.Context, id string) (*Job, error) {
 		&requestedCPUs, &allocatedCPUs, &requestedMemMB, &allocatedMemMB, &requestedGPUs, &allocatedGPUs,
 		&clusterName, &schedulerInstance, &ingestVersion,
 		&lastSampleAt, &sampleCount, &avgCPU, &maxCPU, &maxMem, &avgGPU, &maxGPU,
+		&cgroupPath, &gpuCount, &gpuVendor, &gpuDevicesStr,
 		&job.CreatedAt, &job.UpdatedAt)
 
 	if err == sql.ErrNoRows {
@@ -450,6 +498,20 @@ func (s *PostgresStorage) GetJob(ctx context.Context, id string) (*Job, error) {
 		sampleCount,
 		avgCPU, maxCPU, avgGPU, maxGPU,
 		maxMem)
+
+	// Handle cgroup and GPU fields
+	if cgroupPath.Valid {
+		job.CgroupPath = cgroupPath.String
+	}
+	if gpuCount.Valid {
+		job.GPUCount = int(gpuCount.Int64)
+	}
+	if gpuVendor.Valid {
+		job.GPUVendor = GPUVendor(gpuVendor.String)
+	}
+	if gpuDevicesStr.Valid && gpuDevicesStr.String != "" {
+		job.GPUDevices = strings.Split(gpuDevicesStr.String, ",")
+	}
 
 	return job, nil
 }
@@ -515,6 +577,25 @@ func (s *PostgresStorage) UpdateJob(ctx context.Context, job *Job) (err error) {
 	}
 
 	nodesStr := strings.Join(job.Nodes, ",")
+
+	// Prepare cgroup and GPU fields for UPDATE
+	var cgroupPath, gpuVendor, gpuDevicesStr *string
+	var gpuCount *int
+	if job.CgroupPath != "" {
+		cgroupPath = &job.CgroupPath
+	}
+	if job.GPUCount > 0 {
+		gpuCount = &job.GPUCount
+	}
+	if job.GPUVendor != "" && job.GPUVendor != GPUVendorNone {
+		v := string(job.GPUVendor)
+		gpuVendor = &v
+	}
+	if len(job.GPUDevices) > 0 {
+		d := strings.Join(job.GPUDevices, ",")
+		gpuDevicesStr = &d
+	}
+
 	result, err := tx.ExecContext(ctx, `
 		UPDATE jobs SET user_name = $1, nodes = $2, node_count = $3, state = $4, start_time = $5, end_time = $6,
 		                runtime_seconds = $7, cpu_usage = $8, memory_usage_mb = $9, gpu_usage = $10,
@@ -523,13 +604,15 @@ func (s *PostgresStorage) UpdateJob(ctx context.Context, job *Job) (err error) {
 		                requested_cpus = $22, allocated_cpus = $23, requested_memory_mb = $24, allocated_memory_mb = $25,
 		                requested_gpus = $26, allocated_gpus = $27,
 		                cluster_name = $28, scheduler_instance = $29, ingest_version = $30,
-		                updated_at = $31
-		WHERE id = $32
+		                cgroup_path = $31, gpu_count = $32, gpu_vendor = $33, gpu_devices = $34,
+		                updated_at = $35
+		WHERE id = $36
 	`, job.User, nodesStr, job.NodeCount, job.State, job.StartTime, job.EndTime, job.RuntimeSeconds,
 		job.CPUUsage, job.MemoryUsageMB, job.GPUUsage,
 		externalJobID, schedulerType, rawState, partition, account, qos, priority, submitTime, exitCode, stateReason, timeLimitMins,
 		job.RequestedCPUs, job.AllocatedCPUs, job.RequestedMemMB, job.AllocatedMemMB, job.RequestedGPUs, job.AllocatedGPUs,
 		job.ClusterName, job.SchedulerInst, job.IngestVersion,
+		cgroupPath, gpuCount, gpuVendor, gpuDevicesStr,
 		job.UpdatedAt, job.ID)
 	if err != nil {
 		return err
@@ -621,6 +704,25 @@ func (s *PostgresStorage) UpsertJob(ctx context.Context, job *Job) (err error) {
 	}
 
 	nodesStr := strings.Join(job.Nodes, ",")
+
+	// Prepare cgroup and GPU fields for UPSERT
+	var cgroupPath, gpuVendor, gpuDevicesStr *string
+	var gpuCount *int
+	if job.CgroupPath != "" {
+		cgroupPath = &job.CgroupPath
+	}
+	if job.GPUCount > 0 {
+		gpuCount = &job.GPUCount
+	}
+	if job.GPUVendor != "" && job.GPUVendor != GPUVendorNone {
+		v := string(job.GPUVendor)
+		gpuVendor = &v
+	}
+	if len(job.GPUDevices) > 0 {
+		d := strings.Join(job.GPUDevices, ",")
+		gpuDevicesStr = &d
+	}
+
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO jobs (
 			id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,
@@ -629,9 +731,10 @@ func (s *PostgresStorage) UpsertJob(ctx context.Context, job *Job) (err error) {
 			requested_cpus, allocated_cpus, requested_memory_mb, allocated_memory_mb, requested_gpus, allocated_gpus,
 			cluster_name, scheduler_instance, ingest_version,
 			last_sample_at, sample_count, avg_cpu_usage, max_cpu_usage, max_memory_usage_mb, avg_gpu_usage, max_gpu_usage,
+			cgroup_path, gpu_count, gpu_vendor, gpu_devices,
 			created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44)
 		ON CONFLICT (id) DO UPDATE SET
 			user_name = EXCLUDED.user_name,
 			nodes = EXCLUDED.nodes,
@@ -663,6 +766,10 @@ func (s *PostgresStorage) UpsertJob(ctx context.Context, job *Job) (err error) {
 			cluster_name = EXCLUDED.cluster_name,
 			scheduler_instance = EXCLUDED.scheduler_instance,
 			ingest_version = EXCLUDED.ingest_version,
+			cgroup_path = COALESCE(EXCLUDED.cgroup_path, jobs.cgroup_path),
+			gpu_count = COALESCE(EXCLUDED.gpu_count, jobs.gpu_count),
+			gpu_vendor = COALESCE(EXCLUDED.gpu_vendor, jobs.gpu_vendor),
+			gpu_devices = COALESCE(EXCLUDED.gpu_devices, jobs.gpu_devices),
 			updated_at = EXCLUDED.updated_at
 	`, job.ID, job.User, nodesStr, job.NodeCount, job.State, job.StartTime, job.EndTime, job.RuntimeSeconds,
 		job.CPUUsage, job.MemoryUsageMB, job.GPUUsage,
@@ -670,6 +777,7 @@ func (s *PostgresStorage) UpsertJob(ctx context.Context, job *Job) (err error) {
 		job.RequestedCPUs, job.AllocatedCPUs, job.RequestedMemMB, job.AllocatedMemMB, job.RequestedGPUs, job.AllocatedGPUs,
 		job.ClusterName, job.SchedulerInst, job.IngestVersion,
 		job.LastSampleAt, job.SampleCount, job.AvgCPUUsage, job.MaxCPUUsage, job.MaxMemUsageMB, job.AvgGPUUsage, job.MaxGPUUsage,
+		cgroupPath, gpuCount, gpuVendor, gpuDevicesStr,
 		job.CreatedAt, job.UpdatedAt)
 	if err != nil {
 		return err
@@ -780,6 +888,7 @@ func (s *PostgresStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Jo
 		       requested_cpus, allocated_cpus, requested_memory_mb, allocated_memory_mb, requested_gpus, allocated_gpus,
 		       cluster_name, scheduler_instance, ingest_version,
 		       last_sample_at, sample_count, avg_cpu_usage, max_cpu_usage, max_memory_usage_mb, avg_gpu_usage, max_gpu_usage,
+		       cgroup_path, gpu_count, gpu_vendor, gpu_devices,
 		       created_at, updated_at
 		FROM jobs %s
 		ORDER BY start_time DESC
@@ -809,6 +918,8 @@ func (s *PostgresStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Jo
 		var sampleCount sql.NullInt64
 		var avgCPU, maxCPU, avgGPU, maxGPU sql.NullFloat64
 		var maxMem sql.NullInt64
+		var cgroupPath, gpuVendor, gpuDevicesStr sql.NullString
+		var gpuCount sql.NullInt64
 
 		if err := rows.Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &job.State, &job.StartTime, &endTime,
 			&job.RuntimeSeconds, &job.CPUUsage, &job.MemoryUsageMB, &gpuUsage,
@@ -816,6 +927,7 @@ func (s *PostgresStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Jo
 			&requestedCPUs, &allocatedCPUs, &requestedMemMB, &allocatedMemMB, &requestedGPUs, &allocatedGPUs,
 			&clusterName, &schedulerInstance, &ingestVersion,
 			&lastSampleAt, &sampleCount, &avgCPU, &maxCPU, &maxMem, &avgGPU, &maxGPU,
+			&cgroupPath, &gpuCount, &gpuVendor, &gpuDevicesStr,
 			&job.CreatedAt, &job.UpdatedAt); err != nil {
 			return nil, 0, err
 		}
@@ -830,6 +942,20 @@ func (s *PostgresStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Jo
 			sampleCount,
 			avgCPU, maxCPU, avgGPU, maxGPU,
 			maxMem)
+
+		// Set cgroup and GPU fields
+		if cgroupPath.Valid {
+			job.CgroupPath = cgroupPath.String
+		}
+		if gpuCount.Valid {
+			job.GPUCount = int(gpuCount.Int64)
+		}
+		if gpuVendor.Valid {
+			job.GPUVendor = GPUVendor(gpuVendor.String)
+		}
+		if gpuDevicesStr.Valid && gpuDevicesStr.String != "" {
+			job.GPUDevices = strings.Split(gpuDevicesStr.String, ",")
+		}
 
 		jobs = append(jobs, job)
 	}
@@ -846,6 +972,7 @@ func (s *PostgresStorage) GetAllJobs(ctx context.Context) ([]*Job, error) {
 		       requested_cpus, allocated_cpus, requested_memory_mb, allocated_memory_mb, requested_gpus, allocated_gpus,
 		       cluster_name, scheduler_instance, ingest_version,
 		       last_sample_at, sample_count, avg_cpu_usage, max_cpu_usage, max_memory_usage_mb, avg_gpu_usage, max_gpu_usage,
+		       cgroup_path, gpu_count, gpu_vendor, gpu_devices,
 		       created_at, updated_at
 		FROM jobs
 	`)
@@ -870,6 +997,8 @@ func (s *PostgresStorage) GetAllJobs(ctx context.Context) ([]*Job, error) {
 		var sampleCount sql.NullInt64
 		var avgCPU, maxCPU, avgGPU, maxGPU sql.NullFloat64
 		var maxMem sql.NullInt64
+		var cgroupPath, gpuVendor, gpuDevicesStr sql.NullString
+		var gpuCount sql.NullInt64
 
 		if err := rows.Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &job.State, &job.StartTime, &endTime,
 			&job.RuntimeSeconds, &job.CPUUsage, &job.MemoryUsageMB, &gpuUsage,
@@ -877,6 +1006,7 @@ func (s *PostgresStorage) GetAllJobs(ctx context.Context) ([]*Job, error) {
 			&requestedCPUs, &allocatedCPUs, &requestedMemMB, &allocatedMemMB, &requestedGPUs, &allocatedGPUs,
 			&clusterName, &schedulerInstance, &ingestVersion,
 			&lastSampleAt, &sampleCount, &avgCPU, &maxCPU, &maxMem, &avgGPU, &maxGPU,
+			&cgroupPath, &gpuCount, &gpuVendor, &gpuDevicesStr,
 			&job.CreatedAt, &job.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -891,6 +1021,20 @@ func (s *PostgresStorage) GetAllJobs(ctx context.Context) ([]*Job, error) {
 			sampleCount,
 			avgCPU, maxCPU, avgGPU, maxGPU,
 			maxMem)
+
+		// Set cgroup and GPU fields
+		if cgroupPath.Valid {
+			job.CgroupPath = cgroupPath.String
+		}
+		if gpuCount.Valid {
+			job.GPUCount = int(gpuCount.Int64)
+		}
+		if gpuVendor.Valid {
+			job.GPUVendor = GPUVendor(gpuVendor.String)
+		}
+		if gpuDevicesStr.Valid && gpuDevicesStr.String != "" {
+			job.GPUDevices = strings.Split(gpuDevicesStr.String, ",")
+		}
 
 		jobs = append(jobs, job)
 	}

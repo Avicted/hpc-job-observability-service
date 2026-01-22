@@ -6,11 +6,11 @@ A microservice for tracking and monitoring HPC (High Performance Computing) job 
 
 ## Features
 
-- **Slurm Integration**: Native support for Slurm via its REST API
-- **Job Management**: Create, update, list, and delete HPC jobs
-- **Resource Metrics**: Track CPU, memory, and GPU usage over time
+- **Slurm Integration**: Event-based integration via prolog/epilog scripts and REST API
+- **Job Lifecycle Events**: Real-time job creation and completion notifications
+- **Resource Metrics**: Track CPU, memory, and GPU usage over time via cgroups
 - **Prometheus Integration**: Export metrics in Prometheus format with best practices
-- **Database Support**: PostgreSQL storage backend
+- **Database Support**: PostgreSQL storage backend with full audit trail
 - **Demo Data**: Seed sample data for testing and demonstration
 - **Configurable Retention**: Automatic cleanup of old metrics
 
@@ -19,13 +19,13 @@ A microservice for tracking and monitoring HPC (High Performance Computing) job 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   HPC Cluster   │────▶│  Observability  │────▶│   Prometheus    │
-│   Schedulers    │     │    Service      │     │   + Grafana     │
+│  (Slurm + Jobs) │     │    Service      │     │   + Grafana     │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
-                               │
-                               ▼
-                        ┌─────────────────┐
-                        │   PostgreSQL    │
-                        └─────────────────┘
+        │                       │
+        │ Events:               ▼
+        │ • prolog (start)  ┌─────────────────┐
+        │ • epilog (finish) │   PostgreSQL    │
+        └──────────────────▶└─────────────────┘
 ```
 
 ## Quick Start
@@ -137,7 +137,14 @@ Use the `SEED_DEMO` environment variable to seed demo data on startup (mock back
 
 ## Scheduler Integration (SLURM)
 
-For detailed integration documentation, see [Architecture - Scheduler Integration](docs/architecture.md#scheduler-integration).
+The service uses an **event-based architecture** for Slurm integration:
+- **Prolog script**: Creates jobs when they start (`/v1/events/job-started`)
+- **Epilog script**: Updates jobs when they complete (`/v1/events/job-finished`)
+- **Collector**: Gathers real-time metrics from running jobs via cgroups
+
+For detailed integration documentation, see:
+- [Slurm Integration Guide](docs/slurm-integration.md) - Step-by-step setup
+- [Architecture - Scheduler Integration](docs/architecture.md#scheduler-integration)
 
 ## Documentation
 

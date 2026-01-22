@@ -34,6 +34,22 @@ type Exporter struct {
 	// Labels: job_id, user, node
 	jobGPUUsagePercent *prometheus.GaugeVec
 
+	// Per-GPU device utilization
+	// Labels: job_id, node, gpu_vendor, gpu_id
+	jobGPUDeviceUtilization *prometheus.GaugeVec
+
+	// Per-GPU device memory usage in bytes
+	// Labels: job_id, node, gpu_vendor, gpu_id
+	jobGPUDeviceMemoryBytes *prometheus.GaugeVec
+
+	// Per-GPU device power usage in watts
+	// Labels: job_id, node, gpu_vendor, gpu_id
+	jobGPUDevicePowerWatts *prometheus.GaugeVec
+
+	// Per-GPU device temperature in celsius
+	// Labels: job_id, node, gpu_vendor, gpu_id
+	jobGPUDeviceTemperature *prometheus.GaugeVec
+
 	// Job state counter - counts jobs by state
 	// Labels: state
 	jobStateTotal *prometheus.GaugeVec
@@ -128,6 +144,46 @@ func NewExporterWithScheduler(store storage.Storage, sched scheduler.JobSource) 
 				Help:      "Current GPU usage of the job as a percentage (0-100)",
 			},
 			[]string{"job_id", "user", "node"},
+		),
+
+		jobGPUDeviceUtilization: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "job",
+				Name:      "gpu_device_utilization_percent",
+				Help:      "GPU device utilization percentage (0-100)",
+			},
+			[]string{"job_id", "node", "gpu_vendor", "gpu_id"},
+		),
+
+		jobGPUDeviceMemoryBytes: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "job",
+				Name:      "gpu_device_memory_used_bytes",
+				Help:      "GPU device memory usage in bytes",
+			},
+			[]string{"job_id", "node", "gpu_vendor", "gpu_id"},
+		),
+
+		jobGPUDevicePowerWatts: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "job",
+				Name:      "gpu_device_power_watts",
+				Help:      "GPU device power consumption in watts",
+			},
+			[]string{"job_id", "node", "gpu_vendor", "gpu_id"},
+		),
+
+		jobGPUDeviceTemperature: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "hpc",
+				Subsystem: "job",
+				Name:      "gpu_device_temperature_celsius",
+				Help:      "GPU device temperature in celsius",
+			},
+			[]string{"job_id", "node", "gpu_vendor", "gpu_id"},
 		),
 
 		jobStateTotal: prometheus.NewGaugeVec(
@@ -250,6 +306,10 @@ func (e *Exporter) Register(registry prometheus.Registerer) error {
 		e.jobCPUUsagePercent,
 		e.jobMemoryUsageBytes,
 		e.jobGPUUsagePercent,
+		e.jobGPUDeviceUtilization,
+		e.jobGPUDeviceMemoryBytes,
+		e.jobGPUDevicePowerWatts,
+		e.jobGPUDeviceTemperature,
 		e.jobStateTotal,
 		e.jobsTotal,
 		e.lastCollectTime,
@@ -284,6 +344,10 @@ func (e *Exporter) Collect(ctx context.Context) error {
 	e.jobCPUUsagePercent.Reset()
 	e.jobMemoryUsageBytes.Reset()
 	e.jobGPUUsagePercent.Reset()
+	e.jobGPUDeviceUtilization.Reset()
+	e.jobGPUDeviceMemoryBytes.Reset()
+	e.jobGPUDevicePowerWatts.Reset()
+	e.jobGPUDeviceTemperature.Reset()
 	e.jobStateTotal.Reset()
 	e.nodeCPUUsagePercent.Reset()
 	e.nodeMemoryUsageBytes.Reset()
@@ -464,6 +528,49 @@ func (e *Exporter) UpdateJobMetrics(job *storage.Job) {
 	if job.GPUUsage != nil {
 		e.jobGPUUsagePercent.With(labels).Set(*job.GPUUsage)
 	}
+}
+
+// GPUDeviceMetric represents metrics for a single GPU device.
+type GPUDeviceMetric struct {
+	JobID          string
+	Node           string
+	Vendor         string // "nvidia" or "amd"
+	DeviceID       string // GPU device ID (e.g., "0", "1")
+	Utilization    float64
+	MemoryUsedMB   int64
+	PowerWatts     float64
+	TemperatureCel float64
+}
+
+// UpdateGPUDeviceMetrics updates metrics for individual GPU devices.
+func (e *Exporter) UpdateGPUDeviceMetrics(metrics []GPUDeviceMetric) {
+	for _, m := range metrics {
+		labels := prometheus.Labels{
+			"job_id":     m.JobID,
+			"node":       m.Node,
+			"gpu_vendor": m.Vendor,
+			"gpu_id":     m.DeviceID,
+		}
+
+		e.jobGPUDeviceUtilization.With(labels).Set(m.Utilization)
+		e.jobGPUDeviceMemoryBytes.With(labels).Set(float64(m.MemoryUsedMB) * 1024 * 1024)
+		if m.PowerWatts > 0 {
+			e.jobGPUDevicePowerWatts.With(labels).Set(m.PowerWatts)
+		}
+		if m.TemperatureCel > 0 {
+			e.jobGPUDeviceTemperature.With(labels).Set(m.TemperatureCel)
+		}
+	}
+}
+
+// ClearGPUDeviceMetrics removes GPU device metrics for a specific job.
+func (e *Exporter) ClearGPUDeviceMetrics(jobID string) {
+	// Reset all GPU device gauges - they will be repopulated on next collection
+	// This is a simple approach; for more granular control, we'd need to track labels
+	e.jobGPUDeviceUtilization.Reset()
+	e.jobGPUDeviceMemoryBytes.Reset()
+	e.jobGPUDevicePowerWatts.Reset()
+	e.jobGPUDeviceTemperature.Reset()
 }
 
 // IncrementJobsTotal increments the total jobs counter.

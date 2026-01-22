@@ -1387,3 +1387,455 @@ func TestRecordJobMetrics_InvalidJSON(t *testing.T) {
 		t.Errorf("expected status 400, got %d", rec.Code)
 	}
 }
+
+// =========================================================================
+// Lifecycle Event Handler Tests
+// =========================================================================
+
+func TestJobStartedEvent_Success(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	gpuVendor := types.Nvidia
+	gpuAllocation := 2
+	cpuAllocation := 4
+	memAllocation := 16384
+	partition := "gpu"
+	account := "ml-team"
+	cgroupPath := "/sys/fs/cgroup/slurm/job_12345"
+	gpuDevices := []string{"GPU-0", "GPU-1"}
+
+	event := types.JobStartedEvent{
+		JobId:              "test-job-123",
+		User:               "testuser",
+		NodeList:           []string{"node1", "node2"},
+		Timestamp:          time.Now(),
+		GpuVendor:          &gpuVendor,
+		GpuAllocation:      &gpuAllocation,
+		CpuAllocation:      &cpuAllocation,
+		MemoryAllocationMb: &memAllocation,
+		Partition:          &partition,
+		Account:            &account,
+		CgroupPath:         &cgroupPath,
+		GpuDevices:         &gpuDevices,
+	}
+
+	body, _ := json.Marshal(event)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/job-started", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.JobStartedEvent(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp types.JobEventResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	if resp.Status != types.Created {
+		t.Errorf("expected status 'created', got '%s'", resp.Status)
+	}
+	if resp.JobId != "test-job-123" {
+		t.Errorf("expected job_id 'test-job-123', got '%s'", resp.JobId)
+	}
+
+	// Verify job was created in storage
+	job, err := store.GetJob(context.Background(), "test-job-123")
+	if err != nil {
+		t.Fatalf("failed to get job from storage: %v", err)
+	}
+
+	if job.User != "testuser" {
+		t.Errorf("expected user 'testuser', got '%s'", job.User)
+	}
+	if job.State != storage.JobStateRunning {
+		t.Errorf("expected state 'running', got '%s'", job.State)
+	}
+	if job.NodeCount != 2 {
+		t.Errorf("expected node_count 2, got %d", job.NodeCount)
+	}
+	if job.GPUVendor != storage.GPUVendor(gpuVendor) {
+		t.Errorf("expected gpu_vendor '%s', got '%s'", string(gpuVendor), job.GPUVendor)
+	}
+	if job.GPUCount != gpuAllocation {
+		t.Errorf("expected gpu_count %d, got %d", gpuAllocation, job.GPUCount)
+	}
+	if job.AllocatedCPUs != int64(cpuAllocation) {
+		t.Errorf("expected allocated_cpus %d, got %d", cpuAllocation, job.AllocatedCPUs)
+	}
+	if job.AllocatedMemMB != int64(memAllocation) {
+		t.Errorf("expected allocated_mem_mb %d, got %d", memAllocation, job.AllocatedMemMB)
+	}
+	if job.CgroupPath != cgroupPath {
+		t.Errorf("expected cgroup_path '%s', got '%s'", cgroupPath, job.CgroupPath)
+	}
+	if len(job.GPUDevices) != len(gpuDevices) {
+		t.Errorf("expected %d gpu_devices, got %d", len(gpuDevices), len(job.GPUDevices))
+	}
+	if job.Scheduler == nil {
+		t.Fatal("expected scheduler info to be set")
+	}
+	if job.Scheduler.Partition != partition {
+		t.Errorf("expected partition '%s', got '%s'", partition, job.Scheduler.Partition)
+	}
+	if job.Scheduler.Account != account {
+		t.Errorf("expected account '%s', got '%s'", account, job.Scheduler.Account)
+	}
+}
+
+func TestJobStartedEvent_Idempotent(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	event := types.JobStartedEvent{
+		JobId:     "test-job-idempotent",
+		User:      "testuser",
+		NodeList:  []string{"node1"},
+		Timestamp: time.Now(),
+	}
+
+	// First request
+	body, _ := json.Marshal(event)
+	req1 := httptest.NewRequest(http.MethodPost, "/v1/events/job-started", bytes.NewReader(body))
+	req1.Header.Set("Content-Type", "application/json")
+	rec1 := httptest.NewRecorder()
+	srv.JobStartedEvent(rec1, req1)
+
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("first request failed: %s", rec1.Body.String())
+	}
+
+	var resp1 types.JobEventResponse
+	json.Unmarshal(rec1.Body.Bytes(), &resp1)
+	if resp1.Status != types.Created {
+		t.Errorf("first request status should be 'created', got '%s'", resp1.Status)
+	}
+
+	// Second request (duplicate)
+	req2 := httptest.NewRequest(http.MethodPost, "/v1/events/job-started", bytes.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	rec2 := httptest.NewRecorder()
+	srv.JobStartedEvent(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("second request failed: %s", rec2.Body.String())
+	}
+
+	var resp2 types.JobEventResponse
+	json.Unmarshal(rec2.Body.Bytes(), &resp2)
+	if resp2.Status != types.Skipped {
+		t.Errorf("second request status should be 'skipped', got '%s'", resp2.Status)
+	}
+}
+
+func TestJobStartedEvent_MissingRequiredFields(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	testCases := []struct {
+		name  string
+		event types.JobStartedEvent
+	}{
+		{
+			name: "missing job_id",
+			event: types.JobStartedEvent{
+				User:      "testuser",
+				NodeList:  []string{"node1"},
+				Timestamp: time.Now(),
+			},
+		},
+		{
+			name: "missing user",
+			event: types.JobStartedEvent{
+				JobId:     "test-job",
+				NodeList:  []string{"node1"},
+				Timestamp: time.Now(),
+			},
+		},
+		{
+			name: "missing node_list",
+			event: types.JobStartedEvent{
+				JobId:     "test-job",
+				User:      "testuser",
+				Timestamp: time.Now(),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			body, _ := json.Marshal(tc.event)
+			req := httptest.NewRequest(http.MethodPost, "/v1/events/job-started", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			srv.JobStartedEvent(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("expected status 400, got %d: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestJobStartedEvent_InvalidJSON(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/job-started", bytes.NewReader([]byte("invalid")))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.JobStartedEvent(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestJobFinishedEvent_Success(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	// Create a job first
+	startTime := time.Now().Add(-5 * time.Minute)
+	store.jobs["test-job-finish"] = &storage.Job{
+		ID:        "test-job-finish",
+		User:      "testuser",
+		Nodes:     []string{"node1"},
+		State:     storage.JobStateRunning,
+		StartTime: startTime,
+		Scheduler: &storage.SchedulerInfo{
+			Type: storage.SchedulerTypeSlurm,
+		},
+	}
+
+	exitCode := 0
+	event := types.JobFinishedEvent{
+		JobId:      "test-job-finish",
+		FinalState: types.Completed,
+		ExitCode:   &exitCode,
+		Timestamp:  time.Now(),
+	}
+
+	body, _ := json.Marshal(event)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/job-finished", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.JobFinishedEvent(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp types.JobEventResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	if resp.Status != types.Updated {
+		t.Errorf("expected status 'updated', got '%s'", resp.Status)
+	}
+
+	// Verify job was updated in storage
+	job, _ := store.GetJob(context.Background(), "test-job-finish")
+	if job.State != storage.JobStateCompleted {
+		t.Errorf("expected state 'completed', got '%s'", job.State)
+	}
+	if job.EndTime == nil {
+		t.Error("expected end_time to be set")
+	}
+	if job.RuntimeSeconds <= 0 {
+		t.Errorf("expected positive runtime_seconds, got %f", job.RuntimeSeconds)
+	}
+	if job.Scheduler.ExitCode == nil || *job.Scheduler.ExitCode != 0 {
+		t.Errorf("expected exit_code 0, got %v", job.Scheduler.ExitCode)
+	}
+}
+
+func TestJobFinishedEvent_Failed(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	// Create a job first
+	store.jobs["test-job-fail"] = &storage.Job{
+		ID:        "test-job-fail",
+		User:      "testuser",
+		Nodes:     []string{"node1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now().Add(-1 * time.Minute),
+		Scheduler: &storage.SchedulerInfo{
+			Type: storage.SchedulerTypeSlurm,
+		},
+	}
+
+	exitCode := 42
+	event := types.JobFinishedEvent{
+		JobId:      "test-job-fail",
+		FinalState: types.Failed,
+		ExitCode:   &exitCode,
+		Timestamp:  time.Now(),
+	}
+
+	body, _ := json.Marshal(event)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/job-finished", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.JobFinishedEvent(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	job, _ := store.GetJob(context.Background(), "test-job-fail")
+	if job.State != storage.JobStateFailed {
+		t.Errorf("expected state 'failed', got '%s'", job.State)
+	}
+	if job.Scheduler.ExitCode == nil || *job.Scheduler.ExitCode != 42 {
+		t.Errorf("expected exit_code 42, got %v", job.Scheduler.ExitCode)
+	}
+}
+
+func TestJobFinishedEvent_Idempotent(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	// Create a job that's already completed
+	store.jobs["test-job-already-done"] = &storage.Job{
+		ID:        "test-job-already-done",
+		User:      "testuser",
+		Nodes:     []string{"node1"},
+		State:     storage.JobStateCompleted, // Already terminal
+		StartTime: time.Now().Add(-1 * time.Minute),
+	}
+
+	exitCode := 0
+	event := types.JobFinishedEvent{
+		JobId:      "test-job-already-done",
+		FinalState: types.Completed,
+		ExitCode:   &exitCode,
+		Timestamp:  time.Now(),
+	}
+
+	body, _ := json.Marshal(event)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/job-finished", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.JobFinishedEvent(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp types.JobEventResponse
+	json.Unmarshal(rec.Body.Bytes(), &resp)
+	if resp.Status != types.Skipped {
+		t.Errorf("expected status 'skipped' for already terminal job, got '%s'", resp.Status)
+	}
+}
+
+func TestJobFinishedEvent_NotFound(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	exitCode := 0
+	event := types.JobFinishedEvent{
+		JobId:      "nonexistent-job",
+		FinalState: types.Completed,
+		ExitCode:   &exitCode,
+		Timestamp:  time.Now(),
+	}
+
+	body, _ := json.Marshal(event)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/job-finished", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.JobFinishedEvent(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestJobFinishedEvent_MissingJobId(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	event := types.JobFinishedEvent{
+		FinalState: types.Completed,
+		Timestamp:  time.Now(),
+	}
+
+	body, _ := json.Marshal(event)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/job-finished", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.JobFinishedEvent(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestJobFinishedEvent_InvalidJSON(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/job-finished", bytes.NewReader([]byte("invalid")))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.JobFinishedEvent(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestJobFinishedEvent_CancelledState(t *testing.T) {
+	store := newMockStorage()
+	srv := setupTestServer(store)
+
+	// Create a job first
+	store.jobs["test-job-cancel"] = &storage.Job{
+		ID:        "test-job-cancel",
+		User:      "testuser",
+		Nodes:     []string{"node1"},
+		State:     storage.JobStateRunning,
+		StartTime: time.Now().Add(-1 * time.Minute),
+		Scheduler: &storage.SchedulerInfo{
+			Type: storage.SchedulerTypeSlurm,
+		},
+	}
+
+	event := types.JobFinishedEvent{
+		JobId:      "test-job-cancel",
+		FinalState: types.Cancelled,
+		Timestamp:  time.Now(),
+	}
+
+	body, _ := json.Marshal(event)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/job-finished", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.JobFinishedEvent(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	job, _ := store.GetJob(context.Background(), "test-job-cancel")
+	if job.State != storage.JobStateCancelled {
+		t.Errorf("expected state 'cancelled', got '%s'", job.State)
+	}
+}

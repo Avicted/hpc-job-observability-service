@@ -57,9 +57,6 @@ hpc-job-observability-service/
 │   ├── slurmclient/                        # Generated Slurm REST API client
 │   │   ├── generate.go
 │   │   └── client.gen.go
-│   ├── syncer/                             # Job synchronization
-│   │   ├── syncer.go                       # Syncs jobs from scheduler to storage
-│   │   └── syncer_test.go
 │   └── storage/                            # Database layer
 │       ├── storage.go                      # Interface and types
 │       ├── postgres.go                     # PostgreSQL implementation
@@ -161,17 +158,17 @@ docker-compose --profile slurm up --build --force-recreate
 docker-compose --profile slurm ps
 ```
 
-### Job Synchronization
+### Job Lifecycle Events
 
-When using the `slurm` backend, the service automatically syncs jobs from the Slurm scheduler to the database:
+When using the `slurm` backend, jobs are tracked via prolog/epilog lifecycle events:
 
-- **Sync Interval**: Jobs are synced every 30 seconds
-- **Initial Delay**: First sync occurs 5 seconds after startup
-- **Upsert Logic**: Jobs are created or updated based on their ID
-- **Demo Data**: When using `slurm` backend, `SEED_DEMO` is ignored (jobs come from Slurm)
+- **Prolog Script**: Creates jobs in database when they start (`/v1/events/job-started`)
+- **Epilog Script**: Updates job state when they finish (`/v1/events/job-finished`)
+- **Real-time**: No polling delay - jobs appear instantly when they start
+- **Accurate States**: Exit codes and signals are captured for correct state mapping
 
 When using the `mock` backend:
-- **No Syncer**: Jobs must be created manually or via demo data
+- **Manual Creation**: Jobs must be created via API or demo data
 - **Demo Data**: Set `SEED_DEMO=true` to seed 100 demo jobs
 
 ### Architecture
@@ -234,16 +231,16 @@ All job changes are logged to the `job_audit_events` table for traceability:
 | Column | Description |
 |--------|-------------|
 | job_id | Job identifier |
-| change_type | Type of change (upsert, update, delete) |
+| change_type | Type of change (create, update, delete) |
 | changed_at | Timestamp of the change |
-| changed_by | Source of change (syncer, collector, api) |
-| source | Data source (slurm, mock) |
+| changed_by | Source of change (slurm-prolog, slurm-epilog, collector, api) |
+| source | Data source (lifecycle-event, metrics, api) |
 | correlation_id | Groups related operations |
 | job_snapshot | Complete job state as JSONB |
 
-**Correlation IDs** group all jobs processed in a single sync batch. This enables:
-- Tracing which jobs were synced together
-- Debugging sync issues
+**Correlation IDs** group related operations for traceability. This enables:
+- Tracing job lifecycle events (prolog → epilog → collector)
+- Debugging job state issues
 - Auditing and compliance
 
 Query audit events:
@@ -252,9 +249,12 @@ Query audit events:
 SELECT job_id, change_type, changed_by, correlation_id, changed_at
 FROM job_audit_events ORDER BY changed_at DESC LIMIT 20;
 
--- Find all jobs in a sync batch
+-- Find all events for a specific job
 SELECT * FROM job_audit_events
-WHERE correlation_id = '<uuid>';
+WHERE job_id = 'slurm-123' ORDER BY changed_at;
+
+-- View changes by source
+SELECT changed_by, COUNT(*) FROM job_audit_events GROUP BY changed_by;
 ```
 
 ### Running Unit Tests
@@ -275,11 +275,10 @@ go test ./internal/scheduler/... -v
 ### Running End-to-End Integration Tests
 
 The project includes comprehensive E2E tests that run against a real Slurm cluster.
-These tests:
-- Submit real jobs to Slurm via sbatch
-- Sync jobs to the database
-- Verify data through the REST API
-- Validate data integrity between Slurm, storage, and API
+These tests use the **event-based architecture** where:
+- Slurm prolog creates jobs via `/v1/events/job-started`
+- Slurm epilog updates jobs via `/v1/events/job-finished`
+- The collector gathers real-time metrics from running jobs
 
 **Prerequisites:**
 - Docker and Docker Compose
@@ -288,39 +287,38 @@ These tests:
 **Running E2E Tests:**
 
 ```bash
-# 1. Start the Slurm stack (PostgreSQL + Slurm)
-docker-compose --profile slurm up -d postgres slurm
+# 1. Start the Slurm stack (PostgreSQL + Slurm + App)
+docker-compose --profile slurm up -d
 
-# 2. Wait for services to be healthy (slurmrestd should be accessible)
+# 2. Wait for services to be healthy
 docker-compose --profile slurm ps
-curl -s http://localhost:6820/openapi/v3 | head -5
 
 # 3. Run E2E tests with the slurm_e2e build tag
-# Use your DATABASE_URL from .env (default uses CHANGE_ME_IN_PRODUCTION password)
 DATABASE_URL="postgres://hpc:CHANGE_ME_IN_PRODUCTION@localhost:5432/hpc_jobs?sslmode=disable" \
   go test ./internal/e2e/... -tags=slurm_e2e -v
 
 # 4. Run specific E2E test
 DATABASE_URL="postgres://hpc:CHANGE_ME_IN_PRODUCTION@localhost:5432/hpc_jobs?sslmode=disable" \
-  go test ./internal/e2e/... -tags=slurm_e2e -v -run TestSlurmE2E_JobSubmissionAndSync
+  go test ./internal/e2e/... -tags=slurm_e2e -v -run TestJobLifecycle_Completed
 
 # 5. Stop Slurm when done
 docker-compose --profile slurm down
 ```
 
 **What the E2E tests cover:**
+
+*Lifecycle Tests (lifecycle_e2e_test.go):*
+- `TestJobLifecycle_Completed` - Jobs that complete successfully (exit code 0)
+- `TestJobLifecycle_Failed` - Jobs that fail with various exit codes (1, 2, 42, 126, 127, 128, 255)
+- `TestJobLifecycle_Cancelled` - Jobs cancelled by user (SIGTERM/SIGKILL detection)
+- `TestJobLifecycle_Timeout` - Jobs killed by Slurm time limit
+- `TestJobLifecycle_Signal` - Jobs terminated by various signals (SIGSEGV, SIGABRT, etc.)
+- `TestJobLifecycle_Concurrent` - Multiple concurrent jobs in different states
+
+*Basic E2E Tests (slurm_e2e_test.go):*
 - `TestSlurmE2E_SlurmConnectivity` - Verify connectivity to slurmrestd and list nodes
 - `TestSlurmE2E_AuditTableCreation` - Verify job_audit_events table schema
-- `TestSlurmE2E_JobSubmissionAndSync` - Submit job, sync, verify in storage
 - `TestSlurmE2E_AuditEventCreation` - Verify audit events with changed_by, source, correlation_id
-- `TestSlurmE2E_JobStateTransition` - Full job lifecycle (pending → running → completed)
-- `TestSlurmE2E_MultipleJobsSync` - Verify correlation IDs shared across sync batch
-- `TestSlurmE2E_SchedulerMetadataPreservation` - Verify scheduler metadata in DB and audit snapshot
-- `TestSlurmE2E_DataIntegrity` - Data consistency: Slurm → DB → Audit snapshot
-- `TestSlurmE2E_CancelledJobState` - Verify CANCELLED state mapping and audit trail
-- `TestSlurmE2E_FailedJobState` - Verify TIMEOUT/FAILED state mapping (takes ~60s)
-- `TestSlurmE2E_PendingJobState` - Verify PENDING state with resource constraints
-- `TestSlurmE2E_AllTerminalStates` - Verify completed and failed exit code mapping
 
 **Note:** E2E tests are skipped automatically if Slurm or PostgreSQL is not available,
 allowing `go test ./...` to run without Docker.
@@ -354,7 +352,8 @@ curl http://localhost:6820/openapi/v3 | head -100
 
 ### Testing the Service with Slurm
 
-To test the full integration (service + Slurm):
+The service uses an **event-based architecture** where Slurm prolog/epilog scripts
+notify the service of job lifecycle events. To test the full integration:
 
 ```bash
 # Create .env with Slurm config
@@ -365,10 +364,13 @@ SLURM_API_VERSION=v0.0.37
 DATABASE_URL=postgres://hpc:hpc_password@postgres:5432/hpc_jobs?sslmode=disable
 EOF
 
-# Start everything
+# Start everything (includes prolog/epilog configuration)
 docker-compose --profile slurm up --build --force-recreate
 
-# The app will now use SlurmJobSource instead of MockJobSource
+# The service receives job events from:
+# - Prolog: /v1/events/job-started (creates job with RUNNING state)
+# - Epilog: /v1/events/job-finished (updates job with exit code/signal)
+# - Collector: Updates running jobs with real-time metrics
 ```
 
 ### Stopping Slurm Services

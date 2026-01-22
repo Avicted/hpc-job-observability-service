@@ -21,7 +21,6 @@ import (
 	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
 	"github.com/Avicted/hpc-job-observability-service/internal/scheduler"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
-	"github.com/Avicted/hpc-job-observability-service/internal/syncer"
 	"github.com/joho/godotenv"
 )
 
@@ -93,19 +92,12 @@ func main() {
 			log.Fatalf("Failed to seed demo data: %v", err)
 		}
 	} else if cfg.SeedDemo && cfg.SchedulerBackend != "mock" {
-		log.Println("Note: SEED_DEMO is ignored when using slurm backend (jobs will be synced from scheduler)")
-	}
-
-	// Start job syncer for real scheduler backends
-	var jobSyncer *syncer.Syncer
-	if cfg.SchedulerBackend != "mock" {
-		syncerConfig := syncer.DefaultConfig()
-		jobSyncer = syncer.New(jobSource, store, syncerConfig)
-		jobSyncer.Start()
-		defer jobSyncer.Stop()
+		log.Println("Note: SEED_DEMO is ignored when using slurm backend (jobs created via prolog/epilog events)")
 	}
 
 	// Initialize metrics exporter with scheduler for node metrics
+	// Note: Job synchronization is handled by event-based architecture (prolog/epilog scripts)
+	// The jobSource is only used for fetching node metrics from the scheduler
 	metricsExporter := metrics.NewExporterWithScheduler(store, jobSource)
 
 	// Initialize metric collector

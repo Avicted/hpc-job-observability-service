@@ -163,14 +163,14 @@ The storage layer includes a comprehensive audit system that tracks all job chan
 | job_id | text | Job identifier |
 | change_type | text | Type of change (upsert, update, delete) |
 | changed_at | timestamp | When the change occurred |
-| changed_by | text | Who made the change (syncer, collector, api) |
+| changed_by | text | Who made the change (slurm-prolog, slurm-epilog, collector, api) |
 | source | text | Data source (slurm, mock, api) |
 | correlation_id | text | Groups related operations |
 | job_snapshot | jsonb | Complete job state at change time |
 
 **Correlation IDs:**
-- A single UUID is generated for each sync batch
-- All jobs processed in that batch share the same correlation ID
+- A single UUID is generated for each job lifecycle operation
+- All events for the same job share correlation IDs from the originating source
 - Enables tracing and debugging of related operations
 - Useful for auditing and distributed tracing
 
@@ -330,13 +330,14 @@ The original state is preserved in `scheduler.raw_state` for detailed analysis.
 
 ### SLURM Integration
 
-The service integrates with SLURM clusters via slurmrestd:
+The service integrates with SLURM clusters via prolog/epilog lifecycle events:
 
-1. Configure the SLURM REST API endpoint via `SLURM_BASE_URL`
-2. The syncer periodically fetches jobs from Slurm (default: every 30 seconds)
-3. Jobs are automatically normalized to the API model
-4. Existing endpoints and Prometheus metrics work unchanged
-5. Audit events track all job changes with correlation IDs for traceability
+1. Configure the SLURM REST API endpoint via `SLURM_BASE_URL` (for node metrics)
+2. Install prolog/epilog scripts on compute nodes
+3. Prolog creates jobs via `/v1/events/job-started` when jobs start
+4. Epilog updates jobs via `/v1/events/job-finished` when jobs complete
+5. Exit codes and signals are captured for accurate state mapping
+6. Audit events track all changes with correlation IDs
 
 ## Configuration
 

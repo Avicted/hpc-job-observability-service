@@ -400,6 +400,103 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /events/job-started:
+    post:
+      tags:
+        - events
+      summary: Job started event
+      description: |
+        Receives a job started event from Slurm prolog scripts.
+        This event registers a new job with its cgroup path and GPU allocation.
+        The endpoint is idempotent - duplicate events are handled safely.
+      operationId: jobStartedEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobStartedEvent'
+            example:
+              job_id: "12345"
+              user: alice
+              node_list:
+                - node-01
+                - node-02
+              cpu_allocation: 16
+              gpu_allocation: 2
+              gpu_vendor: nvidia
+              gpu_devices:
+                - GPU-abc123
+                - GPU-def456
+              cgroup_path: /sys/fs/cgroup/system.slice/slurmstepd.scope/job_12345
+              timestamp: '2026-01-22T10:00:00Z'
+      responses:
+        '200':
+          description: Job started event processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobEventResponse'
+        '400':
+          description: Invalid event payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /events/job-finished:
+    post:
+      tags:
+        - events
+      summary: Job finished event
+      description: |
+        Receives a job finished event from Slurm epilog scripts.
+        This event closes the job with its final state and exit code.
+        The endpoint is idempotent - duplicate events are handled safely.
+      operationId: jobFinishedEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobFinishedEvent'
+            example:
+              job_id: "12345"
+              final_state: completed
+              exit_code: 0
+              timestamp: '2026-01-22T12:30:00Z'
+      responses:
+        '200':
+          description: Job finished event processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobEventResponse'
+        '400':
+          description: Invalid event payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   parameters:
     JobId:
@@ -806,3 +903,126 @@ components:
           type: object
           additionalProperties: true
           description: Additional error details
+
+    GPUVendor:
+      type: string
+      enum:
+        - none
+        - nvidia
+        - amd
+        - mixed
+      description: GPU vendor type
+
+    JobStartedEvent:
+      type: object
+      required:
+        - job_id
+        - user
+        - node_list
+        - timestamp
+      description: Event emitted by Slurm prolog script when a job starts
+      properties:
+        job_id:
+          type: string
+          description: Slurm job ID
+          example: "12345"
+        user:
+          type: string
+          description: User who submitted the job
+          example: alice
+        node_list:
+          type: array
+          items:
+            type: string
+          description: List of nodes allocated to the job
+          example:
+            - node-01
+            - node-02
+        cpu_allocation:
+          type: integer
+          minimum: 0
+          description: Number of CPUs allocated
+          example: 16
+        memory_allocation_mb:
+          type: integer
+          minimum: 0
+          description: Memory allocated in MB
+          example: 65536
+        gpu_allocation:
+          type: integer
+          minimum: 0
+          description: Number of GPUs allocated
+          example: 2
+        gpu_vendor:
+          $ref: '#/components/schemas/GPUVendor'
+        gpu_devices:
+          type: array
+          items:
+            type: string
+          description: GPU device identifiers (UUIDs or card IDs)
+          example:
+            - GPU-abc123
+            - GPU-def456
+        cgroup_path:
+          type: string
+          description: Path to the job's cgroup
+          example: /sys/fs/cgroup/system.slice/slurmstepd.scope/job_12345
+        partition:
+          type: string
+          description: Slurm partition name
+          example: gpu
+        account:
+          type: string
+          description: Slurm account name
+          example: project_123
+        timestamp:
+          type: string
+          format: date-time
+          description: Event timestamp
+
+    JobFinishedEvent:
+      type: object
+      required:
+        - job_id
+        - final_state
+        - timestamp
+      description: Event emitted by Slurm epilog script when a job finishes
+      properties:
+        job_id:
+          type: string
+          description: Slurm job ID
+          example: "12345"
+        final_state:
+          $ref: '#/components/schemas/JobState'
+        exit_code:
+          type: integer
+          description: Job exit code
+          example: 0
+        signal:
+          type: integer
+          description: Signal that killed the job (if applicable)
+          example: 9
+        timestamp:
+          type: string
+          format: date-time
+          description: Event timestamp
+
+    JobEventResponse:
+      type: object
+      required:
+        - status
+        - job_id
+      properties:
+        status:
+          type: string
+          enum:
+            - created
+            - updated
+            - skipped
+          description: Result of processing the event
+        job_id:
+          type: string
+          description: Job identifier
+        message:
+          type: string
+          description: Optional message with details

@@ -23,6 +23,7 @@ func jobRowColumns() []string {
 		"requested_cpus", "allocated_cpus", "requested_memory_mb", "allocated_memory_mb", "requested_gpus", "allocated_gpus",
 		"cluster_name", "scheduler_instance", "ingest_version",
 		"last_sample_at", "sample_count", "avg_cpu_usage", "max_cpu_usage", "max_memory_usage_mb", "avg_gpu_usage", "max_gpu_usage",
+		"cgroup_path", "gpu_count", "gpu_vendor", "gpu_devices",
 		"created_at", "updated_at",
 	}
 }
@@ -39,6 +40,7 @@ func jobRowValues(id string, state JobState, start time.Time, end *time.Time) []
 		int64(0), int64(0), int64(0), int64(0), int64(0), int64(0),
 		"default", "test", "test",
 		nil, int64(0), float64(0), float64(0), int64(0), float64(0), float64(0),
+		nil, nil, nil, nil, // cgroup_path, gpu_count, gpu_vendor, gpu_devices
 		time.Now(), time.Now(),
 	}
 }
