@@ -1,6 +1,5 @@
 # Binaries
 server
-mockserver
 
 !cmd/**/*
 !internal/api/server/

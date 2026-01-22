@@ -9,9 +9,8 @@ A microservice for tracking and monitoring HPC (High Performance Computing) job 
 - **Job Management**: Create, update, list, and delete HPC jobs
 - **Resource Metrics**: Track CPU, memory, and GPU usage over time
 - **Prometheus Integration**: Export metrics in Prometheus format with best practices
-- **Database Support**: SQLite (default) or PostgreSQL storage backends
+- **Database Support**: PostgreSQL storage backend
 - **Demo Data**: Seed sample data for testing and demonstration
-- **Mock Server**: OpenAPI-driven mock server for learning and testing
 - **Configurable Retention**: Automatic cleanup of old metrics
 
 ## Architecture
@@ -25,7 +24,6 @@ A microservice for tracking and monitoring HPC (High Performance Computing) job 
                                ▼
                         ┌─────────────────┐
                         │   PostgreSQL    │
-                        │   or SQLite     │
                         └─────────────────┘
 ```
 
@@ -46,14 +44,11 @@ go build -o server ./cmd/server
 cp .env.example .env
 # Edit .env with your settings
 
-# Run with SQLite (default)
-./server
+# Run with PostgreSQL
+DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
 
 # Run with demo data (mock backend only)
-SEED_DEMO=true SCHEDULER_BACKEND=mock ./server
-
-# Run with PostgreSQL
-DATABASE_TYPE=postgres DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
+SEED_DEMO=true SCHEDULER_BACKEND=mock DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
 ```
 
 ### Running with Docker Compose
@@ -72,9 +67,6 @@ SEED_DEMO=true SCHEDULER_BACKEND=mock docker-compose up --build
 
 # Or start only the Slurm container (for testing scheduler module)
 docker-compose --profile slurm up slurm
-
-# Start with mock server for testing
-docker-compose --profile mock up
 
 # View Prometheus at http://localhost:9090
 # View Grafana at http://localhost:3000 (credentials from .env)
@@ -195,8 +187,7 @@ cp .env.example .env
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_TYPE` | `sqlite` | Database type (`sqlite` or `postgres`) |
-| `DATABASE_URL` | `file:hpc_jobs.db...` | Database connection string |
+| `DATABASE_URL` | `postgres://...` | PostgreSQL connection string |
 | `POSTGRES_USER` | `hpc` | PostgreSQL username (Docker) |
 | `POSTGRES_PASSWORD` | - | PostgreSQL password (Docker) |
 | `POSTGRES_DB` | `hpc_jobs` | PostgreSQL database name (Docker) |
@@ -269,7 +260,6 @@ hpc_node_job_count > 2
 ```
 ├── cmd/
 │   ├── server/           # Main application
-│   └── mockserver/       # OpenAPI mock server
 ├── config/               # Configuration files
 │   ├── openapi.yaml      # OpenAPI 3.0 specification
 │   ├── prometheus.yml    # Prometheus scrape config
@@ -280,7 +270,7 @@ hpc_node_job_count > 2
 │   └── development.md    # Development guide
 ├── internal/
 │   ├── api/              # HTTP handlers and generated code
-│   ├── storage/          # Database layer (SQLite + PostgreSQL)
+│   ├── storage/          # Database layer (PostgreSQL)
 │   ├── collector/        # Background metric collector
 │   └── metrics/          # Prometheus exporter
 ├── docker-compose.yml
@@ -307,13 +297,6 @@ To run the concurrent job stress test:
 
 ```bash
 STRESS_TEST=1 go test ./internal/storage -run TestStressConcurrentJobs
-```
-
-### Mock Server
-
-```bash
-go build -o mockserver ./cmd/mockserver
-./mockserver
 ```
 
 ## Scheduler Integration (SLURM)

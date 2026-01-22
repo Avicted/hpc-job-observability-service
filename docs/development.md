@@ -15,8 +15,6 @@ hpc-job-observability-service/
 ├── cmd/
 │   ├── server/             # Main application entry point
 │   │   └── main.go
-│   └── mockserver/         # OpenAPI mock server
-│       └── main.go
 ├── config/                 # Configuration files
 │   ├── openapi/            # OpenAPI specifications
 │   │   ├── service/        # Our service API
@@ -62,7 +60,6 @@ hpc-job-observability-service/
 │   │   └── syncer_test.go
 │   └── storage/            # Database layer
 │       ├── storage.go      # Interface and types
-│       ├── sqlite.go       # SQLite implementation
 │       ├── postgres.go     # PostgreSQL implementation
 │       └── storage_test.go
 ├── scripts/                # Utility scripts
@@ -89,20 +86,16 @@ go mod download
 
 # Build binaries
 go build -o server ./cmd/server
-go build -o mockserver ./cmd/mockserver
 ```
 
 ### Run Locally
 
 ```bash
-# Run with SQLite (default)
-./server
+# Run with PostgreSQL
+DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
 
 # Run with demo data (mock backend only)
-SEED_DEMO=true SCHEDULER_BACKEND=mock ./server
-
-# Run with PostgreSQL
-DATABASE_TYPE=postgres DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
+SEED_DEMO=true SCHEDULER_BACKEND=mock DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
 ```
 
 ### Run with Docker Compose
@@ -113,9 +106,6 @@ docker-compose --profile slurm up --build --force-recreate
 
 # Or start only the Slurm container (for testing scheduler module)
 docker-compose --profile slurm up slurm
-
-# Start with mock server for testing
-docker-compose --profile mock up
 
 # (Optional) Seed demo data when using mock backend
 # Note: demo seeding is ignored when SCHEDULER_BACKEND=slurm
@@ -336,7 +326,6 @@ cat > .env << 'EOF'
 SCHEDULER_BACKEND=slurm
 SLURM_BASE_URL=http://slurm:6820
 SLURM_API_VERSION=v0.0.37
-DATABASE_TYPE=postgres
 DATABASE_URL=postgres://hpc:hpc_password@postgres:5432/hpc_jobs?sslmode=disable
 EOF
 
@@ -511,11 +500,9 @@ The project includes VS Code tasks in `.vscode/tasks.json`:
 | Task | Description |
 |------|-------------|
 | Build Server | Build the main server binary |
-| Build Mock Server | Build the mock server binary |
 | Build All | Build all packages |
 | Run Server | Run server locally |
 | Run Server (with demo data) | Run server with demo data |
-| Run Mock Server | Run the mock server |
 | Test All | Run all tests |
 | Test with Coverage | Run tests with coverage report |
 | Generate OpenAPI Code | Regenerate code from OpenAPI |
@@ -588,15 +575,7 @@ func TestJobOperations(t *testing.T) {
 
 Migrations run automatically on startup. The storage layer handles schema creation.
 
-**SQLite Schema:**
-
-Tables are created in `internal/storage/sqlite.go`:
-- `jobs` - Job records
-- `metrics` - Metric samples
-
-**PostgreSQL Schema:**
-
-Tables are created in `internal/storage/postgres.go` with the same structure.
+Tables are created in `internal/storage/postgres.go`.
 
 ## Adding New Features
 
@@ -632,17 +611,7 @@ Set environment variable:
 DEBUG=1 ./server
 ```
 
-### Inspect Database
-
-**SQLite:**
-
-```bash
-sqlite3 hpc-jobs.db
-.tables
-SELECT * FROM jobs;
-```
-
-**PostgreSQL:**
+### Inspect Database (PostgreSQL)
 
 ```bash
 docker-compose exec postgres psql -U hpc -d hpc_jobs

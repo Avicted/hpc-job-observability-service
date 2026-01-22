@@ -53,10 +53,10 @@ The HPC Job Observability Service is a microservice designed to track and monito
 └──────────────────────────────────────────────────────────────────────────────┘
                     │
                     ▼
-       ┌────────────────────────┐
-       │       Database         │
-       │   (SQLite/PostgreSQL)  │
-       └────────────────────────┘
+      ┌────────────────────────┐
+      │       Database         │
+      │      PostgreSQL        │
+      └────────────────────────┘
 ```
 
 ## Component Design
@@ -81,19 +81,7 @@ Handlers implement the `ServerInterface` generated from the OpenAPI specificatio
 
 ### Storage Layer
 
-The storage layer provides a database-agnostic interface with two implementations:
-
-**SQLite** (default):
-- Zero configuration
-- Suitable for development and single-node deployments
-- File-based persistence
-
-**PostgreSQL**:
-- Recommended for production
-- Supports concurrent access
-- Better query performance at scale
-
-Both implementations support:
+The storage layer provides a PostgreSQL-backed implementation that supports:
 - Job CRUD operations
 - Metrics recording and retrieval
 - Automatic schema migrations

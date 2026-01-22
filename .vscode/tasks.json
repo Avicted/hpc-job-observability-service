@@ -14,15 +14,6 @@
             ]
         },
         {
-            "label": "Build Mock Server",
-            "type": "shell",
-            "command": "go build -o mockserver ./cmd/mockserver",
-            "group": "build",
-            "problemMatcher": [
-                "$go"
-            ]
-        },
-        {
             "label": "Build All",
             "type": "shell",
             "command": "go build ./...",
@@ -43,14 +34,6 @@
             "label": "Run Server (with demo data)",
             "type": "shell",
             "command": "SEED_DEMO=true go run ./cmd/server",
-            "group": "none",
-            "problemMatcher": [],
-            "isBackground": true
-        },
-        {
-            "label": "Run Mock Server",
-            "type": "shell",
-            "command": "go run ./cmd/mockserver",
             "group": "none",
             "problemMatcher": [],
             "isBackground": true

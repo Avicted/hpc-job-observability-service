@@ -1,5 +1,5 @@
 // Package storage provides database storage for jobs and metrics.
-// It supports both SQLite (default) and PostgreSQL backends.
+// It supports PostgreSQL as the primary backend.
 package storage
 
 import (
@@ -309,17 +309,15 @@ func marshalJobSnapshot(job *Job) ([]byte, error) {
 
 // New creates a new storage instance based on the database type.
 func New(dbType, dsn string) (Storage, error) {
-	switch strings.ToLower(dbType) {
-	case "sqlite":
-		return NewSQLiteStorage(dsn)
-	case "postgres", "postgresql":
+	switch strings.ToLower(strings.TrimSpace(dbType)) {
+	case "", "postgres", "postgresql":
 		return NewPostgresStorage(dsn)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", dbType)
 	}
 }
 
-// baseStorage contains common SQL operations shared between SQLite and PostgreSQL.
+// baseStorage contains common SQL operations shared between storage backends.
 type baseStorage struct {
 	db *sql.DB
 }

@@ -32,8 +32,7 @@ type Config struct {
 	Host string
 
 	// Database settings
-	DatabaseURL  string
-	DatabaseType string // "sqlite" or "postgres"
+	DatabaseURL string
 
 	// Metrics settings
 	MetricsRetentionDays int
@@ -75,7 +74,7 @@ func main() {
 	log.Printf("Scheduler backend: %s", cfg.SchedulerBackend)
 
 	// Initialize storage
-	store, err := storage.New(cfg.DatabaseType, cfg.DatabaseURL)
+	store, err := storage.New("postgres", cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
@@ -160,8 +159,7 @@ func loadConfig() (*Config, error) {
 	// Environment variables with defaults
 	cfg.Port = getEnvInt("PORT", 8080)
 	cfg.Host = getEnv("HOST", "0.0.0.0")
-	cfg.DatabaseType = getEnv("DATABASE_TYPE", "sqlite")
-	cfg.DatabaseURL = getEnv("DATABASE_URL", "file:hpc_jobs.db?cache=shared&mode=rwc")
+	cfg.DatabaseURL = getEnv("DATABASE_URL", "postgres://hpc:hpc_password@localhost:5432/hpc_jobs?sslmode=disable")
 	cfg.MetricsRetentionDays = getEnvInt("METRICS_RETENTION_DAYS", 7)
 
 	// Demo seed (opt-in)
