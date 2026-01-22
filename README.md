@@ -2,7 +2,7 @@
 
 A microservice for tracking and monitoring HPC (High Performance Computing) job resource utilization with Prometheus metrics export.
 
-> This project is a proof of concept for building an observability service for HPC job schedulers like Slurm. It provides a RESTful API to manage jobs and record resource usage metrics (CPU, memory, GPU) over time. The service exports metrics in Prometheus format for easy integration with monitoring systems.
+> This service integrates with Slurm via prolog/epilog scripts to provide real-time job tracking and resource monitoring. It collects CPU, memory, and GPU metrics from running jobs using Linux cgroups v2, stores historical data in PostgreSQL, and exports metrics in Prometheus format for Grafana dashboards.
 
 ## Features
 
