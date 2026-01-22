@@ -88,6 +88,70 @@ The storage layer provides a PostgreSQL-backed implementation that supports:
 - Retention-based cleanup
 - Audit event logging
 
+#### Jobs Table Schema
+
+The `jobs` table stores the current, canonical view of each job (as created in `Migrate()`):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | text | Primary key (API job ID) |
+| user_name | text | Job owner |
+| nodes | text | Comma-separated node list |
+| node_count | integer | Count of allocated nodes |
+| state | text | Normalized state (pending, running, completed, failed, cancelled) |
+| start_time | timestamptz | Job start time |
+| end_time | timestamptz | Job end time (nullable) |
+| runtime_seconds | double precision | Runtime in seconds |
+| cpu_usage | double precision | Current CPU usage |
+| memory_usage_mb | bigint | Current memory usage in MB |
+| gpu_usage | double precision | Current GPU usage (nullable) |
+| external_job_id | text | External scheduler job ID |
+| scheduler_type | text | Scheduler type (mock, slurm) |
+| raw_state | text | Raw scheduler state |
+| partition | text | Scheduler partition/queue |
+| account | text | Project/account |
+| qos | text | Scheduler QoS |
+| priority | bigint | Scheduler priority |
+| submit_time | timestamptz | Scheduler submit time |
+| exit_code | integer | Scheduler exit code |
+| state_reason | text | Scheduler state reason |
+| time_limit_minutes | integer | Time limit in minutes |
+| requested_cpus | bigint | Requested CPUs |
+| allocated_cpus | bigint | Allocated CPUs |
+| requested_memory_mb | bigint | Requested memory in MB |
+| allocated_memory_mb | bigint | Allocated memory in MB |
+| requested_gpus | bigint | Requested GPUs |
+| allocated_gpus | bigint | Allocated GPUs |
+| cluster_name | text | Cluster name |
+| scheduler_instance | text | Scheduler instance identifier |
+| ingest_version | text | Ingest pipeline version |
+| last_sample_at | timestamptz | Timestamp of most recent sample |
+| sample_count | bigint | Count of samples recorded |
+| avg_cpu_usage | double precision | Average CPU usage |
+| max_cpu_usage | double precision | Max CPU usage |
+| max_memory_usage_mb | bigint | Max memory usage in MB |
+| avg_gpu_usage | double precision | Average GPU usage |
+| max_gpu_usage | double precision | Max GPU usage |
+| created_at | timestamptz | Creation time |
+| updated_at | timestamptz | Last update time |
+
+> Note: Scheduler-related columns are nullable and only populated when data is sourced from an external scheduler.
+
+#### Metrics Table Schema
+
+The `metric_samples` table stores time-series samples for each job:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | bigserial | Primary key |
+| job_id | text | Foreign key to jobs.id |
+| timestamp | timestamptz | Sample timestamp |
+| cpu_usage | double precision | CPU usage at sample time |
+| memory_usage_mb | bigint | Memory usage at sample time (MB) |
+| gpu_usage | double precision | GPU usage at sample time (nullable) |
+
+The metrics retention job periodically deletes rows older than the configured retention window.
+
 ### Audit System
 
 The storage layer includes a comprehensive audit system that tracks all job changes:
