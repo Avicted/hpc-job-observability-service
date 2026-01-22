@@ -342,7 +342,7 @@ func TestMockJobSource_SchedulerInfoFields(t *testing.T) {
 	ctx := context.Background()
 	source := NewMockJobSource()
 
-	priority := 100
+	priority := int64(100)
 	exitCode := 0
 	job := &Job{
 		ID:    "detailed-job",

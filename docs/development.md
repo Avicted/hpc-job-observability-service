@@ -13,49 +13,61 @@ This document covers development setup, workflows, and guidelines for contributi
 ```
 hpc-job-observability-service/
 ├── cmd/
-│   ├── server/             # Main application entry point
+│   ├── server/                             # Main application entry point
 │   │   └── main.go
-│   └── mockserver/         # OpenAPI mock server
-│       └── main.go
-├── config/                 # Configuration files
-│   ├── openapi.yaml        # OpenAPI 3.0 specification
-│   ├── oapi-codegen-types.yaml
-│   ├── oapi-codegen-server.yaml
+├── config/                                 # Configuration files
+│   ├── openapi/                            # OpenAPI specifications
+│   │   ├── service/                        # Our service API
+│   │   │   ├── openapi.yaml                # OpenAPI 3.0 specification
+│   │   │   ├── oapi-codegen-server.yaml
+│   │   │   └── oapi-codegen-types.yaml
+│   │   └── slurm/                          # Slurm REST API
+│   │       ├── slurm-openapi.json          # Full Slurm OpenAPI spec
+│   │       ├── slurm-openapi-v0.0.37.json  # Filtered spec (v0.0.37)
+│   │       └── oapi-codegen-slurm-client.yaml
+│   ├── grafana/                            # Grafana dashboards
+│   ├── slurm/                              # Slurm container config
 │   └── prometheus.yml
-├── docs/                   # Documentation
+├── docs/                                   # Documentation
 │   ├── architecture.md
 │   ├── api-reference.md
 │   └── development.md
 ├── internal/
 │   ├── api/
-│   │   ├── types/          # Generated API types
+│   │   ├── types/                          # Generated API types
 │   │   │   ├── generate.go
 │   │   │   └── types.gen.go
-│   │   ├── server/         # Generated server interface
+│   │   ├── server/                         # Generated server interface
 │   │   │   ├── generate.go
 │   │   │   └── server.gen.go
-│   │   ├── handler.go      # API handler implementation
+│   │   ├── handler.go                      # API handler implementation
 │   │   └── handler_test.go
-│   ├── collector/          # Background metric collector
+│   ├── collector/                          # Background metric collector
 │   │   ├── collector.go
 │   │   └── collector_test.go
-│   ├── metrics/            # Prometheus exporter
+│   ├── e2e/                                # End-to-end integration tests
+│   │   └── slurm_e2e_test.go
+│   ├── metrics/                            # Prometheus exporter
 │   │   └── exporter.go
-│   ├── scheduler/          # Scheduler abstraction layer
-│   │   ├── scheduler.go    # Interface and types
-│   │   ├── mock.go         # Mock job source
-│   │   ├── slurm.go        # Slurm job source
+│   ├── scheduler/                          # Scheduler abstraction layer
+│   │   ├── scheduler.go                    # Interface and types
+│   │   ├── mock.go                         # Mock job source
+│   │   ├── slurm.go                        # Slurm job source
 │   │   └── *_test.go
-│   ├── syncer/             # Job synchronization
-│   │   ├── syncer.go       # Syncs jobs from scheduler to storage
+│   ├── slurmclient/                        # Generated Slurm REST API client
+│   │   ├── generate.go
+│   │   └── client.gen.go
+│   ├── syncer/                             # Job synchronization
+│   │   ├── syncer.go                       # Syncs jobs from scheduler to storage
 │   │   └── syncer_test.go
-│   └── storage/            # Database layer
-│       ├── storage.go      # Interface and types
-│       ├── sqlite.go       # SQLite implementation
-│       ├── postgres.go     # PostgreSQL implementation
-│       └── storage_test.go
-├── .vscode/
-│   └── tasks.json          # VS Code tasks
+│   └── storage/                            # Database layer
+│       ├── storage.go                      # Interface and types
+│       ├── postgres.go                     # PostgreSQL implementation
+│       └── *_test.go
+├── scripts/                                # Utility scripts
+│   ├── coverage.sh
+│   ├── filter-slurm-openapi.py
+│   └── verify-docker-stack.sh
 ├── Dockerfile
 ├── docker-compose.yml
 ├── go.mod
@@ -76,33 +88,26 @@ go mod download
 
 # Build binaries
 go build -o server ./cmd/server
-go build -o mockserver ./cmd/mockserver
 ```
 
 ### Run Locally
 
 ```bash
-# Run with SQLite (default)
-./server
+# Run with PostgreSQL
+DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
 
 # Run with demo data (mock backend only)
-SEED_DEMO=true SCHEDULER_BACKEND=mock ./server
-
-# Run with PostgreSQL
-DATABASE_TYPE=postgres DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
+SEED_DEMO=true SCHEDULER_BACKEND=mock DATABASE_URL="postgres://user:pass@localhost/hpc?sslmode=disable" ./server
 ```
 
 ### Run with Docker Compose
 
 ```bash
 # Start the full stack with Slurm integration
-docker-compose --profile slurm up --build
+docker-compose --profile slurm up --build --force-recreate
 
 # Or start only the Slurm container (for testing scheduler module)
 docker-compose --profile slurm up slurm
-
-# Start with mock server for testing
-docker-compose --profile mock up
 
 # (Optional) Seed demo data when using mock backend
 # Note: demo seeding is ignored when SCHEDULER_BACKEND=slurm
@@ -153,7 +158,7 @@ When `SCHEDULER_BACKEND=slurm`, the service now waits (up to 60 seconds) for `sl
 If you see this error, ensure you started Docker Compose with the `slurm` profile and wait for the slurm container to be healthy:
 
 ```bash
-docker-compose --profile slurm up --build
+docker-compose --profile slurm up --build --force-recreate
 docker-compose --profile slurm ps
 ```
 
@@ -170,17 +175,16 @@ When using the `mock` backend:
 - **No Syncer**: Jobs must be created manually or via demo data
 - **Demo Data**: Set `SEED_DEMO=true` to seed 100 demo jobs
 
-### Architecture (WIP)
+### Architecture
 
-The Slurm integration testing stack is **work in progress** and currently uses a
-single container that bundles:
+The Slurm integration testing stack uses a single container that bundles:
 
 - **slurmctld** - Slurm controller daemon
 - **slurmd** - Compute daemon
 - **slurmdbd** - Database daemon for accounting
 - **slurmrestd** - REST API daemon (exposed on port 6820)
 
-This single-container setup is intended for local testing only and may change.
+This single-container setup is intended for local development and testing.
 
 ### Quick Start
 
@@ -203,14 +207,14 @@ SCHEDULER_BACKEND=slurm
 # Docker Compose:     http://slurm:6820 (container hostname)
 SLURM_BASE_URL=http://localhost:6820
 
-# Optional: API version (default: v0.0.36 for the test container)
-SLURM_API_VERSION=v0.0.36
+# Optional: API version (default: v0.0.37 for the test container)
+SLURM_API_VERSION=v0.0.37
 
 # Optional: Auth token (depends on slurmrestd auth config)
 SLURM_AUTH_TOKEN=
 ```
 
-### Node Metrics (WIP)
+### Node Metrics
 
 When running with the Slurm backend, node-level metrics are pulled from the
 Slurm nodes API and exported to Prometheus. This provides node load and capacity
@@ -224,9 +228,39 @@ Key metrics include:
 - `hpc_node_total_memory_bytes`
 - `hpc_node_state`
 
+### Audit System
+
+All job changes are logged to the `job_audit_events` table for traceability:
+
+| Column | Description |
+|--------|-------------|
+| job_id | Job identifier |
+| change_type | Type of change (upsert, update, delete) |
+| changed_at | Timestamp of the change |
+| changed_by | Source of change (syncer, collector, api) |
+| source | Data source (slurm, mock) |
+| correlation_id | Groups related operations |
+| job_snapshot | Complete job state as JSONB |
+
+**Correlation IDs** group all jobs processed in a single sync batch. This enables:
+- Tracing which jobs were synced together
+- Debugging sync issues
+- Auditing and compliance
+
+Query audit events:
+```sql
+-- View recent audit events
+SELECT job_id, change_type, changed_by, correlation_id, changed_at
+FROM job_audit_events ORDER BY changed_at DESC LIMIT 20;
+
+-- Find all jobs in a sync batch
+SELECT * FROM job_audit_events
+WHERE correlation_id = '<uuid>';
+```
+
 ### Running Unit Tests
 
-The existing unit tests for Slurm use `httptest.Server` to mock slurmrestd responses:
+The unit tests for Slurm use mock clients to simulate slurmrestd responses:
 
 ```bash
 # Run all tests including Slurm unit tests
@@ -239,7 +273,60 @@ go test ./internal/scheduler/... -v
 ./scripts/coverage.sh
 ```
 
-### Running Integration Tests
+### Running End-to-End Integration Tests
+
+The project includes comprehensive E2E tests that run against a real Slurm cluster.
+These tests:
+- Submit real jobs to Slurm via sbatch
+- Sync jobs to the database
+- Verify data through the REST API
+- Validate data integrity between Slurm, storage, and API
+
+**Prerequisites:**
+- Docker and Docker Compose
+- Slurm stack running via `docker-compose --profile slurm up -d`
+
+**Running E2E Tests:**
+
+```bash
+# 1. Start the Slurm stack (PostgreSQL + Slurm)
+docker-compose --profile slurm up -d postgres slurm
+
+# 2. Wait for services to be healthy (slurmrestd should be accessible)
+docker-compose --profile slurm ps
+curl -s http://localhost:6820/openapi/v3 | head -5
+
+# 3. Run E2E tests with the slurm_e2e build tag
+# Use your DATABASE_URL from .env (default uses CHANGE_ME_IN_PRODUCTION password)
+DATABASE_URL="postgres://hpc:CHANGE_ME_IN_PRODUCTION@localhost:5432/hpc_jobs?sslmode=disable" \
+  go test ./internal/e2e/... -tags=slurm_e2e -v
+
+# 4. Run specific E2E test
+DATABASE_URL="postgres://hpc:CHANGE_ME_IN_PRODUCTION@localhost:5432/hpc_jobs?sslmode=disable" \
+  go test ./internal/e2e/... -tags=slurm_e2e -v -run TestSlurmE2E_JobSubmissionAndSync
+
+# 5. Stop Slurm when done
+docker-compose --profile slurm down
+```
+
+**What the E2E tests cover:**
+- `TestSlurmE2E_SlurmConnectivity` - Verify connectivity to slurmrestd and list nodes
+- `TestSlurmE2E_AuditTableCreation` - Verify job_audit_events table schema
+- `TestSlurmE2E_JobSubmissionAndSync` - Submit job, sync, verify in storage
+- `TestSlurmE2E_AuditEventCreation` - Verify audit events with changed_by, source, correlation_id
+- `TestSlurmE2E_JobStateTransition` - Full job lifecycle (pending → running → completed)
+- `TestSlurmE2E_MultipleJobsSync` - Verify correlation IDs shared across sync batch
+- `TestSlurmE2E_SchedulerMetadataPreservation` - Verify scheduler metadata in DB and audit snapshot
+- `TestSlurmE2E_DataIntegrity` - Data consistency: Slurm → DB → Audit snapshot
+- `TestSlurmE2E_CancelledJobState` - Verify CANCELLED state mapping and audit trail
+- `TestSlurmE2E_FailedJobState` - Verify TIMEOUT/FAILED state mapping (takes ~60s)
+- `TestSlurmE2E_PendingJobState` - Verify PENDING state with resource constraints
+- `TestSlurmE2E_AllTerminalStates` - Verify completed and failed exit code mapping
+
+**Note:** E2E tests are skipped automatically if Slurm or PostgreSQL is not available,
+allowing `go test ./...` to run without Docker.
+
+### Manual Integration Testing
 
 With the Slurm stack running, you can submit real jobs and verify the integration:
 
@@ -254,7 +341,7 @@ docker-compose --profile slurm ps
 docker-compose exec slurm sbatch --wrap="echo 'Hello from Slurm'; sleep 30"
 
 # 4. Check job status via slurmrestd
-curl http://localhost:6820/slurm/v0.0.36/jobs/
+curl http://localhost:6820/slurm/v0.0.37/jobs/
 
 # 5. Verify node status
 docker-compose exec slurm sinfo
@@ -275,13 +362,12 @@ To test the full integration (service + Slurm):
 cat > .env << 'EOF'
 SCHEDULER_BACKEND=slurm
 SLURM_BASE_URL=http://slurm:6820
-SLURM_API_VERSION=v0.0.36
-DATABASE_TYPE=postgres
+SLURM_API_VERSION=v0.0.37
 DATABASE_URL=postgres://hpc:hpc_password@postgres:5432/hpc_jobs?sslmode=disable
 EOF
 
 # Start everything
-docker-compose --profile slurm up --build
+docker-compose --profile slurm up --build --force-recreate
 
 # The app will now use SlurmJobSource instead of MockJobSource
 ```
@@ -343,7 +429,7 @@ This project follows API-first development. The OpenAPI specification is the sou
 
 ### Code Generation
 
-The project uses `oapi-codegen` to generate Go types and server interfaces from the OpenAPI spec.
+The project uses `oapi-codegen` to generate Go types and server interfaces from OpenAPI specs.
 
 **Install oapi-codegen:**
 
@@ -351,7 +437,7 @@ The project uses `oapi-codegen` to generate Go types and server interfaces from 
 go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 ```
 
-**Regenerate code:**
+**Regenerate all code:**
 
 ```bash
 go generate ./...
@@ -360,6 +446,61 @@ go generate ./...
 This runs the `//go:generate` directives in:
 - `internal/api/types/generate.go` - Generates API types
 - `internal/api/server/generate.go` - Generates server interface
+- `internal/slurmclient/generate.go` - Generates Slurm REST API client
+
+### Slurm Client Code Generation
+
+The project uses a runtime-free Go client generated from the official Slurm OpenAPI specification.
+This provides type-safe access to slurmrestd endpoints.
+
+**Files:**
+- `config/openapi/slurm/slurm-openapi.json` - Full Slurm OpenAPI spec (fetched from slurmrestd)
+- `config/openapi/slurm/slurm-openapi-v0.0.37.json` - Filtered spec (v0.0.37 paths only)
+- `config/openapi/slurm/oapi-codegen-slurm-client.yaml` - oapi-codegen configuration
+- `internal/slurmclient/client.gen.go` - Generated client code
+- `scripts/filter-slurm-openapi.py` - Script to filter spec to a single API version
+- `scripts/fix-slurm-openapi-types.py` - Script to fix type issues in the spec
+
+**To update the Slurm OpenAPI spec:**
+
+1. Start the Slurm container:
+   ```bash
+   docker-compose --profile slurm up -d slurm
+   ```
+
+2. Fetch the latest OpenAPI spec:
+   ```bash
+   curl -s http://localhost:6820/openapi/v3 > config/openapi/slurm/slurm-openapi.json
+   ```
+
+3. Filter to a single API version (to avoid duplicate operation IDs):
+   ```bash
+   ./scripts/filter-slurm-openapi.py --version v0.0.37
+   ```
+
+4. Regenerate the client:
+   ```bash
+   go generate ./internal/slurmclient/...
+   ```
+
+**To use a different API version:**
+
+```bash
+# Filter to a different version
+./scripts/filter-slurm-openapi.py --version v0.0.37
+
+# Update the generate.go to point to the new filtered spec
+# Then regenerate
+go generate ./internal/slurmclient/...
+```
+
+**Why runtime-free client?**
+
+The generated client uses oapi-codegen's runtime-free mode, which:
+- Generates typed request/response helpers without extra dependencies
+- Lets you control HTTP behavior, auth, retries, and middleware yourself
+- Keeps the dependency footprint minimal
+- Works well with the existing `SlurmJobSource` HTTP handling
 
 ### Running Tests
 
@@ -375,9 +516,9 @@ go test ./... -v
 
 # View coverage report
 go tool cover -html=coverage.out
+```
 
 The coverage script excludes cmd/* and generated API server/types packages from totals.
-```
 
 ### Linting
 
@@ -396,11 +537,9 @@ The project includes VS Code tasks in `.vscode/tasks.json`:
 | Task | Description |
 |------|-------------|
 | Build Server | Build the main server binary |
-| Build Mock Server | Build the mock server binary |
 | Build All | Build all packages |
 | Run Server | Run server locally |
 | Run Server (with demo data) | Run server with demo data |
-| Run Mock Server | Run the mock server |
 | Test All | Run all tests |
 | Test with Coverage | Run tests with coverage report |
 | Generate OpenAPI Code | Regenerate code from OpenAPI |
@@ -473,15 +612,7 @@ func TestJobOperations(t *testing.T) {
 
 Migrations run automatically on startup. The storage layer handles schema creation.
 
-**SQLite Schema:**
-
-Tables are created in `internal/storage/sqlite.go`:
-- `jobs` - Job records
-- `metrics` - Metric samples
-
-**PostgreSQL Schema:**
-
-Tables are created in `internal/storage/postgres.go` with the same structure.
+Tables are created in `internal/storage/postgres.go`.
 
 ## Adding New Features
 
@@ -517,17 +648,7 @@ Set environment variable:
 DEBUG=1 ./server
 ```
 
-### Inspect Database
-
-**SQLite:**
-
-```bash
-sqlite3 hpc-jobs.db
-.tables
-SELECT * FROM jobs;
-```
-
-**PostgreSQL:**
+### Inspect Database (PostgreSQL)
 
 ```bash
 docker-compose exec postgres psql -U hpc -d hpc_jobs

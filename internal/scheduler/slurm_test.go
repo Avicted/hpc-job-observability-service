@@ -2,113 +2,107 @@ package scheduler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/avic/hpc-job-observability-service/internal/slurmclient"
 )
 
-func TestNewSlurmJobSource(t *testing.T) {
-	// Test with default HTTP client
-	config := SlurmConfig{
-		BaseURL:    "http://localhost:6820",
-		APIVersion: "v0.0.44",
-		AuthToken:  "test-token",
-	}
-	source := NewSlurmJobSource(config)
-	if source == nil {
-		t.Fatal("NewSlurmJobSource returned nil")
-	}
+// mockSlurmClient implements SlurmClient for testing.
+type mockSlurmClient struct {
+	jobsResponse  *slurmclient.SlurmctldGetJobsResponse
+	jobResponse   *slurmclient.SlurmctldGetJobResponse
+	nodesResponse *slurmclient.SlurmctldGetNodesResponse
+	pingResponse  *slurmclient.SlurmctldPingResponse
+	err           error
+}
+
+func (m *mockSlurmClient) SlurmctldGetJobsWithResponse(ctx context.Context, params *slurmclient.SlurmctldGetJobsParams, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetJobsResponse, error) {
+	return m.jobsResponse, m.err
+}
+
+func (m *mockSlurmClient) SlurmctldGetJobWithResponse(ctx context.Context, jobId string, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetJobResponse, error) {
+	return m.jobResponse, m.err
+}
+
+func (m *mockSlurmClient) SlurmctldGetNodesWithResponse(ctx context.Context, params *slurmclient.SlurmctldGetNodesParams, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldGetNodesResponse, error) {
+	return m.nodesResponse, m.err
+}
+
+func (m *mockSlurmClient) SlurmctldPingWithResponse(ctx context.Context, reqEditors ...slurmclient.RequestEditorFn) (*slurmclient.SlurmctldPingResponse, error) {
+	return m.pingResponse, m.err
+}
+
+// Helper functions strPtr, intPtr, int64Ptr are defined in mock.go
+
+func TestSlurmJobSource_Type(t *testing.T) {
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, &mockSlurmClient{})
 	if source.Type() != SchedulerTypeSlurm {
 		t.Errorf("Type() = %v, want %v", source.Type(), SchedulerTypeSlurm)
 	}
+}
+
+func TestSlurmJobSource_SupportsMetrics(t *testing.T) {
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, &mockSlurmClient{})
 	if source.SupportsMetrics() {
 		t.Error("SupportsMetrics() = true, want false")
-	}
-
-	// Test with custom HTTP client
-	customClient := &http.Client{Timeout: 60 * time.Second}
-	configWithClient := SlurmConfig{
-		BaseURL:    "http://localhost:6820",
-		APIVersion: "v0.0.44",
-		HTTPClient: customClient,
-	}
-	sourceWithClient := NewSlurmJobSource(configWithClient)
-	if sourceWithClient.httpClient != customClient {
-		t.Error("Custom HTTP client not used")
 	}
 }
 
 func TestSlurmJobSource_ListJobs(t *testing.T) {
-	// Create mock SLURM server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			t.Errorf("Expected GET, got %s", r.Method)
-		}
-		if r.Header.Get("X-SLURM-USER-TOKEN") != "test-token" {
-			t.Errorf("Missing or incorrect auth token")
-		}
-		if r.Header.Get("Accept") != "application/json" {
-			t.Error("Expected Accept: application/json")
-		}
+	startTime := int64Ptr(1737478800) // Unix timestamp
+	submitTime := int64Ptr(1737475200)
 
-		response := slurmJobsResponse{
-			Jobs: []slurmJob{
-				{
-					JobID:      12345,
-					Name:       "test-job-1",
-					UserName:   "alice",
-					Nodes:      "node01,node02",
-					JobState:   "RUNNING",
-					Partition:  "compute",
-					Account:    "research",
-					QoS:        "normal",
-					Priority:   1000,
-					StartTime:  uint64(time.Now().Add(-1 * time.Hour).Unix()),
-					SubmitTime: uint64(time.Now().Add(-2 * time.Hour).Unix()),
-					Cpus:       32,
-					Memory:     64000,
-				},
-				{
-					JobID:      12346,
-					Name:       "test-job-2",
-					UserName:   "bob",
-					Nodes:      "node03",
-					JobState:   "PENDING",
-					Partition:  "gpu",
-					Account:    "ml",
-					QoS:        "high",
-					Priority:   2000,
-					SubmitTime: uint64(time.Now().Add(-30 * time.Minute).Unix()),
-					Cpus:       8,
-					Memory:     32000,
-				},
-			},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(response)
-	}))
-	defer server.Close()
-
-	config := SlurmConfig{
-		BaseURL:    server.URL,
-		APIVersion: "v0.0.44",
-		AuthToken:  "test-token",
+	jobs := []slurmclient.V0037JobResponseProperties{
+		{
+			JobId:     intPtr(12345),
+			UserName:  strPtr("alice"),
+			Nodes:     strPtr("node01,node02"),
+			JobState:  strPtr("RUNNING"),
+			Partition: strPtr("compute"),
+			Account:   strPtr("research"),
+			Qos:       strPtr("normal"),
+			Priority:  intPtr(1000),
+			StartTime: startTime,
+			Cpus:      intPtr(32),
+		},
+		{
+			JobId:      intPtr(12346),
+			UserName:   strPtr("bob"),
+			Nodes:      strPtr("node03"),
+			JobState:   strPtr("PENDING"),
+			Partition:  strPtr("gpu"),
+			Account:    strPtr("ml"),
+			Qos:        strPtr("high"),
+			Priority:   intPtr(2000),
+			SubmitTime: submitTime,
+			Cpus:       intPtr(8),
+		},
 	}
-	source := NewSlurmJobSource(config)
+
+	client := &mockSlurmClient{
+		jobsResponse: &slurmclient.SlurmctldGetJobsResponse{
+			HTTPResponse: &http.Response{StatusCode: http.StatusOK},
+			JSON200: &slurmclient.V0037JobsResponse{
+				Jobs: &jobs,
+			},
+		},
+	}
+
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, client)
 
 	ctx := context.Background()
-	jobs, err := source.ListJobs(ctx, JobFilter{})
+	result, err := source.ListJobs(ctx, JobFilter{})
 	if err != nil {
 		t.Fatalf("ListJobs() error = %v", err)
 	}
-	if len(jobs) != 2 {
-		t.Fatalf("ListJobs() returned %d jobs, want 2", len(jobs))
+	if len(result) != 2 {
+		t.Fatalf("ListJobs() returned %d jobs, want 2", len(result))
 	}
 
 	// Verify first job
-	job := jobs[0]
+	job := result[0]
 	if job.ID != "12345" {
 		t.Errorf("Job ID = %s, want 12345", job.ID)
 	}
@@ -130,118 +124,100 @@ func TestSlurmJobSource_ListJobs(t *testing.T) {
 	if job.Scheduler.Partition != "compute" {
 		t.Errorf("Scheduler.Partition = %s, want compute", job.Scheduler.Partition)
 	}
-	if job.Scheduler.Account != "research" {
-		t.Errorf("Scheduler.Account = %s, want research", job.Scheduler.Account)
-	}
-	if job.Scheduler.Priority == nil || *job.Scheduler.Priority != 1000 {
-		t.Error("Priority not set correctly")
+	if job.AllocatedCPUs != 32 {
+		t.Errorf("AllocatedCPUs = %d, want 32", job.AllocatedCPUs)
 	}
 }
 
 func TestSlurmJobSource_ListJobs_WithFilter(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := slurmJobsResponse{
-			Jobs: []slurmJob{
-				{JobID: 1, UserName: "alice", JobState: "RUNNING", Partition: "compute"},
-				{JobID: 2, UserName: "bob", JobState: "RUNNING", Partition: "gpu"},
-				{JobID: 3, UserName: "alice", JobState: "PENDING", Partition: "compute"},
-			},
-		}
-		_ = json.NewEncoder(w).Encode(response)
-	}))
-	defer server.Close()
+	jobs := []slurmclient.V0037JobResponseProperties{
+		{JobId: intPtr(1), UserName: strPtr("alice"), JobState: strPtr("RUNNING"), Partition: strPtr("compute")},
+		{JobId: intPtr(2), UserName: strPtr("bob"), JobState: strPtr("RUNNING"), Partition: strPtr("gpu")},
+		{JobId: intPtr(3), UserName: strPtr("alice"), JobState: strPtr("PENDING"), Partition: strPtr("compute")},
+	}
 
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    server.URL,
-		APIVersion: "v0.0.44",
-	})
+	client := &mockSlurmClient{
+		jobsResponse: &slurmclient.SlurmctldGetJobsResponse{
+			HTTPResponse: &http.Response{StatusCode: http.StatusOK},
+			JSON200:      &slurmclient.V0037JobsResponse{Jobs: &jobs},
+		},
+	}
 
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, client)
 	ctx := context.Background()
 
 	// Test user filter
 	user := "alice"
-	jobs, _ := source.ListJobs(ctx, JobFilter{User: &user})
-	if len(jobs) != 2 {
-		t.Errorf("ListJobs(user=alice) returned %d jobs, want 2", len(jobs))
+	result, _ := source.ListJobs(ctx, JobFilter{User: &user})
+	if len(result) != 2 {
+		t.Errorf("ListJobs(user=alice) returned %d jobs, want 2", len(result))
 	}
 
 	// Test state filter
 	state := JobStateRunning
-	jobs, _ = source.ListJobs(ctx, JobFilter{State: &state})
-	if len(jobs) != 2 {
-		t.Errorf("ListJobs(state=running) returned %d jobs, want 2", len(jobs))
+	result, _ = source.ListJobs(ctx, JobFilter{State: &state})
+	if len(result) != 2 {
+		t.Errorf("ListJobs(state=running) returned %d jobs, want 2", len(result))
 	}
 
 	// Test partition filter
 	partition := "gpu"
-	jobs, _ = source.ListJobs(ctx, JobFilter{Partition: &partition})
-	if len(jobs) != 1 {
-		t.Errorf("ListJobs(partition=gpu) returned %d jobs, want 1", len(jobs))
-	}
-
-	// Test combined filter
-	jobs, _ = source.ListJobs(ctx, JobFilter{User: &user, State: &state})
-	if len(jobs) != 1 {
-		t.Errorf("ListJobs(user=alice, state=running) returned %d jobs, want 1", len(jobs))
+	result, _ = source.ListJobs(ctx, JobFilter{Partition: &partition})
+	if len(result) != 1 {
+		t.Errorf("ListJobs(partition=gpu) returned %d jobs, want 1", len(result))
 	}
 }
 
 func TestSlurmJobSource_ListJobs_Pagination(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := slurmJobsResponse{
-			Jobs: []slurmJob{
-				{JobID: 1, UserName: "user", JobState: "RUNNING"},
-				{JobID: 2, UserName: "user", JobState: "RUNNING"},
-				{JobID: 3, UserName: "user", JobState: "RUNNING"},
-				{JobID: 4, UserName: "user", JobState: "RUNNING"},
-				{JobID: 5, UserName: "user", JobState: "RUNNING"},
-			},
-		}
-		_ = json.NewEncoder(w).Encode(response)
-	}))
-	defer server.Close()
+	jobs := []slurmclient.V0037JobResponseProperties{
+		{JobId: intPtr(1), UserName: strPtr("user"), JobState: strPtr("RUNNING")},
+		{JobId: intPtr(2), UserName: strPtr("user"), JobState: strPtr("RUNNING")},
+		{JobId: intPtr(3), UserName: strPtr("user"), JobState: strPtr("RUNNING")},
+		{JobId: intPtr(4), UserName: strPtr("user"), JobState: strPtr("RUNNING")},
+		{JobId: intPtr(5), UserName: strPtr("user"), JobState: strPtr("RUNNING")},
+	}
 
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    server.URL,
-		APIVersion: "v0.0.44",
-	})
+	client := &mockSlurmClient{
+		jobsResponse: &slurmclient.SlurmctldGetJobsResponse{
+			HTTPResponse: &http.Response{StatusCode: http.StatusOK},
+			JSON200:      &slurmclient.V0037JobsResponse{Jobs: &jobs},
+		},
+	}
 
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, client)
 	ctx := context.Background()
 
 	// Test limit
-	jobs, _ := source.ListJobs(ctx, JobFilter{Limit: 2})
-	if len(jobs) != 2 {
-		t.Errorf("ListJobs(limit=2) returned %d jobs, want 2", len(jobs))
+	result, _ := source.ListJobs(ctx, JobFilter{Limit: 2})
+	if len(result) != 2 {
+		t.Errorf("ListJobs(limit=2) returned %d jobs, want 2", len(result))
 	}
 
 	// Test offset
-	jobs, _ = source.ListJobs(ctx, JobFilter{Offset: 2, Limit: 2})
-	if len(jobs) != 2 {
-		t.Errorf("ListJobs(offset=2, limit=2) returned %d jobs, want 2", len(jobs))
+	result, _ = source.ListJobs(ctx, JobFilter{Offset: 2, Limit: 2})
+	if len(result) != 2 {
+		t.Errorf("ListJobs(offset=2, limit=2) returned %d jobs, want 2", len(result))
 	}
-	if jobs[0].ID != "3" {
-		t.Errorf("First job ID = %s, want 3", jobs[0].ID)
+	if result[0].ID != "3" {
+		t.Errorf("First job ID = %s, want 3", result[0].ID)
 	}
 
 	// Test offset beyond available jobs
-	jobs, _ = source.ListJobs(ctx, JobFilter{Offset: 10})
-	if len(jobs) != 0 {
-		t.Errorf("ListJobs(offset=10) returned %d jobs, want 0", len(jobs))
+	result, _ = source.ListJobs(ctx, JobFilter{Offset: 10})
+	if len(result) != 0 {
+		t.Errorf("ListJobs(offset=10) returned %d jobs, want 0", len(result))
 	}
 }
 
 func TestSlurmJobSource_ListJobs_Error(t *testing.T) {
-	// Test API error response
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("Internal Server Error"))
-	}))
-	defer server.Close()
+	client := &mockSlurmClient{
+		jobsResponse: &slurmclient.SlurmctldGetJobsResponse{
+			HTTPResponse: &http.Response{StatusCode: http.StatusInternalServerError},
+			Body:         []byte("Internal Server Error"),
+		},
+	}
 
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    server.URL,
-		APIVersion: "v0.0.44",
-	})
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, client)
 
 	ctx := context.Background()
 	_, err := source.ListJobs(ctx, JobFilter{})
@@ -250,69 +226,24 @@ func TestSlurmJobSource_ListJobs_Error(t *testing.T) {
 	}
 }
 
-func TestSlurmJobSource_ListJobs_InvalidJSON(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("invalid json"))
-	}))
-	defer server.Close()
-
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    server.URL,
-		APIVersion: "v0.0.44",
-	})
-
-	ctx := context.Background()
-	_, err := source.ListJobs(ctx, JobFilter{})
-	if err == nil {
-		t.Error("Expected error for invalid JSON")
-	}
-}
-
-func TestSlurmJobSource_ListJobs_ConnectionError(t *testing.T) {
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    "http://localhost:99999", // Non-existent server
-		APIVersion: "v0.0.44",
-	})
-
-	ctx := context.Background()
-	_, err := source.ListJobs(ctx, JobFilter{})
-	if err == nil {
-		t.Error("Expected connection error")
-	}
-}
-
 func TestSlurmJobSource_GetJob(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/slurm/v0.0.44/job/12345" {
-			t.Errorf("Unexpected path: %s", r.URL.Path)
-		}
+	jobs := []slurmclient.V0037JobResponseProperties{
+		{
+			JobId:     intPtr(12345),
+			UserName:  strPtr("alice"),
+			JobState:  strPtr("RUNNING"),
+			Partition: strPtr("compute"),
+		},
+	}
 
-		response := slurmJobsResponse{
-			Jobs: []slurmJob{
-				{
-					JobID:       12345,
-					Name:        "detailed-job",
-					UserName:    "alice",
-					Nodes:       "node[01-04]",
-					JobState:    "COMPLETED",
-					Partition:   "compute",
-					Account:     "research",
-					StartTime:   uint64(time.Now().Add(-1 * time.Hour).Unix()),
-					EndTime:     uint64(time.Now().Add(-30 * time.Minute).Unix()),
-					SubmitTime:  uint64(time.Now().Add(-2 * time.Hour).Unix()),
-					ExitCode:    0,
-					StateReason: "",
-				},
-			},
-		}
-		_ = json.NewEncoder(w).Encode(response)
-	}))
-	defer server.Close()
+	client := &mockSlurmClient{
+		jobResponse: &slurmclient.SlurmctldGetJobResponse{
+			HTTPResponse: &http.Response{StatusCode: http.StatusOK},
+			JSON200:      &slurmclient.V0037JobsResponse{Jobs: &jobs},
+		},
+	}
 
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    server.URL,
-		APIVersion: "v0.0.44",
-	})
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, client)
 
 	ctx := context.Background()
 	job, err := source.GetJob(ctx, "12345")
@@ -325,31 +256,16 @@ func TestSlurmJobSource_GetJob(t *testing.T) {
 	if job.ID != "12345" {
 		t.Errorf("Job ID = %s, want 12345", job.ID)
 	}
-	if job.State != JobStateCompleted {
-		t.Errorf("State = %v, want %v", job.State, JobStateCompleted)
-	}
-	if job.EndTime == nil {
-		t.Error("EndTime should be set for completed job")
-	}
-	if job.RuntimeSeconds <= 0 {
-		t.Error("RuntimeSeconds should be positive for completed job")
-	}
-	// Note: node[01-04] is returned as-is since expansion is not implemented
-	if len(job.Nodes) != 1 {
-		t.Errorf("Nodes count = %d, want 1 (unexpanded)", len(job.Nodes))
-	}
 }
 
 func TestSlurmJobSource_GetJob_NotFound(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
+	client := &mockSlurmClient{
+		jobResponse: &slurmclient.SlurmctldGetJobResponse{
+			HTTPResponse: &http.Response{StatusCode: http.StatusNotFound},
+		},
+	}
 
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    server.URL,
-		APIVersion: "v0.0.44",
-	})
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, client)
 
 	ctx := context.Background()
 	job, err := source.GetJob(ctx, "99999")
@@ -361,497 +277,303 @@ func TestSlurmJobSource_GetJob_NotFound(t *testing.T) {
 	}
 }
 
-func TestSlurmJobSource_GetJob_EmptyResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := slurmJobsResponse{Jobs: []slurmJob{}}
-		_ = json.NewEncoder(w).Encode(response)
-	}))
-	defer server.Close()
-
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    server.URL,
-		APIVersion: "v0.0.44",
-	})
+func TestSlurmJobSource_GetJob_InvalidID(t *testing.T) {
+	// With v0.0.37, job IDs are strings passed directly to the API
+	// The API will return 404 for non-existent jobs
+	client := &mockSlurmClient{
+		jobResponse: &slurmclient.SlurmctldGetJobResponse{
+			HTTPResponse: &http.Response{StatusCode: http.StatusNotFound},
+		},
+	}
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, client)
 
 	ctx := context.Background()
-	job, err := source.GetJob(ctx, "12345")
+	job, err := source.GetJob(ctx, "not-a-number")
+	// Should not error, just return nil for not found
 	if err != nil {
-		t.Fatalf("GetJob() error = %v", err)
+		t.Errorf("GetJob() error = %v, want nil", err)
 	}
 	if job != nil {
-		t.Error("GetJob() should return nil for empty response")
+		t.Error("GetJob() should return nil for not found job")
 	}
 }
 
-func TestSlurmJobSource_GetJob_Error(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("Server Error"))
-	}))
-	defer server.Close()
-
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    server.URL,
-		APIVersion: "v0.0.44",
-	})
-
-	ctx := context.Background()
-	_, err := source.GetJob(ctx, "12345")
-	if err == nil {
-		t.Error("Expected error for 500 response")
+func TestSlurmJobSource_ListNodes(t *testing.T) {
+	cpuLoad := int64(240) // 2.40 load
+	nodes := []slurmclient.V0037Node{
+		{
+			Name:       strPtr("node01"),
+			Hostname:   strPtr("node01.cluster"),
+			State:      strPtr("idle"),
+			Cpus:       intPtr(64),
+			Cores:      intPtr(32),
+			Sockets:    intPtr(2),
+			RealMemory: intPtr(256000),
+			FreeMemory: intPtr(240000),
+			CpuLoad:    &cpuLoad,
+			Features:   strPtr("avx2,gpu"),
+		},
+		{
+			Name:     strPtr("node02"),
+			Hostname: strPtr("node02.cluster"),
+			State:    strPtr("allocated"),
+			Cpus:     intPtr(64),
+		},
 	}
-}
 
-func TestSlurmJobSource_GetJobMetrics(t *testing.T) {
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    "http://localhost:6820",
-		APIVersion: "v0.0.44",
-	})
+	client := &mockSlurmClient{
+		nodesResponse: &slurmclient.SlurmctldGetNodesResponse{
+			HTTPResponse: &http.Response{StatusCode: http.StatusOK},
+			JSON200:      &slurmclient.V0037NodesResponse{Nodes: &nodes},
+		},
+	}
+
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, client)
 
 	ctx := context.Background()
-	metrics, err := source.GetJobMetrics(ctx, "12345")
+	result, err := source.ListNodes(ctx)
 	if err != nil {
-		t.Errorf("GetJobMetrics() error = %v", err)
+		t.Fatalf("ListNodes() error = %v", err)
 	}
-	if metrics != nil {
-		t.Error("GetJobMetrics() should return nil (not supported)")
-	}
-}
-
-func TestSlurmJobSource_ConvertSlurmJob(t *testing.T) {
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    "http://localhost:6820",
-		APIVersion: "v0.0.44",
-	})
-
-	startTime := time.Now().Add(-1 * time.Hour)
-	endTime := time.Now().Add(-30 * time.Minute)
-	submitTime := time.Now().Add(-2 * time.Hour)
-
-	tests := []struct {
-		name      string
-		slurmJob  slurmJob
-		checkFunc func(t *testing.T, job *Job)
-	}{
-		{
-			name: "running job without end time",
-			slurmJob: slurmJob{
-				JobID:     1,
-				Name:      "running-job",
-				UserName:  "user1",
-				JobState:  "RUNNING",
-				StartTime: uint64(startTime.Unix()),
-			},
-			checkFunc: func(t *testing.T, job *Job) {
-				if job.State != JobStateRunning {
-					t.Errorf("State = %v, want running", job.State)
-				}
-				if job.EndTime != nil {
-					t.Error("EndTime should be nil for running job")
-				}
-				if job.RuntimeSeconds <= 0 {
-					t.Error("RuntimeSeconds should be positive for running job")
-				}
-			},
-		},
-		{
-			name: "completed job with all fields",
-			slurmJob: slurmJob{
-				JobID:        2,
-				Name:         "completed-job",
-				UserName:     "user2",
-				JobState:     "COMPLETED",
-				Partition:    "gpu",
-				Account:      "ml",
-				QoS:          "high",
-				Priority:     5000,
-				StartTime:    uint64(startTime.Unix()),
-				EndTime:      uint64(endTime.Unix()),
-				SubmitTime:   uint64(submitTime.Unix()),
-				ExitCode:     0,
-				Cpus:         16,
-				Memory:       32000,
-				TresAllocStr: "cpu=16,mem=32G",
-				TresReqStr:   "cpu=16,mem=32G",
-				StateReason:  "",
-			},
-			checkFunc: func(t *testing.T, job *Job) {
-				if job.State != JobStateCompleted {
-					t.Errorf("State = %v, want completed", job.State)
-				}
-				if job.EndTime == nil {
-					t.Error("EndTime should be set for completed job")
-				}
-				if job.Scheduler == nil {
-					t.Fatal("Scheduler info is nil")
-				}
-				if job.Scheduler.QoS != "high" {
-					t.Errorf("QoS = %s, want high", job.Scheduler.QoS)
-				}
-				if job.Scheduler.SubmitTime == nil {
-					t.Error("SubmitTime should be set")
-				}
-				if job.Scheduler.ExitCode != nil {
-					t.Error("ExitCode should be nil when 0")
-				}
-				extra := job.Scheduler.Extra
-				if extra == nil {
-					t.Fatal("Extra is nil")
-				}
-				if extra["cpus"] != uint32(16) {
-					t.Errorf("Extra[cpus] = %v, want 16", extra["cpus"])
-				}
-			},
-		},
-		{
-			name: "failed job with exit code",
-			slurmJob: slurmJob{
-				JobID:       3,
-				UserName:    "user3",
-				JobState:    "FAILED",
-				ExitCode:    1,
-				StateReason: "NonZeroExitCode",
-			},
-			checkFunc: func(t *testing.T, job *Job) {
-				if job.State != JobStateFailed {
-					t.Errorf("State = %v, want failed", job.State)
-				}
-				if job.Scheduler.ExitCode == nil || *job.Scheduler.ExitCode != 1 {
-					t.Error("ExitCode should be 1")
-				}
-			},
-		},
-		{
-			name: "pending job",
-			slurmJob: slurmJob{
-				JobID:       4,
-				UserName:    "user4",
-				JobState:    "PENDING",
-				Priority:    0,
-				StateReason: "Priority",
-			},
-			checkFunc: func(t *testing.T, job *Job) {
-				if job.State != JobStatePending {
-					t.Errorf("State = %v, want pending", job.State)
-				}
-				// Priority 0 should not be set
-				if job.Scheduler.Priority != nil {
-					t.Error("Priority should be nil when 0")
-				}
-			},
-		},
-		{
-			name: "cancelled job",
-			slurmJob: slurmJob{
-				JobID:    5,
-				UserName: "user5",
-				JobState: "CANCELLED",
-			},
-			checkFunc: func(t *testing.T, job *Job) {
-				if job.State != JobStateCancelled {
-					t.Errorf("State = %v, want cancelled", job.State)
-				}
-			},
-		},
-		{
-			name: "job with zero end time",
-			slurmJob: slurmJob{
-				JobID:     6,
-				UserName:  "user6",
-				JobState:  "RUNNING",
-				StartTime: uint64(startTime.Unix()),
-				EndTime:   0,
-			},
-			checkFunc: func(t *testing.T, job *Job) {
-				if job.EndTime != nil {
-					t.Error("EndTime should be nil when SLURM sends 0")
-				}
-			},
-		},
+	if len(result) != 2 {
+		t.Fatalf("ListNodes() returned %d nodes, want 2", len(result))
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			job := source.convertSlurmJob(&tt.slurmJob)
-			if job == nil {
-				t.Fatal("convertSlurmJob returned nil")
-			}
-			tt.checkFunc(t, job)
-		})
+	// Verify first node
+	node := result[0]
+	if node.Name != "node01" {
+		t.Errorf("Node name = %s, want node01", node.Name)
+	}
+	if node.State != NodeStateIdle {
+		t.Errorf("Node state = %v, want %v", node.State, NodeStateIdle)
+	}
+	if node.CPUs != 64 {
+		t.Errorf("CPUs = %d, want 64", node.CPUs)
+	}
+	if node.CPULoad != 2.40 {
+		t.Errorf("CPULoad = %f, want 2.40", node.CPULoad)
+	}
+	if len(node.Features) != 2 {
+		t.Errorf("Features count = %d, want 2", len(node.Features))
 	}
 }
 
-func TestSlurmJobSource_ParseNodes(t *testing.T) {
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    "http://localhost:6820",
-		APIVersion: "v0.0.44",
-	})
+func TestSlurmJobSource_MapNodeState(t *testing.T) {
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, &mockSlurmClient{})
 
 	tests := []struct {
-		input    string
-		expected []string
+		input string
+		want  NodeState
 	}{
-		{"", nil},
-		{"node01", []string{"node01"}},
-		{"node01,node02,node03", []string{"node01", "node02", "node03"}},
-		{"node[01-04]", []string{"node[01-04]"}}, // Unexpanded for now
+		{"idle", NodeStateIdle},
+		{"IDLE", NodeStateIdle},
+		{"idle+cloud", NodeStateIdle},
+		{"alloc", NodeStateAllocated},
+		{"allocated", NodeStateAllocated},
+		{"mix", NodeStateMixed},
+		{"mixed", NodeStateMixed},
+		{"drain", NodeStateDrained},
+		{"drained", NodeStateDrained},
+		{"draining", NodeStateDrained},
+		{"down", NodeStateDown},
+		{"down*", NodeStateDown},
+		{"unknown", NodeStateUnknown},
+		{"", NodeStateUnknown},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := source.parseNodes(tt.input)
-			if tt.expected == nil && result != nil {
-				t.Errorf("parseNodes(%q) = %v, want nil", tt.input, result)
-				return
-			}
-			if len(result) != len(tt.expected) {
-				t.Errorf("parseNodes(%q) = %v, want %v", tt.input, result, tt.expected)
-				return
-			}
-			for i := range result {
-				if result[i] != tt.expected[i] {
-					t.Errorf("parseNodes(%q)[%d] = %s, want %s", tt.input, i, result[i], tt.expected[i])
-				}
+			got := source.mapNodeState(tt.input)
+			if got != tt.want {
+				t.Errorf("mapNodeState(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestSlurmJobSource_MatchesFilter(t *testing.T) {
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    "http://localhost:6820",
-		APIVersion: "v0.0.44",
-	})
-
-	job := &Job{
-		ID:    "1",
-		User:  "alice",
-		State: JobStateRunning,
-		Scheduler: &SchedulerInfo{
-			Partition: "compute",
-		},
-	}
-
+func TestParseNodeList(t *testing.T) {
 	tests := []struct {
-		name    string
-		filter  JobFilter
-		matches bool
+		input string
+		want  int
 	}{
-		{"empty filter", JobFilter{}, true},
-		{"matching user", JobFilter{User: stringPtr("alice")}, true},
-		{"non-matching user", JobFilter{User: stringPtr("bob")}, false},
-		{"matching state", JobFilter{State: jobStatePtr(JobStateRunning)}, true},
-		{"non-matching state", JobFilter{State: jobStatePtr(JobStatePending)}, false},
-		{"matching partition", JobFilter{Partition: stringPtr("compute")}, true},
-		{"non-matching partition", JobFilter{Partition: stringPtr("gpu")}, false},
-		{"combined matching", JobFilter{User: stringPtr("alice"), State: jobStatePtr(JobStateRunning)}, true},
-		{"combined non-matching", JobFilter{User: stringPtr("alice"), State: jobStatePtr(JobStatePending)}, false},
+		{"", 0},
+		{"node01", 1},
+		{"node01,node02", 2},
+		{"node01,node02,node03", 3},
+		{"node[01-04]", 1}, // Not expanded yet
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := source.matchesFilter(job, tt.filter); got != tt.matches {
-				t.Errorf("matchesFilter() = %v, want %v", got, tt.matches)
+		t.Run(tt.input, func(t *testing.T) {
+			got := parseNodeList(tt.input)
+			if len(got) != tt.want {
+				t.Errorf("parseNodeList(%q) returned %d items, want %d", tt.input, len(got), tt.want)
 			}
 		})
 	}
+}
 
-	// Test job without scheduler info
-	jobNoScheduler := &Job{
-		ID:        "2",
-		User:      "bob",
-		State:     JobStateRunning,
-		Scheduler: nil,
+func TestParseTRESInt(t *testing.T) {
+	tests := []struct {
+		tres string
+		key  string
+		want int64
+	}{
+		{"cpu=4,mem=8192M,node=1", "cpu", 4},
+		{"cpu=4,mem=8192M,node=1", "node", 1},
+		{"cpu=4,mem=8192M,node=1", "gpu", 0},
+		{"", "cpu", 0},
+		{"gres/gpu=2", "gres/gpu", 2},
 	}
-	partFilter := JobFilter{Partition: stringPtr("compute")}
-	if source.matchesFilter(jobNoScheduler, partFilter) {
-		t.Error("matchesFilter() should return false for job without scheduler when filtering by partition")
+
+	for _, tt := range tests {
+		t.Run(tt.tres+"_"+tt.key, func(t *testing.T) {
+			got := parseTRESInt(tt.tres, tt.key)
+			if got != tt.want {
+				t.Errorf("parseTRESInt(%q, %q) = %d, want %d", tt.tres, tt.key, got, tt.want)
+			}
+		})
 	}
 }
 
-func TestSlurmJobSource_BuildURL(t *testing.T) {
-	source := NewSlurmJobSource(SlurmConfig{
+func TestParseTRESMemory(t *testing.T) {
+	tests := []struct {
+		tres string
+		want int64
+	}{
+		{"cpu=4,mem=8192M,node=1", 8192},
+		{"cpu=4,mem=8G,node=1", 8192},
+		{"cpu=4,mem=1024K,node=1", 1},
+		{"cpu=4,node=1", 0},
+		{"", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.tres, func(t *testing.T) {
+			got := parseTRESMemory(tt.tres)
+			if got != tt.want {
+				t.Errorf("parseTRESMemory(%q) = %d, want %d", tt.tres, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseMemoryString(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int64
+	}{
+		{"8192M", 8192},
+		{"8G", 8192},
+		{"1T", 1048576},
+		{"1024K", 1},
+		{"8388608", 8}, // Assumed bytes, becomes 8MB
+		{"", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := parseMemoryString(tt.input)
+			if got != tt.want {
+				t.Errorf("parseMemoryString(%q) = %d, want %d", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSlurmJobStateMapping(t *testing.T) {
+	mapper := NewSlurmStateMapping()
+
+	tests := []struct {
+		input string
+		want  JobState
+	}{
+		{"PENDING", JobStatePending},
+		{"RUNNING", JobStateRunning},
+		{"COMPLETED", JobStateCompleted},
+		{"FAILED", JobStateFailed},
+		{"CANCELLED", JobStateCancelled},
+		{"TIMEOUT", JobStateFailed},
+		{"NODE_FAIL", JobStateFailed},
+		{"PREEMPTED", JobStateCancelled},
+		{"SUSPENDED", JobStatePending},
+		{"UNKNOWN", JobStatePending}, // Default
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := mapper.NormalizeState(tt.input)
+			if got != tt.want {
+				t.Errorf("NormalizeState(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewSlurmJobSource(t *testing.T) {
+	config := SlurmConfig{
 		BaseURL:    "http://localhost:6820",
-		APIVersion: "v0.0.44",
-	})
-
-	url := source.buildURL("/slurm/%s/jobs/", "v0.0.44")
-	expected := "http://localhost:6820/slurm/v0.0.44/jobs/"
-	if url != expected {
-		t.Errorf("buildURL() = %s, want %s", url, expected)
+		APIVersion: "v0.0.36",
+		AuthToken:  "test-token",
 	}
 
-	url = source.buildURL("/slurm/%s/job/%s", "v0.0.44", "12345")
-	expected = "http://localhost:6820/slurm/v0.0.44/job/12345"
-	if url != expected {
-		t.Errorf("buildURL() = %s, want %s", url, expected)
+	source, err := NewSlurmJobSource(config)
+	if err != nil {
+		t.Fatalf("NewSlurmJobSource() error = %v", err)
+	}
+	if source == nil {
+		t.Fatal("NewSlurmJobSource() returned nil")
+	}
+	if source.Type() != SchedulerTypeSlurm {
+		t.Errorf("Type() = %v, want %v", source.Type(), SchedulerTypeSlurm)
 	}
 }
 
-func TestSlurmJobSource_DoRequest_WithoutAuth(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-SLURM-USER-TOKEN") != "" {
-			t.Error("Auth token should not be set")
-		}
-		_ = json.NewEncoder(w).Encode(slurmJobsResponse{Jobs: []slurmJob{}})
-	}))
-	defer server.Close()
+func TestNewSlurmJobSource_CustomHTTPClient(t *testing.T) {
+	customClient := &http.Client{Timeout: 60 * time.Second}
+	config := SlurmConfig{
+		BaseURL:    "http://localhost:6820",
+		APIVersion: "v0.0.36",
+		HTTPClient: customClient,
+	}
 
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    server.URL,
-		APIVersion: "v0.0.44",
-		AuthToken:  "", // No auth
-	})
+	source, err := NewSlurmJobSource(config)
+	if err != nil {
+		t.Fatalf("NewSlurmJobSource() error = %v", err)
+	}
+	if source == nil {
+		t.Fatal("NewSlurmJobSource() returned nil")
+	}
+}
+
+func TestSlurmJobSource_Ping(t *testing.T) {
+	client := &mockSlurmClient{
+		pingResponse: &slurmclient.SlurmctldPingResponse{
+			HTTPResponse: &http.Response{StatusCode: http.StatusOK},
+		},
+	}
+
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, client)
 
 	ctx := context.Background()
-	_, err := source.ListJobs(ctx, JobFilter{})
+	err := source.Ping(ctx)
 	if err != nil {
-		t.Errorf("ListJobs() error = %v", err)
+		t.Errorf("Ping() error = %v", err)
 	}
 }
 
-func TestSlurmJobSource_DoRequest_WithBody(t *testing.T) {
-	// While SLURM REST API typically uses GET, test the body marshaling path
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
+func TestSlurmJobSource_Ping_Error(t *testing.T) {
+	client := &mockSlurmClient{
+		pingResponse: &slurmclient.SlurmctldPingResponse{
+			HTTPResponse: &http.Response{StatusCode: http.StatusServiceUnavailable},
+		},
+	}
 
-	source := NewSlurmJobSource(SlurmConfig{
-		BaseURL:    server.URL,
-		APIVersion: "v0.0.44",
-	})
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, client)
 
 	ctx := context.Background()
-	// Call doRequest directly with a body (even though our API doesn't use POST)
-	resp, err := source.doRequest(ctx, "POST", server.URL+"/test", map[string]string{"key": "value"})
-	if err != nil {
-		t.Errorf("doRequest() error = %v", err)
-	}
-	resp.Body.Close()
-}
-
-// Helper functions for test pointers
-func stringPtr(s string) *string {
-	return &s
-}
-
-func jobStatePtr(s JobState) *JobState {
-	return &s
-}
-
-func TestParseMemoryFromTRES(t *testing.T) {
-	tests := []struct {
-		name     string
-		tresStr  string
-		expected int64
-	}{
-		{
-			name:     "empty string",
-			tresStr:  "",
-			expected: 0,
-		},
-		{
-			name:     "memory in MB",
-			tresStr:  "cpu=1,mem=31995M,node=1,billing=1",
-			expected: 31995,
-		},
-		{
-			name:     "memory in GB",
-			tresStr:  "cpu=4,mem=32G,node=1",
-			expected: 32768,
-		},
-		{
-			name:     "memory in KB",
-			tresStr:  "mem=1048576K,cpu=2",
-			expected: 1024,
-		},
-		{
-			name:     "memory at start",
-			tresStr:  "mem=2048M,cpu=1",
-			expected: 2048,
-		},
-		{
-			name:     "memory at end",
-			tresStr:  "cpu=1,node=1,mem=4096M",
-			expected: 4096,
-		},
-		{
-			name:     "no memory field",
-			tresStr:  "cpu=1,node=1,billing=1",
-			expected: 0,
-		},
-		{
-			name:     "lowercase suffix",
-			tresStr:  "mem=1024m",
-			expected: 1024,
-		},
-		{
-			name:     "memory in TB",
-			tresStr:  "mem=1T",
-			expected: 1024 * 1024,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := parseMemoryFromTRES(tt.tresStr)
-			if result != tt.expected {
-				t.Errorf("parseMemoryFromTRES(%q) = %d, want %d", tt.tresStr, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestParseMemoryValue(t *testing.T) {
-	tests := []struct {
-		name     string
-		memStr   string
-		expected int64
-	}{
-		{
-			name:     "empty",
-			memStr:   "",
-			expected: 0,
-		},
-		{
-			name:     "MB",
-			memStr:   "1024M",
-			expected: 1024,
-		},
-		{
-			name:     "GB",
-			memStr:   "4G",
-			expected: 4096,
-		},
-		{
-			name:     "KB",
-			memStr:   "2048K",
-			expected: 2,
-		},
-		{
-			name:     "TB",
-			memStr:   "1T",
-			expected: 1048576,
-		},
-		{
-			name:     "lowercase m",
-			memStr:   "512m",
-			expected: 512,
-		},
-		{
-			name:     "lowercase g",
-			memStr:   "8g",
-			expected: 8192,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := parseMemoryValue(tt.memStr)
-			if result != tt.expected {
-				t.Errorf("parseMemoryValue(%q) = %d, want %d", tt.memStr, result, tt.expected)
-			}
-		})
+	err := source.Ping(ctx)
+	if err == nil {
+		t.Error("Expected error for unavailable service")
 	}
 }

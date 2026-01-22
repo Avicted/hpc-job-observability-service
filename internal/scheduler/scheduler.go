@@ -40,8 +40,10 @@ type SchedulerInfo struct {
 	Partition     string                 `json:"partition,omitempty"`
 	Account       string                 `json:"account,omitempty"`
 	QoS           string                 `json:"qos,omitempty"`
-	Priority      *int                   `json:"priority,omitempty"`
+	Priority      *int64                 `json:"priority,omitempty"`
 	ExitCode      *int                   `json:"exit_code,omitempty"`
+	StateReason   string                 `json:"state_reason,omitempty"`
+	TimeLimitMins *int                   `json:"time_limit_minutes,omitempty"`
 	Extra         map[string]interface{} `json:"extra,omitempty"`
 }
 
@@ -52,6 +54,7 @@ type Job struct {
 	ID             string         `json:"id"`
 	User           string         `json:"user"`
 	Nodes          []string       `json:"nodes"`
+	NodeCount      int            `json:"node_count,omitempty"`
 	State          JobState       `json:"state"`
 	StartTime      time.Time      `json:"start_time"`
 	EndTime        *time.Time     `json:"end_time,omitempty"`
@@ -59,6 +62,12 @@ type Job struct {
 	CPUUsage       float64        `json:"cpu_usage"`
 	MemoryUsageMB  int64          `json:"memory_usage_mb"`
 	GPUUsage       *float64       `json:"gpu_usage,omitempty"`
+	RequestedCPUs  int64          `json:"requested_cpus,omitempty"`
+	AllocatedCPUs  int64          `json:"allocated_cpus,omitempty"`
+	RequestedMemMB int64          `json:"requested_memory_mb,omitempty"`
+	AllocatedMemMB int64          `json:"allocated_memory_mb,omitempty"`
+	RequestedGPUs  int64          `json:"requested_gpus,omitempty"`
+	AllocatedGPUs  int64          `json:"allocated_gpus,omitempty"`
 	Scheduler      *SchedulerInfo `json:"scheduler,omitempty"`
 }
 

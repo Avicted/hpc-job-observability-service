@@ -12,7 +12,6 @@ services:
     environment:
       - PORT=8080
       - HOST=0.0.0.0
-      - DATABASE_TYPE=postgres
       - DATABASE_URL=postgres://${POSTGRES_USER:-hpc}:${POSTGRES_PASSWORD:-hpc_password}@postgres:5432/${POSTGRES_DB:-hpc_jobs}?sslmode=disable
       - METRICS_RETENTION_DAYS=${METRICS_RETENTION_DAYS:-7}
       - SCHEDULER_BACKEND=${SCHEDULER_BACKEND:-mock}
@@ -62,7 +61,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -94,25 +93,6 @@ services:
       - prometheus
     networks:
       - hpc-network
-
-  # Mock server (optional, for learning/testing)
-  mockserver:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: hpc-mockserver
-    ports:
-      - "${MOCK_PORT:-8081}:8081"
-    env_file:
-      - .env
-    environment:
-      - MOCK_PORT=${MOCK_PORT:-8081}
-      - MOCK_HOST=${MOCK_HOST:-0.0.0.0}
-    command: ["/app/mockserver"]
-    networks:
-      - hpc-network
-    profiles:
-      - mock
 
   # =============================================================================
   # Slurm Integration Testing Services (optional, use --profile slurm)

@@ -3,12 +3,45 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"testing"
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 )
+
+func testAuditContext() context.Context {
+	return WithAuditInfo(context.Background(), NewAuditInfo("test", "storage-test"))
+}
+
+func jobRowColumns() []string {
+	return []string{
+		"id", "user_name", "nodes", "node_count", "state", "start_time", "end_time", "runtime_seconds",
+		"cpu_usage", "memory_usage_mb", "gpu_usage",
+		"external_job_id", "scheduler_type", "raw_state", "partition", "account", "qos", "priority", "submit_time", "exit_code", "state_reason", "time_limit_minutes",
+		"requested_cpus", "allocated_cpus", "requested_memory_mb", "allocated_memory_mb", "requested_gpus", "allocated_gpus",
+		"cluster_name", "scheduler_instance", "ingest_version",
+		"last_sample_at", "sample_count", "avg_cpu_usage", "max_cpu_usage", "max_memory_usage_mb", "avg_gpu_usage", "max_gpu_usage",
+		"created_at", "updated_at",
+	}
+}
+
+func jobRowValues(id string, state JobState, start time.Time, end *time.Time) []driver.Value {
+	var endVal driver.Value
+	if end != nil {
+		endVal = *end
+	}
+	return []driver.Value{
+		id, "user", "node-1", int64(1), state, start, endVal, float64(0),
+		float64(0), int64(0), nil,
+		"", "", "", "", "", "", nil, nil, nil, "", nil,
+		int64(0), int64(0), int64(0), int64(0), int64(0), int64(0),
+		"default", "test", "test",
+		nil, int64(0), float64(0), float64(0), int64(0), float64(0), float64(0),
+		time.Now(), time.Now(),
+	}
+}
 
 func TestPostgresStorage_CreateJob_Duplicate(t *testing.T) {
 	db, mock, err := sqlmock.New()
@@ -19,11 +52,13 @@ func TestPostgresStorage_CreateJob_Duplicate(t *testing.T) {
 
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 
+	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM jobs WHERE id = \\$1\\)").
 		WithArgs("job-1").
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectRollback()
 
-	err = store.CreateJob(context.Background(), &Job{ID: "job-1"})
+	err = store.CreateJob(testAuditContext(), &Job{ID: "job-1"})
 	if !errors.Is(err, ErrJobAlreadyExists) {
 		t.Fatalf("expected ErrJobAlreadyExists, got %v", err)
 	}
@@ -43,14 +78,16 @@ func TestPostgresStorage_CreateJob_InsertError(t *testing.T) {
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 	job := &Job{ID: "job-2", User: "alice", Nodes: []string{"node-1"}, State: JobStateRunning, StartTime: time.Now()}
 
+	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM jobs WHERE id = \\$1\\)").
 		WithArgs("job-2").
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
 
 	mock.ExpectExec("INSERT INTO jobs").
 		WillReturnError(errors.New("insert failed"))
+	mock.ExpectRollback()
 
-	err = store.CreateJob(context.Background(), job)
+	err = store.CreateJob(testAuditContext(), job)
 	if err == nil || err.Error() != "insert failed" {
 		t.Fatalf("expected insert error, got %v", err)
 	}
@@ -69,11 +106,13 @@ func TestPostgresStorage_CreateJob_ExistsQueryError(t *testing.T) {
 
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 
+	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM jobs WHERE id = \\$1\\)").
 		WithArgs("job-err").
 		WillReturnError(errors.New("query failed"))
+	mock.ExpectRollback()
 
-	err = store.CreateJob(context.Background(), &Job{ID: "job-err"})
+	err = store.CreateJob(testAuditContext(), &Job{ID: "job-err"})
 	if err == nil || err.Error() != "query failed" {
 		t.Fatalf("expected query error, got %v", err)
 	}
@@ -92,7 +131,7 @@ func TestPostgresStorage_GetJob_NotFound(t *testing.T) {
 
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 
-	mock.ExpectQuery("SELECT id, user_name, nodes, state, start_time, end_time, runtime_seconds,").
+	mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
 		WithArgs("missing").
 		WillReturnError(sql.ErrNoRows)
 
@@ -115,7 +154,7 @@ func TestPostgresStorage_GetJob_QueryError(t *testing.T) {
 
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 
-	mock.ExpectQuery("SELECT id, user_name, nodes, state, start_time, end_time, runtime_seconds,").
+	mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
 		WithArgs("job-err").
 		WillReturnError(errors.New("db error"))
 
@@ -138,15 +177,9 @@ func TestPostgresStorage_GetJob_WithNulls(t *testing.T) {
 
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 
-	rows := sqlmock.NewRows([]string{
-		"id", "user_name", "nodes", "state", "start_time", "end_time", "runtime_seconds",
-		"cpu_usage", "memory_usage_mb", "gpu_usage", "created_at", "updated_at",
-	}).AddRow(
-		"job-3", "alice", "node-1,node-2", JobStateRunning, time.Now(), nil, 0.0,
-		10.5, int64(1024), nil, time.Now(), time.Now(),
-	)
+	rows := sqlmock.NewRows(jobRowColumns()).AddRow(jobRowValues("job-3", JobStateRunning, time.Now(), nil)...)
 
-	mock.ExpectQuery("SELECT id, user_name, nodes, state, start_time, end_time, runtime_seconds,").
+	mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
 		WithArgs("job-3").
 		WillReturnRows(rows)
 
@@ -177,10 +210,14 @@ func TestPostgresStorage_UpdateJob_NotFound(t *testing.T) {
 
 	job := &Job{ID: "job-4", User: "bob", Nodes: []string{"node-1"}, State: JobStateCompleted, StartTime: time.Now().Add(-time.Hour)}
 
-	mock.ExpectExec("UPDATE jobs SET").
-		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectBegin()
+	// UpdateJob now calls getJobByIDTx first to check terminal state
+	mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
+		WithArgs("job-4").
+		WillReturnError(sql.ErrNoRows)
+	mock.ExpectRollback()
 
-	err = store.UpdateJob(context.Background(), job)
+	err = store.UpdateJob(testAuditContext(), job)
 	if !errors.Is(err, ErrJobNotFound) {
 		t.Fatalf("expected ErrJobNotFound, got %v", err)
 	}
@@ -199,12 +236,19 @@ func TestPostgresStorage_UpdateJob_ExecError(t *testing.T) {
 
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 
-	job := &Job{ID: "job-5", User: "bob", Nodes: []string{"node-1"}, State: JobStateRunning, StartTime: time.Now()}
+	startTime := time.Now()
+	job := &Job{ID: "job-5", User: "bob", Nodes: []string{"node-1"}, State: JobStateRunning, StartTime: startTime}
 
+	mock.ExpectBegin()
+	// UpdateJob now calls getJobByIDTx first to check terminal state; return a running job
+	mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
+		WithArgs("job-5").
+		WillReturnRows(sqlmock.NewRows(jobRowColumns()).AddRow(jobRowValues("job-5", JobStateRunning, startTime, nil)...))
 	mock.ExpectExec("UPDATE jobs SET").
 		WillReturnError(errors.New("update failed"))
+	mock.ExpectRollback()
 
-	err = store.UpdateJob(context.Background(), job)
+	err = store.UpdateJob(testAuditContext(), job)
 	if err == nil || err.Error() != "update failed" {
 		t.Fatalf("expected update error, got %v", err)
 	}
@@ -223,11 +267,13 @@ func TestPostgresStorage_DeleteJob_NotFound(t *testing.T) {
 
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 
-	mock.ExpectExec("DELETE FROM jobs WHERE id = \\$1").
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
 		WithArgs("missing").
-		WillReturnResult(sqlmock.NewResult(0, 0))
+		WillReturnError(sql.ErrNoRows)
+	mock.ExpectRollback()
 
-	err = store.DeleteJob(context.Background(), "missing")
+	err = store.DeleteJob(testAuditContext(), "missing")
 	if !errors.Is(err, ErrJobNotFound) {
 		t.Fatalf("expected ErrJobNotFound, got %v", err)
 	}
@@ -246,11 +292,18 @@ func TestPostgresStorage_DeleteJob_ExecError(t *testing.T) {
 
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 
+	rows := sqlmock.NewRows(jobRowColumns()).AddRow(jobRowValues("job-err", JobStateRunning, time.Now(), nil)...)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
+		WithArgs("job-err").
+		WillReturnRows(rows)
 	mock.ExpectExec("DELETE FROM jobs WHERE id = \\$1").
 		WithArgs("job-err").
 		WillReturnError(errors.New("delete failed"))
+	mock.ExpectRollback()
 
-	err = store.DeleteJob(context.Background(), "job-err")
+	err = store.DeleteJob(testAuditContext(), "job-err")
 	if err == nil || err.Error() != "delete failed" {
 		t.Fatalf("expected delete error, got %v", err)
 	}
@@ -328,11 +381,20 @@ func TestPostgresStorage_DeleteJob_Success(t *testing.T) {
 
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 
+	rows := sqlmock.NewRows(jobRowColumns()).AddRow(jobRowValues("job-1", JobStateRunning, time.Now(), nil)...)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
+		WithArgs("job-1").
+		WillReturnRows(rows)
 	mock.ExpectExec("DELETE FROM jobs WHERE id = \\$1").
 		WithArgs("job-1").
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("INSERT INTO job_audit_events").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 
-	if err := store.DeleteJob(context.Background(), "job-1"); err != nil {
+	if err := store.DeleteJob(testAuditContext(), "job-1"); err != nil {
 		t.Fatalf("DeleteJob error: %v", err)
 	}
 
@@ -411,14 +473,9 @@ func TestPostgresStorage_ListJobs(t *testing.T) {
 		WithArgs(state, user, "%"+node+"%").
 		WillReturnRows(countRows)
 
-	jobRows := sqlmock.NewRows([]string{
-		"id", "user_name", "nodes", "state", "start_time", "end_time", "runtime_seconds",
-		"cpu_usage", "memory_usage_mb", "gpu_usage", "created_at", "updated_at",
-	}).AddRow(
-		"job-1", "alice", "node-1", JobStateRunning, time.Now(), nil, 0.0, 10.0, int64(512), nil, time.Now(), time.Now(),
-	)
+	jobRows := sqlmock.NewRows(jobRowColumns()).AddRow(jobRowValues("job-1", JobStateRunning, time.Now(), nil)...)
 
-	mock.ExpectQuery("SELECT id, user_name, nodes, state, start_time, end_time, runtime_seconds,").
+	mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
 		WithArgs(state, user, "%"+node+"%", filter.Limit, filter.Offset).
 		WillReturnRows(jobRows)
 
@@ -460,12 +517,9 @@ func TestPostgresStorage_ListJobs_LimitDefaultAndCap(t *testing.T) {
 			mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM jobs").
 				WillReturnRows(countRows)
 
-			jobRows := sqlmock.NewRows([]string{
-				"id", "user_name", "nodes", "state", "start_time", "end_time", "runtime_seconds",
-				"cpu_usage", "memory_usage_mb", "gpu_usage", "created_at", "updated_at",
-			})
+			jobRows := sqlmock.NewRows(jobRowColumns())
 
-			mock.ExpectQuery("SELECT id, user_name, nodes, state, start_time, end_time, runtime_seconds,").
+			mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
 				WithArgs(tc.expected, 0).
 				WillReturnRows(jobRows)
 
@@ -490,14 +544,9 @@ func TestPostgresStorage_GetAllJobs(t *testing.T) {
 
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 
-	jobRows := sqlmock.NewRows([]string{
-		"id", "user_name", "nodes", "state", "start_time", "end_time", "runtime_seconds",
-		"cpu_usage", "memory_usage_mb", "gpu_usage", "created_at", "updated_at",
-	}).AddRow(
-		"job-1", "alice", "node-1", JobStateRunning, time.Now(), nil, 0.0, 10.0, int64(512), nil, time.Now(), time.Now(),
-	)
+	jobRows := sqlmock.NewRows(jobRowColumns()).AddRow(jobRowValues("job-1", JobStateRunning, time.Now(), nil)...)
 
-	mock.ExpectQuery("SELECT id, user_name, nodes, state, start_time, end_time, runtime_seconds,").
+	mock.ExpectQuery("SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,").
 		WillReturnRows(jobRows)
 
 	jobs, err := store.GetAllJobs(context.Background())
@@ -523,8 +572,13 @@ func TestPostgresStorage_RecordMetrics(t *testing.T) {
 	store := &PostgresStorage{baseStorage: baseStorage{db: db}}
 
 	rows := sqlmock.NewRows([]string{"id"}).AddRow(int64(10))
+	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO metric_samples").
 		WillReturnRows(rows)
+	mock.ExpectExec("UPDATE jobs SET").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 
 	sample := &MetricSample{JobID: "job-1", CPUUsage: 10, MemoryUsageMB: 256}
 	if err := store.RecordMetrics(context.Background(), sample); err != nil {

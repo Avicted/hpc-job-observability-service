@@ -10,6 +10,7 @@ import (
 
 	"github.com/avic/hpc-job-observability-service/internal/scheduler"
 	"github.com/avic/hpc-job-observability-service/internal/storage"
+	"github.com/google/uuid"
 )
 
 // Config holds the syncer configuration.
@@ -18,13 +19,21 @@ type Config struct {
 	SyncInterval time.Duration
 	// InitialDelay is how long to wait before the first sync.
 	InitialDelay time.Duration
+	// ClusterName identifies the cluster for audit/observability.
+	ClusterName string
+	// SchedulerInstance identifies the scheduler instance.
+	SchedulerInstance string
+	// IngestVersion identifies the ingestion pipeline version.
+	IngestVersion string
 }
 
 // DefaultConfig returns a default syncer configuration.
 func DefaultConfig() Config {
 	return Config{
-		SyncInterval: 30 * time.Second,
-		InitialDelay: 5 * time.Second,
+		SyncInterval:  30 * time.Second,
+		InitialDelay:  5 * time.Second,
+		ClusterName:   "default",
+		IngestVersion: "syncer-v1",
 	}
 }
 
@@ -114,6 +123,19 @@ func (s *Syncer) syncOnce() {
 
 	log.Printf("Starting job sync from %s...", s.source.Type())
 	startTime := time.Now()
+	correlationID := uuid.NewString()
+	clusterName := s.config.ClusterName
+	if clusterName == "" {
+		clusterName = "default"
+	}
+	schedulerInstance := s.config.SchedulerInstance
+	if schedulerInstance == "" {
+		schedulerInstance = string(s.source.Type())
+	}
+	ingestVersion := s.config.IngestVersion
+	if ingestVersion == "" {
+		ingestVersion = "syncer-v1"
+	}
 
 	// Fetch all jobs from the scheduler
 	jobs, err := s.source.ListJobs(ctx, scheduler.JobFilter{})
@@ -126,6 +148,10 @@ func (s *Syncer) syncOnce() {
 
 	for _, job := range jobs {
 		storageJob := convertToStorageJob(job)
+		storageJob.Audit = storage.NewAuditInfoWithCorrelation("syncer", string(s.source.Type()), correlationID)
+		storageJob.ClusterName = clusterName
+		storageJob.SchedulerInst = schedulerInstance
+		storageJob.IngestVersion = ingestVersion
 
 		// Try to upsert the job
 		err := s.store.UpsertJob(ctx, storageJob)
@@ -190,6 +216,7 @@ func convertToStorageJob(j *scheduler.Job) *storage.Job {
 		ID:             j.ID,
 		User:           j.User,
 		Nodes:          j.Nodes,
+		NodeCount:      j.NodeCount,
 		State:          storage.JobState(j.State),
 		StartTime:      j.StartTime,
 		EndTime:        j.EndTime,
@@ -197,6 +224,12 @@ func convertToStorageJob(j *scheduler.Job) *storage.Job {
 		CPUUsage:       j.CPUUsage,
 		MemoryUsageMB:  j.MemoryUsageMB,
 		GPUUsage:       j.GPUUsage,
+		RequestedCPUs:  j.RequestedCPUs,
+		AllocatedCPUs:  j.AllocatedCPUs,
+		RequestedMemMB: j.RequestedMemMB,
+		AllocatedMemMB: j.AllocatedMemMB,
+		RequestedGPUs:  j.RequestedGPUs,
+		AllocatedGPUs:  j.AllocatedGPUs,
 	}
 
 	// Convert scheduler info
@@ -211,6 +244,8 @@ func convertToStorageJob(j *scheduler.Job) *storage.Job {
 			QoS:           j.Scheduler.QoS,
 			Priority:      j.Scheduler.Priority,
 			ExitCode:      j.Scheduler.ExitCode,
+			StateReason:   j.Scheduler.StateReason,
+			TimeLimitMins: j.Scheduler.TimeLimitMins,
 			Extra:         j.Scheduler.Extra,
 		}
 	}
