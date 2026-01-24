@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Avicted/hpc-job-observability-service/internal/api/types"
+	"github.com/Avicted/hpc-job-observability-service/internal/domain"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
 )
 
@@ -55,7 +56,7 @@ func setupLifecycleTestEnv(t *testing.T) (*lifecycleTestEnv, func()) {
 }
 
 // waitForJobInDB polls the database until the job appears or timeout
-func waitForJobInDB(t *testing.T, store *storage.PostgresStorage, jobID string, timeout time.Duration) *storage.Job {
+func waitForJobInDB(t *testing.T, store *storage.PostgresStorage, jobID string, timeout time.Duration) *domain.Job {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -71,7 +72,7 @@ func waitForJobInDB(t *testing.T, store *storage.PostgresStorage, jobID string, 
 }
 
 // waitForJobState polls the database until the job reaches the expected state or timeout
-func waitForJobState(t *testing.T, store *storage.PostgresStorage, jobID string, expectedState storage.JobState, timeout time.Duration) *storage.Job {
+func waitForJobState(t *testing.T, store *storage.PostgresStorage, jobID string, expectedState domain.JobState, timeout time.Duration) *domain.Job {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -110,7 +111,7 @@ func TestLifecycleE2E_BasicJobFlow(t *testing.T) {
 	// Verify initial job state from prolog
 	t.Logf("Job created in DB: state=%s, user=%s, nodes=%v", job.State, job.User, job.Nodes)
 
-	if job.State != storage.JobStateRunning {
+	if job.State != domain.JobStateRunning {
 		t.Errorf("Expected initial state 'running' from prolog, got '%s'", job.State)
 	}
 	if job.User == "" {
@@ -124,7 +125,7 @@ func TestLifecycleE2E_BasicJobFlow(t *testing.T) {
 	if job.Scheduler == nil {
 		t.Error("Scheduler info should not be nil")
 	} else {
-		if job.Scheduler.Type != storage.SchedulerTypeSlurm {
+		if job.Scheduler.Type != domain.SchedulerTypeSlurm {
 			t.Errorf("Expected scheduler type 'slurm', got '%s'", job.Scheduler.Type)
 		}
 	}
@@ -139,7 +140,7 @@ func TestLifecycleE2E_BasicJobFlow(t *testing.T) {
 
 	// Wait for job to complete and epilog to update state
 	t.Log("Waiting for job-finished event to update job state...")
-	job = waitForJobState(t, env.store, jobID, storage.JobStateCompleted, 60*time.Second)
+	job = waitForJobState(t, env.store, jobID, domain.JobStateCompleted, 60*time.Second)
 
 	// Verify final state from epilog
 	t.Logf("Job completed: state=%s, exit_code=%v, runtime=%v",
@@ -174,7 +175,7 @@ func TestLifecycleE2E_FailedJobExitCode(t *testing.T) {
 	t.Logf("Job created with state: %s", job.State)
 
 	// Wait for job to reach failed state (epilog)
-	job = waitForJobState(t, env.store, jobID, storage.JobStateFailed, 60*time.Second)
+	job = waitForJobState(t, env.store, jobID, domain.JobStateFailed, 60*time.Second)
 	t.Logf("Job failed: state=%s", job.State)
 
 	// Verify exit code
@@ -226,7 +227,7 @@ func TestLifecycleE2E_JobResourceAllocation(t *testing.T) {
 	}
 
 	// Wait for completion
-	waitForJobState(t, env.store, jobID, storage.JobStateCompleted, 60*time.Second)
+	waitForJobState(t, env.store, jobID, domain.JobStateCompleted, 60*time.Second)
 }
 
 // TestLifecycleE2E_AuditTrailForLifecycleEvents tests that audit events are created for prolog/epilog
@@ -239,7 +240,7 @@ func TestLifecycleE2E_AuditTrailForLifecycleEvents(t *testing.T) {
 	t.Logf("Submitted job: %s", jobID)
 
 	// Wait for job to complete
-	waitForJobState(t, env.store, jobID, storage.JobStateCompleted, 60*time.Second)
+	waitForJobState(t, env.store, jobID, domain.JobStateCompleted, 60*time.Second)
 
 	// Query audit events
 	events := queryAuditEvents(t, env.db, jobID)
@@ -378,7 +379,7 @@ func TestLifecycleE2E_CgroupPathCapture(t *testing.T) {
 	}
 
 	// Wait for completion
-	waitForJobState(t, env.store, jobID, storage.JobStateCompleted, 60*time.Second)
+	waitForJobState(t, env.store, jobID, domain.JobStateCompleted, 60*time.Second)
 }
 
 // TestLifecycleE2E_MultiNodeJobHandling tests jobs running on multiple nodes
@@ -488,7 +489,7 @@ func TestLifecycleE2E_GPUInfoCapture(t *testing.T) {
 		t.Fatalf("Failed to get job: %v", err)
 	}
 
-	if job.GPUVendor != storage.GPUVendor(gpuVendor) {
+	if job.GPUVendor != domain.GPUVendor(gpuVendor) {
 		t.Errorf("Expected GPU vendor '%s', got '%s'", gpuVendor, job.GPUVendor)
 	}
 	if job.GPUCount != gpuAllocation {
@@ -605,7 +606,7 @@ func TestLifecycleE2E_CancelledJobState(t *testing.T) {
 	cancelSlurmJob(t, jobID)
 
 	// Wait for cancelled state
-	job = waitForJobState(t, env.store, jobID, storage.JobStateCancelled, 60*time.Second)
+	job = waitForJobState(t, env.store, jobID, domain.JobStateCancelled, 60*time.Second)
 	t.Logf("Job cancelled: state=%s", job.State)
 
 	// Verify end time is set
@@ -637,7 +638,7 @@ func TestLifecycleE2E_RapidJobSubmission(t *testing.T) {
 
 	// Wait for all jobs to complete
 	for _, jobID := range jobIDs {
-		job := waitForJobState(t, env.store, jobID, storage.JobStateCompleted, 90*time.Second)
+		job := waitForJobState(t, env.store, jobID, domain.JobStateCompleted, 90*time.Second)
 		t.Logf("Job %s completed: state=%s, runtime=%.2fs", jobID, job.State, job.RuntimeSeconds)
 	}
 
@@ -708,10 +709,10 @@ func TestLifecycleE2E_AllJobStates_Completed(t *testing.T) {
 	t.Logf("Job created: state=%s", job.State)
 
 	// Wait for completion (epilog)
-	job = waitForJobState(t, env.store, jobID, storage.JobStateCompleted, 60*time.Second)
+	job = waitForJobState(t, env.store, jobID, domain.JobStateCompleted, 60*time.Second)
 
 	// Verify state and exit code
-	if job.State != storage.JobStateCompleted {
+	if job.State != domain.JobStateCompleted {
 		t.Errorf("Expected state 'completed', got '%s'", job.State)
 	}
 	if job.Scheduler != nil && job.Scheduler.ExitCode != nil {
@@ -749,10 +750,10 @@ func TestLifecycleE2E_AllJobStates_Failed(t *testing.T) {
 			t.Logf("Job created: state=%s", job.State)
 
 			// Wait for failed state (epilog)
-			job = waitForJobState(t, env.store, jobID, storage.JobStateFailed, 60*time.Second)
+			job = waitForJobState(t, env.store, jobID, domain.JobStateFailed, 60*time.Second)
 
 			// Verify state and exit code
-			if job.State != storage.JobStateFailed {
+			if job.State != domain.JobStateFailed {
 				t.Errorf("Expected state 'failed', got '%s'", job.State)
 			}
 			if job.Scheduler == nil || job.Scheduler.ExitCode == nil {
@@ -789,10 +790,10 @@ func TestLifecycleE2E_AllJobStates_Cancelled(t *testing.T) {
 	cancelSlurmJob(t, jobID)
 
 	// Wait for cancelled state (epilog)
-	job = waitForJobState(t, env.store, jobID, storage.JobStateCancelled, 60*time.Second)
+	job = waitForJobState(t, env.store, jobID, domain.JobStateCancelled, 60*time.Second)
 
 	// Verify state
-	if job.State != storage.JobStateCancelled {
+	if job.State != domain.JobStateCancelled {
 		t.Errorf("Expected state 'cancelled', got '%s'", job.State)
 	}
 	if job.EndTime == nil {
@@ -826,7 +827,7 @@ func TestLifecycleE2E_AllJobStates_Timeout(t *testing.T) {
 	// Wait for the job to timeout (should be cancelled state after ~60 seconds)
 	t.Log("Waiting for job to timeout (this will take ~60 seconds)...")
 	deadline := time.Now().Add(90 * time.Second)
-	var finalJob *storage.Job
+	var finalJob *domain.Job
 
 	for time.Now().Before(deadline) {
 		time.Sleep(5 * time.Second)
@@ -834,7 +835,7 @@ func TestLifecycleE2E_AllJobStates_Timeout(t *testing.T) {
 		if finalJob != nil {
 			t.Logf("Job state: %s", finalJob.State)
 			// TIMEOUT maps to cancelled in our epilog script
-			if finalJob.State == storage.JobStateCancelled || finalJob.State == storage.JobStateFailed {
+			if finalJob.State == domain.JobStateCancelled || finalJob.State == domain.JobStateFailed {
 				break
 			}
 		}
@@ -845,7 +846,7 @@ func TestLifecycleE2E_AllJobStates_Timeout(t *testing.T) {
 	}
 
 	// TIMEOUT is mapped to 'cancelled' by the epilog script
-	if finalJob.State != storage.JobStateCancelled && finalJob.State != storage.JobStateFailed {
+	if finalJob.State != domain.JobStateCancelled && finalJob.State != domain.JobStateFailed {
 		t.Errorf("Expected state 'cancelled' or 'failed' for timeout, got '%s'", finalJob.State)
 	}
 	if finalJob.EndTime == nil {
@@ -882,19 +883,19 @@ func TestLifecycleE2E_AllJobStates_Signal(t *testing.T) {
 
 	// If still running, force cancel
 	currentJob, _ := env.store.GetJob(context.Background(), jobID)
-	if currentJob != nil && currentJob.State == storage.JobStateRunning {
+	if currentJob != nil && currentJob.State == domain.JobStateRunning {
 		t.Log("Job still running, force cancelling...")
 		cancelSlurmJob(t, jobID)
 	}
 
 	// Wait for terminal state
 	deadline := time.Now().Add(30 * time.Second)
-	var finalJob *storage.Job
+	var finalJob *domain.Job
 	for time.Now().Before(deadline) {
 		finalJob, _ = env.store.GetJob(context.Background(), jobID)
-		if finalJob != nil && (finalJob.State == storage.JobStateCancelled ||
-			finalJob.State == storage.JobStateFailed ||
-			finalJob.State == storage.JobStateCompleted) {
+		if finalJob != nil && (finalJob.State == domain.JobStateCancelled ||
+			finalJob.State == domain.JobStateFailed ||
+			finalJob.State == domain.JobStateCompleted) {
 			break
 		}
 		time.Sleep(1 * time.Second)
@@ -905,7 +906,7 @@ func TestLifecycleE2E_AllJobStates_Signal(t *testing.T) {
 	}
 
 	// Signal termination should result in cancelled or failed
-	if finalJob.State != storage.JobStateCancelled && finalJob.State != storage.JobStateFailed {
+	if finalJob.State != domain.JobStateCancelled && finalJob.State != domain.JobStateFailed {
 		t.Errorf("Expected terminal state for signaled job, got '%s'", finalJob.State)
 	}
 	t.Logf("Job terminated by signal: state=%s", finalJob.State)
@@ -921,31 +922,31 @@ func TestLifecycleE2E_AllJobStates_ViaDirectAPI(t *testing.T) {
 		name       string
 		finalState types.JobState
 		exitCode   *int
-		wantState  storage.JobState
+		wantState  domain.JobState
 	}{
 		{
 			name:       "completed_state",
 			finalState: types.Completed,
 			exitCode:   ptrInt(0),
-			wantState:  storage.JobStateCompleted,
+			wantState:  domain.JobStateCompleted,
 		},
 		{
 			name:       "failed_state",
 			finalState: types.Failed,
 			exitCode:   ptrInt(1),
-			wantState:  storage.JobStateFailed,
+			wantState:  domain.JobStateFailed,
 		},
 		{
 			name:       "cancelled_state",
 			finalState: types.Cancelled,
 			exitCode:   nil,
-			wantState:  storage.JobStateCancelled,
+			wantState:  domain.JobStateCancelled,
 		},
 		{
 			name:       "pending_state",
 			finalState: types.Pending,
 			exitCode:   nil,
-			wantState:  storage.JobStatePending,
+			wantState:  domain.JobStatePending,
 		},
 	}
 
@@ -1007,15 +1008,15 @@ func TestLifecycleE2E_AllJobStates_StateTransitions(t *testing.T) {
 	// Test valid state transitions
 	testCases := []struct {
 		name       string
-		startState storage.JobState
+		startState domain.JobState
 		endState   types.JobState
 		shouldWork bool
 	}{
-		{"running_to_completed", storage.JobStateRunning, types.Completed, true},
-		{"running_to_failed", storage.JobStateRunning, types.Failed, true},
-		{"running_to_cancelled", storage.JobStateRunning, types.Cancelled, true},
-		{"completed_to_failed", storage.JobStateCompleted, types.Failed, false},       // Already terminal
-		{"cancelled_to_completed", storage.JobStateCancelled, types.Completed, false}, // Already terminal
+		{"running_to_completed", domain.JobStateRunning, types.Completed, true},
+		{"running_to_failed", domain.JobStateRunning, types.Failed, true},
+		{"running_to_cancelled", domain.JobStateRunning, types.Cancelled, true},
+		{"completed_to_failed", domain.JobStateCompleted, types.Failed, false},       // Already terminal
+		{"cancelled_to_completed", domain.JobStateCancelled, types.Completed, false}, // Already terminal
 	}
 
 	for _, tc := range testCases {
@@ -1033,7 +1034,7 @@ func TestLifecycleE2E_AllJobStates_StateTransitions(t *testing.T) {
 			sendJobStartedEvent(t, env.apiURL, startEvent)
 
 			// If we need a non-running start state, update it first
-			if tc.startState != storage.JobStateRunning {
+			if tc.startState != domain.JobStateRunning {
 				// Set initial terminal state
 				initialFinish := types.JobFinishedEvent{
 					JobId:      jobID,
@@ -1075,7 +1076,7 @@ func TestLifecycleE2E_AllJobStates_RealSlurmStates(t *testing.T) {
 	t.Run("COMPLETED", func(t *testing.T) {
 		jobID := submitSlurmJob(t, "echo 'COMPLETED test'; exit 0")
 		job := waitForJobInDB(t, env.store, jobID, 30*time.Second)
-		job = waitForJobState(t, env.store, jobID, storage.JobStateCompleted, 60*time.Second)
+		job = waitForJobState(t, env.store, jobID, domain.JobStateCompleted, 60*time.Second)
 		if job.Scheduler != nil && job.Scheduler.ExitCode != nil && *job.Scheduler.ExitCode != 0 {
 			t.Errorf("COMPLETED job should have exit code 0, got %d", *job.Scheduler.ExitCode)
 		}
@@ -1085,7 +1086,7 @@ func TestLifecycleE2E_AllJobStates_RealSlurmStates(t *testing.T) {
 	t.Run("FAILED_exit_1", func(t *testing.T) {
 		jobID := submitSlurmJob(t, "echo 'FAILED test'; exit 1")
 		waitForJobInDB(t, env.store, jobID, 30*time.Second)
-		job := waitForJobState(t, env.store, jobID, storage.JobStateFailed, 60*time.Second)
+		job := waitForJobState(t, env.store, jobID, domain.JobStateFailed, 60*time.Second)
 		if job.Scheduler == nil || job.Scheduler.ExitCode == nil || *job.Scheduler.ExitCode != 1 {
 			t.Errorf("FAILED job should have exit code 1")
 		}
@@ -1097,7 +1098,7 @@ func TestLifecycleE2E_AllJobStates_RealSlurmStates(t *testing.T) {
 		waitForJobInDB(t, env.store, jobID, 30*time.Second)
 		time.Sleep(2 * time.Second)
 		cancelSlurmJob(t, jobID)
-		job := waitForJobState(t, env.store, jobID, storage.JobStateCancelled, 60*time.Second)
+		job := waitForJobState(t, env.store, jobID, domain.JobStateCancelled, 60*time.Second)
 		t.Logf("CANCELLED: state=%s", job.State)
 	})
 
@@ -1108,12 +1109,12 @@ func TestLifecycleE2E_AllJobStates_RealSlurmStates(t *testing.T) {
 
 		// Wait for terminal state (could be failed or cancelled depending on Slurm version)
 		deadline := time.Now().Add(60 * time.Second)
-		var job *storage.Job
+		var job *domain.Job
 		for time.Now().Before(deadline) {
 			job, _ = env.store.GetJob(context.Background(), jobID)
-			if job != nil && (job.State == storage.JobStateFailed ||
-				job.State == storage.JobStateCancelled ||
-				job.State == storage.JobStateCompleted) {
+			if job != nil && (job.State == domain.JobStateFailed ||
+				job.State == domain.JobStateCancelled ||
+				job.State == domain.JobStateCompleted) {
 				break
 			}
 			time.Sleep(1 * time.Second)
@@ -1140,7 +1141,7 @@ func TestLifecycleE2E_AllJobStates_RealSlurmStates(t *testing.T) {
 
 		// Wait for terminal state
 		deadline := time.Now().Add(60 * time.Second)
-		var job *storage.Job
+		var job *domain.Job
 		for time.Now().Before(deadline) {
 			job, _ = env.store.GetJob(context.Background(), jobID)
 			if job != nil && job.State.IsTerminal() {
@@ -1169,7 +1170,7 @@ func TestLifecycleE2E_AllJobStates_ExitCodeRange(t *testing.T) {
 
 			// Wait for terminal state
 			deadline := time.Now().Add(60 * time.Second)
-			var job *storage.Job
+			var job *domain.Job
 			for time.Now().Before(deadline) {
 				job, _ = env.store.GetJob(context.Background(), jobID)
 				if job != nil && job.State.IsTerminal() {
@@ -1182,9 +1183,9 @@ func TestLifecycleE2E_AllJobStates_ExitCodeRange(t *testing.T) {
 				t.Fatalf("Job %s not found", jobID)
 			}
 
-			expectedState := storage.JobStateCompleted
+			expectedState := domain.JobStateCompleted
 			if code != 0 {
-				expectedState = storage.JobStateFailed
+				expectedState = domain.JobStateFailed
 			}
 
 			if job.State != expectedState {
@@ -1213,12 +1214,12 @@ func TestLifecycleE2E_AllJobStates_ConcurrentStateChanges(t *testing.T) {
 	jobs := []struct {
 		name      string
 		script    string
-		wantState storage.JobState
+		wantState domain.JobState
 	}{
-		{"success1", "echo 'Success 1'; exit 0", storage.JobStateCompleted},
-		{"success2", "echo 'Success 2'; exit 0", storage.JobStateCompleted},
-		{"fail1", "echo 'Fail 1'; exit 1", storage.JobStateFailed},
-		{"fail2", "echo 'Fail 2'; exit 2", storage.JobStateFailed},
+		{"success1", "echo 'Success 1'; exit 0", domain.JobStateCompleted},
+		{"success2", "echo 'Success 2'; exit 0", domain.JobStateCompleted},
+		{"fail1", "echo 'Fail 1'; exit 1", domain.JobStateFailed},
+		{"fail2", "echo 'Fail 2'; exit 2", domain.JobStateFailed},
 	}
 
 	jobIDs := make(map[string]string)
@@ -1236,7 +1237,7 @@ func TestLifecycleE2E_AllJobStates_ConcurrentStateChanges(t *testing.T) {
 		t.Run(j.name, func(t *testing.T) {
 			// Wait for terminal state
 			deadline := time.Now().Add(90 * time.Second)
-			var job *storage.Job
+			var job *domain.Job
 			for time.Now().Before(deadline) {
 				job, _ = env.store.GetJob(context.Background(), jobID)
 				if job != nil && job.State.IsTerminal() {

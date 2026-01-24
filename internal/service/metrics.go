@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"github.com/Avicted/hpc-job-observability-service/internal/mapper"
-	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
+	"github.com/Avicted/hpc-job-observability-service/internal/domain"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/audit"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/mapper"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 )
 
 // MetricsService handles metrics-related business logic including recording
@@ -36,7 +39,7 @@ type GetMetricsInput struct {
 
 // GetMetricsOutput contains the result of getting job metrics.
 type GetMetricsOutput struct {
-	Samples []*storage.MetricSample
+	Samples []*domain.MetricSample
 	Total   int
 }
 
@@ -47,7 +50,7 @@ type GetMetricsOutput struct {
 //   - ctx: Context for cancellation and deadline propagation
 //   - input: Filter parameters for the metrics query
 func (s *MetricsService) GetJobMetrics(ctx context.Context, input GetMetricsInput) (*GetMetricsOutput, error) {
-	filter := storage.MetricsFilter{
+	filter := domain.MetricsFilter{
 		Limit: 1000,
 	}
 
@@ -63,7 +66,7 @@ func (s *MetricsService) GetJobMetrics(ctx context.Context, input GetMetricsInpu
 
 	samples, total, err := s.store.GetJobMetrics(ctx, input.JobID, filter)
 	if err != nil {
-		if err == storage.ErrJobNotFound {
+		if errors.Is(err, domain.ErrJobNotFound) {
 			return nil, ErrJobNotFound
 		}
 		return nil, ErrInternalError
@@ -81,12 +84,12 @@ type RecordMetricsInput struct {
 	CPUUsage      float64
 	MemoryUsageMB int
 	GPUUsage      *float64
-	Audit         *AuditContext
+	Audit         *audit.Context
 }
 
 // RecordMetricsOutput contains the result of recording job metrics.
 type RecordMetricsOutput struct {
-	Sample *storage.MetricSample
+	Sample *domain.MetricSample
 }
 
 // RecordJobMetrics records a metrics sample for a job and updates the job's
@@ -108,7 +111,7 @@ func (s *MetricsService) RecordJobMetrics(ctx context.Context, input RecordMetri
 	// Check if job exists
 	job, err := s.store.GetJob(ctx, input.JobID)
 	if err != nil {
-		if err == storage.ErrJobNotFound {
+		if errors.Is(err, domain.ErrJobNotFound) {
 			return nil, ErrJobNotFound
 		}
 		return nil, ErrInternalError
@@ -122,7 +125,7 @@ func (s *MetricsService) RecordJobMetrics(ctx context.Context, input RecordMetri
 		return nil, &ValidationError{Message: "Memory usage must be non-negative"}
 	}
 
-	sample := &storage.MetricSample{
+	sample := &domain.MetricSample{
 		JobID:         input.JobID,
 		Timestamp:     time.Now(),
 		CPUUsage:      input.CPUUsage,
@@ -138,14 +141,14 @@ func (s *MetricsService) RecordJobMetrics(ctx context.Context, input RecordMetri
 	job.CPUUsage = input.CPUUsage
 	job.MemoryUsageMB = int64(input.MemoryUsageMB)
 	job.GPUUsage = input.GPUUsage
-	job.Audit = input.Audit.ToStorageAuditInfo()
+	job.Audit = input.Audit.ToDomainAuditInfo()
 
 	if err := s.store.UpdateJob(ctx, job); err != nil {
 		return nil, ErrInternalError
 	}
 
 	// Update Prometheus metrics
-	s.exporter.UpdateJobMetrics(job)
+	s.exporter.UpdateJobMetricsDomain(job)
 
 	return &RecordMetricsOutput{Sample: sample}, nil
 }

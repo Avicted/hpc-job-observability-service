@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/Avicted/hpc-job-observability-service/internal/api/types"
-	"github.com/Avicted/hpc-job-observability-service/internal/mapper"
-	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
+	"github.com/Avicted/hpc-job-observability-service/internal/domain"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/audit"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/mapper"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 )
 
 // Service errors returned to handlers for HTTP status code mapping.
@@ -32,19 +34,6 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string {
 	return e.Message
-}
-
-// AuditContext contains audit information extracted from HTTP headers.
-// This is used to track who made changes and for correlation across services.
-type AuditContext struct {
-	ChangedBy     string
-	Source        string
-	CorrelationID string
-}
-
-// ToStorageAuditInfo converts AuditContext to storage.JobAuditInfo.
-func (a *AuditContext) ToStorageAuditInfo() *storage.JobAuditInfo {
-	return storage.NewAuditInfoWithCorrelation(a.ChangedBy, a.Source, a.CorrelationID)
 }
 
 // JobService handles job-related business logic including CRUD operations,
@@ -70,7 +59,7 @@ type CreateJobInput struct {
 	User      string
 	Nodes     []string
 	Scheduler *types.SchedulerInfo
-	Audit     *AuditContext
+	Audit     *audit.Context
 }
 
 // CreateJob creates a new job with the given input.
@@ -83,7 +72,7 @@ type CreateJobInput struct {
 //
 // Side effects:
 //   - Increments Prometheus jobs total counter
-func (s *JobService) CreateJob(ctx context.Context, input CreateJobInput) (*storage.Job, error) {
+func (s *JobService) CreateJob(ctx context.Context, input CreateJobInput) (*domain.Job, error) {
 	// Validate required fields
 	if input.ID == "" {
 		return nil, &ValidationError{Message: "Job ID is required"}
@@ -95,21 +84,21 @@ func (s *JobService) CreateJob(ctx context.Context, input CreateJobInput) (*stor
 		return nil, &ValidationError{Message: "At least one node is required"}
 	}
 
-	job := &storage.Job{
+	job := &domain.Job{
 		ID:            input.ID,
 		User:          input.User,
 		Nodes:         input.Nodes,
-		State:         storage.JobStateRunning,
+		State:         domain.JobStateRunning,
 		StartTime:     time.Now(),
-		Scheduler:     s.mapper.APISchedulerToStorage(input.Scheduler),
-		Audit:         input.Audit.ToStorageAuditInfo(),
+		Scheduler:     s.mapper.APISchedulerToDomain(input.Scheduler),
+		Audit:         input.Audit.ToDomainAuditInfo(),
 		ClusterName:   "default",
 		SchedulerInst: "api",
 		IngestVersion: "api-v1",
 	}
 
 	if err := s.store.CreateJob(ctx, job); err != nil {
-		if err == storage.ErrJobAlreadyExists {
+		if errors.Is(err, domain.ErrJobAlreadyExists) {
 			return nil, ErrJobAlreadyExists
 		}
 		return nil, ErrInternalError
@@ -123,10 +112,10 @@ func (s *JobService) CreateJob(ctx context.Context, input CreateJobInput) (*stor
 
 // GetJob retrieves a job by ID.
 // Returns ErrJobNotFound if the job does not exist.
-func (s *JobService) GetJob(ctx context.Context, id string) (*storage.Job, error) {
+func (s *JobService) GetJob(ctx context.Context, id string) (*domain.Job, error) {
 	job, err := s.store.GetJob(ctx, id)
 	if err != nil {
-		if err == storage.ErrJobNotFound {
+		if errors.Is(err, domain.ErrJobNotFound) {
 			return nil, ErrJobNotFound
 		}
 		return nil, ErrInternalError
@@ -145,7 +134,7 @@ type ListJobsInput struct {
 
 // ListJobsOutput contains the result of listing jobs.
 type ListJobsOutput struct {
-	Jobs   []*storage.Job
+	Jobs   []*domain.Job
 	Total  int
 	Limit  int
 	Offset int
@@ -153,13 +142,13 @@ type ListJobsOutput struct {
 
 // ListJobs retrieves jobs matching the given filter.
 func (s *JobService) ListJobs(ctx context.Context, input ListJobsInput) (*ListJobsOutput, error) {
-	filter := storage.JobFilter{
+	filter := domain.JobFilter{
 		Limit:  100,
 		Offset: 0,
 	}
 
 	if input.State != nil {
-		state := storage.JobState(*input.State)
+		state := domain.JobState(*input.State)
 		filter.State = &state
 	}
 	if input.User != nil {
@@ -194,7 +183,7 @@ type UpdateJobInput struct {
 	CPUUsage      *float64
 	MemoryUsageMB *int
 	GPUUsage      *float64
-	Audit         *AuditContext
+	Audit         *audit.Context
 }
 
 // UpdateJob updates an existing job with the given input.
@@ -205,10 +194,10 @@ type UpdateJobInput struct {
 //
 // Side effects:
 //   - Updates Prometheus job metrics
-func (s *JobService) UpdateJob(ctx context.Context, id string, input UpdateJobInput) (*storage.Job, error) {
+func (s *JobService) UpdateJob(ctx context.Context, id string, input UpdateJobInput) (*domain.Job, error) {
 	job, err := s.store.GetJob(ctx, id)
 	if err != nil {
-		if err == storage.ErrJobNotFound {
+		if errors.Is(err, domain.ErrJobNotFound) {
 			return nil, ErrJobNotFound
 		}
 		return nil, ErrInternalError
@@ -216,7 +205,7 @@ func (s *JobService) UpdateJob(ctx context.Context, id string, input UpdateJobIn
 
 	// Apply updates
 	if input.State != nil {
-		state := s.mapper.APIJobStateToStorage(*input.State)
+		state := s.mapper.APIJobStateToDomain(*input.State)
 		if !s.mapper.IsValidJobState(state) {
 			return nil, &ValidationError{Message: "Invalid job state"}
 		}
@@ -231,24 +220,24 @@ func (s *JobService) UpdateJob(ctx context.Context, id string, input UpdateJobIn
 	if input.GPUUsage != nil {
 		job.GPUUsage = input.GPUUsage
 	}
-	job.Audit = input.Audit.ToStorageAuditInfo()
+	job.Audit = input.Audit.ToDomainAuditInfo()
 
 	if err := s.store.UpdateJob(ctx, job); err != nil {
 		return nil, ErrInternalError
 	}
 
 	// Update Prometheus metrics
-	s.exporter.UpdateJobMetrics(job)
+	s.exporter.UpdateJobMetricsDomain(job)
 
 	return job, nil
 }
 
 // DeleteJob deletes a job by ID.
 // Returns ErrJobNotFound if the job does not exist.
-func (s *JobService) DeleteJob(ctx context.Context, id string, audit *AuditContext) error {
-	ctx = storage.WithAuditInfo(ctx, audit.ToStorageAuditInfo())
+func (s *JobService) DeleteJob(ctx context.Context, id string, auditCtx *audit.Context) error {
+	ctx = storage.WithAuditInfo(ctx, auditCtx.ToDomainAuditInfo())
 	if err := s.store.DeleteJob(ctx, id); err != nil {
-		if err == storage.ErrJobNotFound {
+		if errors.Is(err, domain.ErrJobNotFound) {
 			return ErrJobNotFound
 		}
 		return ErrInternalError

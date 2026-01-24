@@ -10,10 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Avicted/hpc-job-observability-service/internal/cgroup"
-	"github.com/Avicted/hpc-job-observability-service/internal/gpu"
-	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
+	"github.com/Avicted/hpc-job-observability-service/internal/domain"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/audit"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/cgroup"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/gpu"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 )
 
 // CollectorMode defines how the collector gathers metrics.
@@ -149,7 +151,7 @@ func (c *Collector) collectAll() {
 	}
 
 	for _, job := range jobs {
-		if job.State == storage.JobStateRunning {
+		if job.State == domain.JobStateRunning {
 			c.collectJobMetrics(ctx, job)
 		}
 	}
@@ -161,8 +163,8 @@ func (c *Collector) collectAll() {
 }
 
 // collectJobMetrics collects metrics for a single job.
-func (c *Collector) collectJobMetrics(ctx context.Context, job *storage.Job) {
-	var sample *storage.MetricSample
+func (c *Collector) collectJobMetrics(ctx context.Context, job *domain.Job) {
+	var sample *domain.MetricSample
 
 	switch c.config.Mode {
 	case ModeCgroup:
@@ -195,7 +197,7 @@ func (c *Collector) collectJobMetrics(ctx context.Context, job *storage.Job) {
 	job.CPUUsage = sample.CPUUsage
 	job.MemoryUsageMB = sample.MemoryUsageMB
 	job.GPUUsage = sample.GPUUsage
-	job.Audit = storage.NewAuditInfo("collector", "metrics")
+	job.Audit = audit.NewAuditInfo("collector", "metrics")
 
 	if err := c.store.UpdateJob(ctx, job); err != nil {
 		log.Printf("Failed to update job %s metrics: %v", job.ID, err)
@@ -203,7 +205,7 @@ func (c *Collector) collectJobMetrics(ctx context.Context, job *storage.Job) {
 }
 
 // collectCgroupMetrics reads metrics from the job's cgroup.
-func (c *Collector) collectCgroupMetrics(ctx context.Context, job *storage.Job) *storage.MetricSample {
+func (c *Collector) collectCgroupMetrics(ctx context.Context, job *domain.Job) *domain.MetricSample {
 	if c.cgroupRdr == nil {
 		return c.collectMockMetrics(ctx, job)
 	}
@@ -237,7 +239,7 @@ func (c *Collector) collectCgroupMetrics(ctx context.Context, job *storage.Job) 
 	// Convert memory from bytes to MB
 	memoryMB := int64(stats.MemoryCurrentBytes / (1024 * 1024))
 
-	return &storage.MetricSample{
+	return &domain.MetricSample{
 		JobID:         job.ID,
 		Timestamp:     stats.Timestamp,
 		CPUUsage:      cpuPercent,
@@ -260,7 +262,7 @@ func (c *Collector) calculateCPUPercent(jobID string, curr *cgroup.Stats, numCPU
 }
 
 // collectGPUMetrics collects GPU metrics for the job's allocated devices.
-func (c *Collector) collectGPUMetrics(ctx context.Context, job *storage.Job) *float64 {
+func (c *Collector) collectGPUMetrics(ctx context.Context, job *domain.Job) *float64 {
 	if c.gpuDetector == nil || len(job.GPUDevices) == 0 {
 		return nil
 	}
@@ -310,8 +312,8 @@ func (c *Collector) collectGPUMetrics(ctx context.Context, job *storage.Job) *fl
 }
 
 // collectMockMetrics simulates metrics for testing/demo purposes.
-func (c *Collector) collectMockMetrics(ctx context.Context, job *storage.Job) *storage.MetricSample {
-	sample := &storage.MetricSample{
+func (c *Collector) collectMockMetrics(_ context.Context, job *domain.Job) *domain.MetricSample {
+	sample := &domain.MetricSample{
 		JobID:         job.ID,
 		Timestamp:     time.Now(),
 		CPUUsage:      c.simulateCPUUsage(job.CPUUsage),

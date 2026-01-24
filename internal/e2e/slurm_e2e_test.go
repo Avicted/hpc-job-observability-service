@@ -1,4 +1,5 @@
 //go:build slurm_e2e
+// +build slurm_e2e
 
 // Package e2e provides end-to-end integration tests for Slurm scheduler.
 // These tests require a running Slurm cluster (via docker-compose --profile slurm).
@@ -20,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Avicted/hpc-job-observability-service/internal/scheduler"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/scheduler"
 	_ "github.com/lib/pq"
 )
 
@@ -35,7 +36,6 @@ const (
 
 	// Test timeouts
 	slurmReadyTimeout = 60 * time.Second
-	jobSyncTimeout    = 30 * time.Second
 )
 
 // testEnv holds shared test environment state.
@@ -338,13 +338,4 @@ func TestSlurmE2E_DirectSlurmJobAccess(t *testing.T) {
 	if slurmJob.State == "" {
 		t.Error("Job state is empty")
 	}
-}
-
-// Helper function to get map keys
-func mapKeys(m map[string]interface{}) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
 }

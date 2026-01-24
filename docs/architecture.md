@@ -59,7 +59,60 @@ The HPC Job Observability Service is a microservice designed to track and monito
       └────────────────────────┘
 ```
 
-## Component Design
+## Clean Architecture - Component & Dependency Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      API Layer (internal/api)                   │
+│  - Thin HTTP handlers (≤50 lines per endpoint)                  │
+│  - Request parsing, response writing                            │
+│  - Maps service errors to HTTP status codes                     │
+│  - Uses mapper for domain ↔ API type conversion                 │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  Service Layer (internal/service)               │
+│  - Business logic, validation, orchestration                    │
+│  - Depends on storage.Storage interface                         │
+│  - Uses domain entities exclusively                             │
+│  - Updates Prometheus metrics via Exporter                      │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  Domain Layer (internal/domain)                 │
+│  - Core business entities (Job, JobState, MetricSample)         │
+│  - Domain errors (ErrJobNotFound, ErrJobAlreadyExists, etc.)    │
+│  - No external dependencies (only stdlib)                       │
+│  - Business rule methods (IsTerminal(), IsValid())              │
+└─────────────────────────────────────────────────────────────────┘
+                               ▲
+                               │
+┌─────────────────────────────────────────────────────────────────┐
+│                 Storage Layer (internal/storage)                │
+│  - Persistence interfaces using domain entities directly        │
+│  - PostgresStorage implements storage.Storage                   │
+│  - Handles database operations, migrations, audit logging       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key principles:**
+- **Domain** has zero dependencies - it's the innermost layer containing entities and errors
+- **Storage** interface uses domain types directly (no separate repository layer)
+- **Services** depend on storage.Storage interface (not concrete implementations)
+- **Handlers** are thin HTTP glue (≤50 lines per endpoint)
+- **Mapper** converts between domain and API types
+
+**Dependency Flow:**
+
+Dependency Flow: All dependencies point inward toward the Domain. API and Service depend on Domain; Storage depends on Domain and is injected into Service via interfaces.
+
+```
+API → Service → Domain
+          ↑
+       Storage
+```
 
 ### HTTP Layer
 
@@ -73,20 +126,42 @@ The API follows REST conventions:
 
 ### API Handlers
 
-Handlers implement the `ServerInterface` generated from the OpenAPI specification. They:
-- Validate incoming requests
-- Coordinate between storage and metrics layers
-- Transform between API types and storage types
-- Handle errors consistently
+Handlers implement the `ServerInterface` generated from the OpenAPI specification. They are intentionally thin (≤50 lines per endpoint) and:
+- Parse HTTP requests and extract audit context from headers
+- Delegate to service layer for business logic
+- Transform between API types and domain types using the mapper
+- Map service/domain errors to HTTP status codes
+
+### Domain Layer
+
+The domain layer (`internal/domain`) contains core business entities with **zero external dependencies**:
+
+- **Job**: Core job entity with all fields
+- **JobState**: Type-safe job state enum with validation methods (`IsTerminal()`, `IsValid()`)
+- **MetricSample**: CPU, memory, and GPU usage at a point in time
+- **SchedulerInfo**: External scheduler metadata (Slurm partition, account, QoS, etc.)
+- **AuditInfo**: Change tracking metadata (who, when, correlation ID)
+- **JobFilter/MetricsFilter**: Query filter parameters
+- **Errors**: Domain errors (`ErrJobNotFound`, `ErrJobAlreadyExists`, `ErrInvalidJobState`, `ErrMissingAuditInfo`, `ErrJobTerminalFrozen`)
+
+### Service Layer
+
+The service layer (`internal/service`) contains business logic and orchestration:
+
+- **JobService**: Job CRUD operations, state validation, audit logging
+- **MetricsService**: Metric recording and retrieval, aggregation
+- **EventService**: Job lifecycle events (prolog/epilog handling)
+
+Services depend on `storage.Storage` interface, not concrete implementations.
 
 ### Storage Layer
 
-The storage layer provides a PostgreSQL-backed implementation that supports:
-- Job CRUD operations
+The storage layer (`internal/storage`) provides a PostgreSQL-backed implementation that supports:
+- Job CRUD operations using domain entities directly
 - Metrics recording and retrieval
 - Automatic schema migrations
 - Retention-based cleanup
-- Audit event logging
+- Audit event logging with correlation IDs
 
 #### Jobs Table Schema
 
