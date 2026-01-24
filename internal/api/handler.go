@@ -18,10 +18,11 @@ import (
 
 	"github.com/Avicted/hpc-job-observability-service/internal/api/server"
 	"github.com/Avicted/hpc-job-observability-service/internal/api/types"
-	"github.com/Avicted/hpc-job-observability-service/internal/mapper"
-	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
 	"github.com/Avicted/hpc-job-observability-service/internal/service"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/audit"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/mapper"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 	"github.com/google/uuid"
 )
 
@@ -132,7 +133,7 @@ func (s *Server) ListJobs(w http.ResponseWriter, r *http.Request, params server.
 	}
 
 	resp := types.JobListResponse{
-		Jobs:   s.mapper.StorageJobsToAPI(output.Jobs),
+		Jobs:   s.mapper.DomainJobsToAPI(output.Jobs),
 		Total:  output.Total,
 		Limit:  output.Limit,
 		Offset: output.Offset,
@@ -167,7 +168,7 @@ func (s *Server) CreateJob(w http.ResponseWriter, r *http.Request, params server
 		return
 	}
 
-	s.writeJSON(w, http.StatusCreated, s.mapper.StorageJobToAPI(job))
+	s.writeJSON(w, http.StatusCreated, s.mapper.DomainJobToAPI(job))
 }
 
 // GetJob implements ServerInterface.GetJob
@@ -177,7 +178,7 @@ func (s *Server) GetJob(w http.ResponseWriter, r *http.Request, jobId server.Job
 		s.handleServiceError(w, err)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, s.mapper.StorageJobToAPI(job))
+	s.writeJSON(w, http.StatusOK, s.mapper.DomainJobToAPI(job))
 }
 
 // UpdateJob implements ServerInterface.UpdateJob
@@ -210,7 +211,7 @@ func (s *Server) UpdateJob(w http.ResponseWriter, r *http.Request, jobId server.
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, s.mapper.StorageJobToAPI(job))
+	s.writeJSON(w, http.StatusOK, s.mapper.DomainJobToAPI(job))
 }
 
 // DeleteJob implements ServerInterface.DeleteJob
@@ -245,7 +246,7 @@ func (s *Server) GetJobMetrics(w http.ResponseWriter, r *http.Request, jobId ser
 
 	resp := types.JobMetricsResponse{
 		JobId:   string(jobId),
-		Samples: s.mapper.StorageMetricSamplesToAPI(output.Samples),
+		Samples: s.mapper.DomainMetricSamplesToAPI(output.Samples),
 		Total:   output.Total,
 	}
 	s.writeJSON(w, http.StatusOK, resp)
@@ -278,7 +279,7 @@ func (s *Server) RecordJobMetrics(w http.ResponseWriter, r *http.Request, jobId 
 		return
 	}
 
-	s.writeJSON(w, http.StatusCreated, s.mapper.StorageMetricSampleToAPI(output.Sample))
+	s.writeJSON(w, http.StatusCreated, s.mapper.DomainMetricSampleToAPI(output.Sample))
 }
 
 // JobStartedEvent implements ServerInterface.JobStartedEvent
@@ -373,7 +374,7 @@ func (s *Server) validateAuditInfo(w http.ResponseWriter, changedBy, source, cor
 	return changedBy, source, correlationID, true
 }
 
-func (s *Server) auditFromRequest(w http.ResponseWriter, r *http.Request) (*service.AuditContext, bool) {
+func (s *Server) auditFromRequest(w http.ResponseWriter, r *http.Request) (*audit.Context, bool) {
 	changedBy := r.Header.Get("X-Changed-By")
 	source := r.Header.Get("X-Source")
 	correlationID := r.Header.Get("X-Correlation-Id")
@@ -383,14 +384,14 @@ func (s *Server) auditFromRequest(w http.ResponseWriter, r *http.Request) (*serv
 		return nil, false
 	}
 
-	return &service.AuditContext{
+	return &audit.Context{
 		ChangedBy:     changedBy,
 		Source:        source,
 		CorrelationID: correlationID,
 	}, true
 }
 
-func (s *Server) auditFromParams(w http.ResponseWriter, changedBy string, source string, correlationID *string) (*service.AuditContext, bool) {
+func (s *Server) auditFromParams(w http.ResponseWriter, changedBy string, source string, correlationID *string) (*audit.Context, bool) {
 	finalCorrelationID := ""
 	if correlationID != nil {
 		finalCorrelationID = *correlationID
@@ -401,7 +402,7 @@ func (s *Server) auditFromParams(w http.ResponseWriter, changedBy string, source
 		return nil, false
 	}
 
-	return &service.AuditContext{
+	return &audit.Context{
 		ChangedBy:     changedBy,
 		Source:        source,
 		CorrelationID: finalCorrelationID,

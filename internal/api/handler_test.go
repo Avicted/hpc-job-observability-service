@@ -12,15 +12,16 @@ import (
 
 	"github.com/Avicted/hpc-job-observability-service/internal/api/server"
 	"github.com/Avicted/hpc-job-observability-service/internal/api/types"
-	"github.com/Avicted/hpc-job-observability-service/internal/mapper"
-	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
+	"github.com/Avicted/hpc-job-observability-service/internal/domain"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/mapper"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 )
 
-// mockStorage implements storage.Storage for testing.
-type mockStorage struct {
-	jobs    map[string]*storage.Job
-	samples map[string][]*storage.MetricSample
+// mockRepository implements storage.Storage for testing.
+type mockRepository struct {
+	jobs    map[string]*domain.Job
+	samples map[string][]*domain.MetricSample
 
 	createErr  error
 	getErr     error
@@ -31,19 +32,19 @@ type mockStorage struct {
 	metricsErr error
 }
 
-func newMockStorage() *mockStorage {
-	return &mockStorage{
-		jobs:    make(map[string]*storage.Job),
-		samples: make(map[string][]*storage.MetricSample),
+func newMockRepository() *mockRepository {
+	return &mockRepository{
+		jobs:    make(map[string]*domain.Job),
+		samples: make(map[string][]*domain.MetricSample),
 	}
 }
 
-func (m *mockStorage) CreateJob(ctx context.Context, job *storage.Job) error {
+func (m *mockRepository) CreateJob(ctx context.Context, job *domain.Job) error {
 	if m.createErr != nil {
 		return m.createErr
 	}
 	if _, exists := m.jobs[job.ID]; exists {
-		return storage.ErrJobAlreadyExists
+		return domain.ErrJobAlreadyExists
 	}
 	job.CreatedAt = time.Now()
 	job.UpdatedAt = time.Now()
@@ -51,30 +52,30 @@ func (m *mockStorage) CreateJob(ctx context.Context, job *storage.Job) error {
 	return nil
 }
 
-func (m *mockStorage) GetJob(ctx context.Context, id string) (*storage.Job, error) {
+func (m *mockRepository) GetJob(ctx context.Context, id string) (*domain.Job, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
 	job, exists := m.jobs[id]
 	if !exists {
-		return nil, storage.ErrJobNotFound
+		return nil, domain.ErrJobNotFound
 	}
 	return job, nil
 }
 
-func (m *mockStorage) UpdateJob(ctx context.Context, job *storage.Job) error {
+func (m *mockRepository) UpdateJob(ctx context.Context, job *domain.Job) error {
 	if m.updateErr != nil {
 		return m.updateErr
 	}
 	if _, exists := m.jobs[job.ID]; !exists {
-		return storage.ErrJobNotFound
+		return domain.ErrJobNotFound
 	}
 	job.UpdatedAt = time.Now()
 	m.jobs[job.ID] = job
 	return nil
 }
 
-func (m *mockStorage) UpsertJob(ctx context.Context, job *storage.Job) error {
+func (m *mockRepository) UpsertJob(ctx context.Context, job *domain.Job) error {
 	job.UpdatedAt = time.Now()
 	if _, exists := m.jobs[job.ID]; !exists {
 		job.CreatedAt = time.Now()
@@ -83,22 +84,22 @@ func (m *mockStorage) UpsertJob(ctx context.Context, job *storage.Job) error {
 	return nil
 }
 
-func (m *mockStorage) DeleteJob(ctx context.Context, id string) error {
+func (m *mockRepository) DeleteJob(ctx context.Context, id string) error {
 	if m.deleteErr != nil {
 		return m.deleteErr
 	}
 	if _, exists := m.jobs[id]; !exists {
-		return storage.ErrJobNotFound
+		return domain.ErrJobNotFound
 	}
 	delete(m.jobs, id)
 	return nil
 }
 
-func (m *mockStorage) ListJobs(ctx context.Context, filter storage.JobFilter) ([]*storage.Job, int, error) {
+func (m *mockRepository) ListJobs(ctx context.Context, filter domain.JobFilter) ([]*domain.Job, int, error) {
 	if m.listErr != nil {
 		return nil, 0, m.listErr
 	}
-	var result []*storage.Job
+	var result []*domain.Job
 	for _, job := range m.jobs {
 		if filter.State != nil && job.State != *filter.State {
 			continue
@@ -111,15 +112,15 @@ func (m *mockStorage) ListJobs(ctx context.Context, filter storage.JobFilter) ([
 	return result, len(result), nil
 }
 
-func (m *mockStorage) GetAllJobs(ctx context.Context) ([]*storage.Job, error) {
-	var result []*storage.Job
+func (m *mockRepository) GetAllJobs(ctx context.Context) ([]*domain.Job, error) {
+	var result []*domain.Job
 	for _, job := range m.jobs {
 		result = append(result, job)
 	}
 	return result, nil
 }
 
-func (m *mockStorage) RecordMetrics(ctx context.Context, sample *storage.MetricSample) error {
+func (m *mockRepository) RecordMetrics(ctx context.Context, sample *domain.MetricSample) error {
 	if m.recordErr != nil {
 		return m.recordErr
 	}
@@ -127,18 +128,109 @@ func (m *mockStorage) RecordMetrics(ctx context.Context, sample *storage.MetricS
 	return nil
 }
 
-func (m *mockStorage) GetJobMetrics(ctx context.Context, jobID string, filter storage.MetricsFilter) ([]*storage.MetricSample, int, error) {
+func (m *mockRepository) GetJobMetrics(ctx context.Context, jobID string, filter domain.MetricsFilter) ([]*domain.MetricSample, int, error) {
 	if m.metricsErr != nil {
 		return nil, 0, m.metricsErr
 	}
 	if _, exists := m.jobs[jobID]; !exists {
-		return nil, 0, storage.ErrJobNotFound
+		return nil, 0, domain.ErrJobNotFound
 	}
 	s := m.samples[jobID]
 	return s, len(s), nil
 }
 
-func (m *mockStorage) GetLatestMetrics(ctx context.Context, jobID string) (*storage.MetricSample, error) {
+func (m *mockRepository) GetLatestMetrics(ctx context.Context, jobID string) (*domain.MetricSample, error) {
+	s := m.samples[jobID]
+	if len(s) == 0 {
+		return nil, nil
+	}
+	return s[len(s)-1], nil
+}
+
+func (m *mockRepository) DeleteMetricsBefore(cutoff time.Time) error {
+	return nil
+}
+
+func (m *mockRepository) Migrate() error {
+	return nil
+}
+
+func (m *mockRepository) Close() error {
+	return nil
+}
+
+func (m *mockRepository) SeedDemoData() error {
+	return nil
+}
+
+// mockStorage for metrics.Exporter (which still uses storage.Storage)
+type mockStorage struct {
+	jobs    map[string]*domain.Job
+	samples map[string][]*domain.MetricSample
+}
+
+func newMockStorage() *mockStorage {
+	return &mockStorage{
+		jobs:    make(map[string]*domain.Job),
+		samples: make(map[string][]*domain.MetricSample),
+	}
+}
+
+func (m *mockStorage) CreateJob(ctx context.Context, job *domain.Job) error {
+	m.jobs[job.ID] = job
+	return nil
+}
+
+func (m *mockStorage) GetJob(ctx context.Context, id string) (*domain.Job, error) {
+	job, exists := m.jobs[id]
+	if !exists {
+		return nil, domain.ErrJobNotFound
+	}
+	return job, nil
+}
+
+func (m *mockStorage) UpdateJob(ctx context.Context, job *domain.Job) error {
+	m.jobs[job.ID] = job
+	return nil
+}
+
+func (m *mockStorage) UpsertJob(ctx context.Context, job *domain.Job) error {
+	m.jobs[job.ID] = job
+	return nil
+}
+
+func (m *mockStorage) DeleteJob(ctx context.Context, id string) error {
+	delete(m.jobs, id)
+	return nil
+}
+
+func (m *mockStorage) ListJobs(ctx context.Context, filter domain.JobFilter) ([]*domain.Job, int, error) {
+	var result []*domain.Job
+	for _, job := range m.jobs {
+		result = append(result, job)
+	}
+	return result, len(result), nil
+}
+
+func (m *mockStorage) GetAllJobs(ctx context.Context) ([]*domain.Job, error) {
+	var result []*domain.Job
+	for _, job := range m.jobs {
+		result = append(result, job)
+	}
+	return result, nil
+}
+
+func (m *mockStorage) RecordMetrics(ctx context.Context, sample *domain.MetricSample) error {
+	m.samples[sample.JobID] = append(m.samples[sample.JobID], sample)
+	return nil
+}
+
+func (m *mockStorage) GetJobMetrics(ctx context.Context, jobID string, filter domain.MetricsFilter) ([]*domain.MetricSample, int, error) {
+	s := m.samples[jobID]
+	return s, len(s), nil
+}
+
+func (m *mockStorage) GetLatestMetrics(ctx context.Context, jobID string) (*domain.MetricSample, error) {
 	s := m.samples[jobID]
 	if len(s) == 0 {
 		return nil, nil
@@ -162,21 +254,23 @@ func (m *mockStorage) SeedDemoData() error {
 	return nil
 }
 
-func setupTestServer(store storage.Storage) *Server {
+func setupTestServer(repo storage.Storage) *Server {
+	store := newMockStorage()
 	exporter := metrics.NewExporter(store)
-	return NewServer(store, exporter)
+	return NewServer(repo, exporter)
 }
 
 func TestNewServer(t *testing.T) {
+	repo := newMockRepository()
 	store := newMockStorage()
 	exporter := metrics.NewExporter(store)
-	srv := NewServer(store, exporter)
+	srv := NewServer(repo, exporter)
 
 	if srv == nil {
 		t.Fatal("expected non-nil server")
 	}
-	if srv.store != store {
-		t.Error("expected store to be set")
+	if srv.store != repo {
+		t.Error("expected repo to be set")
 	}
 	if srv.exporter != exporter {
 		t.Error("expected exporter to be set")
@@ -184,8 +278,8 @@ func TestNewServer(t *testing.T) {
 }
 
 func TestGetHealth(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
 	rec := httptest.NewRecorder()
@@ -210,8 +304,8 @@ func TestGetHealth(t *testing.T) {
 }
 
 func TestCreateJob_Success(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	reqBody := types.CreateJobRequest{
 		Id:    "test-job-1",
@@ -254,8 +348,8 @@ func TestCreateJob_Success(t *testing.T) {
 }
 
 func TestCreateJob_MissingAuditHeaders(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	reqBody := types.CreateJobRequest{
 		Id:    "test-job-1",
@@ -288,8 +382,8 @@ func TestCreateJob_MissingAuditHeaders(t *testing.T) {
 }
 
 func TestCreateJob_MissingRequiredFields(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	tests := []struct {
 		name    string
@@ -339,10 +433,10 @@ func TestCreateJob_MissingRequiredFields(t *testing.T) {
 }
 
 func TestCreateJob_Duplicate(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["test-job-1"] = &storage.Job{ID: "test-job-1", User: "user", Nodes: []string{"node-1"}}
+	repo.jobs["test-job-1"] = &domain.Job{ID: "test-job-1", User: "user", Nodes: []string{"node-1"}}
 
 	reqBody := types.CreateJobRequest{
 		Id:    "test-job-1",
@@ -364,8 +458,8 @@ func TestCreateJob_Duplicate(t *testing.T) {
 }
 
 func TestCreateJob_InvalidJSON(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
@@ -380,15 +474,15 @@ func TestCreateJob_InvalidJSON(t *testing.T) {
 }
 
 func TestGetJob_Success(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	startTime := time.Now().Add(-1 * time.Hour)
-	store.jobs["test-job-1"] = &storage.Job{
+	repo.jobs["test-job-1"] = &domain.Job{
 		ID:            "test-job-1",
 		User:          "testuser",
 		Nodes:         []string{"node-1"},
-		State:         storage.JobStateRunning,
+		State:         domain.JobStateRunning,
 		StartTime:     startTime,
 		CPUUsage:      50.5,
 		MemoryUsageMB: 2048,
@@ -420,8 +514,8 @@ func TestGetJob_Success(t *testing.T) {
 }
 
 func TestGetJob_NotFound(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/nonexistent", nil)
 	rec := httptest.NewRecorder()
@@ -434,12 +528,12 @@ func TestGetJob_NotFound(t *testing.T) {
 }
 
 func TestListJobs_Success(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["job-1"] = &storage.Job{ID: "job-1", User: "alice", Nodes: []string{"node-1"}, State: storage.JobStateRunning}
-	store.jobs["job-2"] = &storage.Job{ID: "job-2", User: "bob", Nodes: []string{"node-2"}, State: storage.JobStateCompleted}
-	store.jobs["job-3"] = &storage.Job{ID: "job-3", User: "alice", Nodes: []string{"node-1"}, State: storage.JobStateRunning}
+	repo.jobs["job-1"] = &domain.Job{ID: "job-1", User: "alice", Nodes: []string{"node-1"}, State: domain.JobStateRunning}
+	repo.jobs["job-2"] = &domain.Job{ID: "job-2", User: "bob", Nodes: []string{"node-2"}, State: domain.JobStateCompleted}
+	repo.jobs["job-3"] = &domain.Job{ID: "job-3", User: "alice", Nodes: []string{"node-1"}, State: domain.JobStateRunning}
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/jobs", nil)
 	rec := httptest.NewRecorder()
@@ -462,11 +556,11 @@ func TestListJobs_Success(t *testing.T) {
 }
 
 func TestListJobs_FilterByState(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["job-1"] = &storage.Job{ID: "job-1", User: "alice", Nodes: []string{"node-1"}, State: storage.JobStateRunning}
-	store.jobs["job-2"] = &storage.Job{ID: "job-2", User: "bob", Nodes: []string{"node-2"}, State: storage.JobStateCompleted}
+	repo.jobs["job-1"] = &domain.Job{ID: "job-1", User: "alice", Nodes: []string{"node-1"}, State: domain.JobStateRunning}
+	repo.jobs["job-2"] = &domain.Job{ID: "job-2", User: "bob", Nodes: []string{"node-2"}, State: domain.JobStateCompleted}
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/jobs?state=running", nil)
 	rec := httptest.NewRecorder()
@@ -490,11 +584,11 @@ func TestListJobs_FilterByState(t *testing.T) {
 }
 
 func TestListJobs_FilterByUser(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["job-1"] = &storage.Job{ID: "job-1", User: "alice", Nodes: []string{"node-1"}, State: storage.JobStateRunning}
-	store.jobs["job-2"] = &storage.Job{ID: "job-2", User: "bob", Nodes: []string{"node-2"}, State: storage.JobStateRunning}
+	repo.jobs["job-1"] = &domain.Job{ID: "job-1", User: "alice", Nodes: []string{"node-1"}, State: domain.JobStateRunning}
+	repo.jobs["job-2"] = &domain.Job{ID: "job-2", User: "bob", Nodes: []string{"node-2"}, State: domain.JobStateRunning}
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/jobs?user=alice", nil)
 	rec := httptest.NewRecorder()
@@ -518,12 +612,12 @@ func TestListJobs_FilterByUser(t *testing.T) {
 }
 
 func TestListJobs_Pagination(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	for i := 0; i < 10; i++ {
 		id := "job-" + string(rune('0'+i))
-		store.jobs[id] = &storage.Job{ID: id, User: "user", Nodes: []string{"node"}, State: storage.JobStateRunning}
+		repo.jobs[id] = &domain.Job{ID: id, User: "user", Nodes: []string{"node"}, State: domain.JobStateRunning}
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/jobs?limit=5&offset=3", nil)
@@ -552,9 +646,9 @@ func TestListJobs_Pagination(t *testing.T) {
 }
 
 func TestListJobs_Error(t *testing.T) {
-	store := newMockStorage()
-	store.listErr = errors.New("database error")
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	repo.listErr = errors.New("database error")
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/jobs", nil)
 	rec := httptest.NewRecorder()
@@ -568,14 +662,14 @@ func TestListJobs_Error(t *testing.T) {
 }
 
 func TestUpdateJob_Success(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["test-job-1"] = &storage.Job{
+	repo.jobs["test-job-1"] = &domain.Job{
 		ID:        "test-job-1",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now(),
 	}
 
@@ -614,8 +708,8 @@ func TestUpdateJob_Success(t *testing.T) {
 }
 
 func TestUpdateJob_NotFound(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	state := types.JobState("completed")
 	reqBody := types.UpdateJobRequest{State: &state}
@@ -634,14 +728,14 @@ func TestUpdateJob_NotFound(t *testing.T) {
 }
 
 func TestUpdateJob_InvalidState(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["test-job-1"] = &storage.Job{
+	repo.jobs["test-job-1"] = &domain.Job{
 		ID:        "test-job-1",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now(),
 	}
 
@@ -662,14 +756,14 @@ func TestUpdateJob_InvalidState(t *testing.T) {
 }
 
 func TestUpdateJob_InvalidJSON(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["test-job-1"] = &storage.Job{
+	repo.jobs["test-job-1"] = &domain.Job{
 		ID:        "test-job-1",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now(),
 	}
 
@@ -686,10 +780,10 @@ func TestUpdateJob_InvalidJSON(t *testing.T) {
 }
 
 func TestDeleteJob_Success(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["test-job-1"] = &storage.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
+	repo.jobs["test-job-1"] = &domain.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
 
 	req := httptest.NewRequest(http.MethodDelete, "/v1/jobs/test-job-1", nil)
 	rec := httptest.NewRecorder()
@@ -701,14 +795,14 @@ func TestDeleteJob_Success(t *testing.T) {
 		t.Errorf("expected status 204, got %d", rec.Code)
 	}
 
-	if _, exists := store.jobs["test-job-1"]; exists {
+	if _, exists := repo.jobs["test-job-1"]; exists {
 		t.Error("expected job to be deleted")
 	}
 }
 
 func TestDeleteJob_NotFound(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodDelete, "/v1/jobs/nonexistent", nil)
 	rec := httptest.NewRecorder()
@@ -722,11 +816,11 @@ func TestDeleteJob_NotFound(t *testing.T) {
 }
 
 func TestGetJobMetrics_Success(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["test-job-1"] = &storage.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
-	store.samples["test-job-1"] = []*storage.MetricSample{
+	repo.jobs["test-job-1"] = &domain.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
+	repo.samples["test-job-1"] = []*domain.MetricSample{
 		{JobID: "test-job-1", Timestamp: time.Now().Add(-5 * time.Minute), CPUUsage: 50.0, MemoryUsageMB: 2048},
 		{JobID: "test-job-1", Timestamp: time.Now().Add(-3 * time.Minute), CPUUsage: 60.0, MemoryUsageMB: 2560},
 		{JobID: "test-job-1", Timestamp: time.Now(), CPUUsage: 55.0, MemoryUsageMB: 2300},
@@ -759,8 +853,8 @@ func TestGetJobMetrics_Success(t *testing.T) {
 }
 
 func TestGetJobMetrics_NotFound(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/nonexistent/metrics", nil)
 	rec := httptest.NewRecorder()
@@ -774,14 +868,14 @@ func TestGetJobMetrics_NotFound(t *testing.T) {
 }
 
 func TestRecordJobMetrics_Success(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["test-job-1"] = &storage.Job{
+	repo.jobs["test-job-1"] = &domain.Job{
 		ID:        "test-job-1",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now(),
 	}
 
@@ -815,14 +909,14 @@ func TestRecordJobMetrics_Success(t *testing.T) {
 		t.Errorf("expected memory usage 4096, got %d", resp.MemoryUsageMb)
 	}
 
-	if len(store.samples["test-job-1"]) != 1 {
-		t.Errorf("expected 1 metric sample, got %d", len(store.samples["test-job-1"]))
+	if len(repo.samples["test-job-1"]) != 1 {
+		t.Errorf("expected 1 metric sample, got %d", len(repo.samples["test-job-1"]))
 	}
 }
 
 func TestRecordJobMetrics_NotFound(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	reqBody := types.RecordMetricsRequest{
 		CpuUsage:      75.5,
@@ -844,14 +938,14 @@ func TestRecordJobMetrics_NotFound(t *testing.T) {
 }
 
 func TestRecordJobMetrics_ValidationErrors(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["test-job-1"] = &storage.Job{
+	repo.jobs["test-job-1"] = &domain.Job{
 		ID:        "test-job-1",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now(),
 	}
 
@@ -904,14 +998,14 @@ func TestRecordJobMetrics_ValidationErrors(t *testing.T) {
 }
 
 func TestRecordJobMetrics_MissingAuditHeaders(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["test-job-1"] = &storage.Job{
+	repo.jobs["test-job-1"] = &domain.Job{
 		ID:        "test-job-1",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now(),
 	}
 
@@ -933,8 +1027,8 @@ func TestRecordJobMetrics_MissingAuditHeaders(t *testing.T) {
 }
 
 func TestRoutes(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	handler := srv.Routes()
 	if handler == nil {
@@ -959,12 +1053,12 @@ func TestStorageJobToAPI_WithSchedulerInfo(t *testing.T) {
 	timeLimitMins := 60
 	gpuUsage := 85.5
 
-	job := &storage.Job{
+	job := &domain.Job{
 		ID:             "test-job-1",
 		User:           "testuser",
 		Nodes:          []string{"node-1", "node-2"},
 		NodeCount:      2,
-		State:          storage.JobStateCompleted,
+		State:          domain.JobStateCompleted,
 		StartTime:      time.Now().Add(-30 * time.Minute),
 		RuntimeSeconds: 1800,
 		CPUUsage:       75.5,
@@ -985,8 +1079,8 @@ func TestStorageJobToAPI_WithSchedulerInfo(t *testing.T) {
 		MaxMemUsageMB:  5000,
 		AvgGPUUsage:    70.0,
 		MaxGPUUsage:    90.0,
-		Scheduler: &storage.SchedulerInfo{
-			Type:          storage.SchedulerTypeSlurm,
+		Scheduler: &domain.SchedulerInfo{
+			Type:          domain.SchedulerTypeSlurm,
 			ExternalJobID: "12345",
 			RawState:      "COMPLETED",
 			SubmitTime:    &submitTime,
@@ -1001,7 +1095,7 @@ func TestStorageJobToAPI_WithSchedulerInfo(t *testing.T) {
 		},
 	}
 
-	resp := m.StorageJobToAPI(job)
+	resp := m.DomainJobToAPI(job)
 
 	if resp.Id != "test-job-1" {
 		t.Errorf("expected ID 'test-job-1', got %s", resp.Id)
@@ -1029,7 +1123,7 @@ func TestStorageJobToAPI_WithSchedulerInfo(t *testing.T) {
 func TestApiSchedulerToStorage(t *testing.T) {
 	m := mapper.NewMapper()
 
-	result := m.APISchedulerToStorage(nil)
+	result := m.APISchedulerToDomain(nil)
 	if result != nil {
 		t.Error("expected nil result for nil input")
 	}
@@ -1061,9 +1155,9 @@ func TestApiSchedulerToStorage(t *testing.T) {
 		Extra:            &map[string]interface{}{"key": "value"},
 	}
 
-	result = m.APISchedulerToStorage(apiSched)
+	result = m.APISchedulerToDomain(apiSched)
 
-	if result.Type != storage.SchedulerTypeSlurm {
+	if result.Type != domain.SchedulerTypeSlurm {
 		t.Errorf("expected type 'slurm', got %s", result.Type)
 	}
 	if result.ExternalJobID != "12345" {
@@ -1080,12 +1174,12 @@ func TestApiSchedulerToStorage(t *testing.T) {
 func TestIsValidState(t *testing.T) {
 	m := mapper.NewMapper()
 
-	validStates := []storage.JobState{
-		storage.JobStatePending,
-		storage.JobStateRunning,
-		storage.JobStateCompleted,
-		storage.JobStateFailed,
-		storage.JobStateCancelled,
+	validStates := []domain.JobState{
+		domain.JobStatePending,
+		domain.JobStateRunning,
+		domain.JobStateCompleted,
+		domain.JobStateFailed,
+		domain.JobStateCancelled,
 	}
 
 	for _, state := range validStates {
@@ -1094,7 +1188,7 @@ func TestIsValidState(t *testing.T) {
 		}
 	}
 
-	invalidStates := []storage.JobState{"invalid", "unknown", ""}
+	invalidStates := []domain.JobState{"invalid", "unknown", ""}
 	for _, state := range invalidStates {
 		if m.IsValidJobState(state) {
 			t.Errorf("expected state %s to be invalid", state)
@@ -1103,8 +1197,8 @@ func TestIsValidState(t *testing.T) {
 }
 
 func TestHandleError(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
@@ -1125,9 +1219,9 @@ func TestHandleError(t *testing.T) {
 }
 
 func TestCreateJob_StorageError(t *testing.T) {
-	store := newMockStorage()
-	store.createErr = errors.New("database error")
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	repo.createErr = errors.New("database error")
+	srv := setupTestServer(repo)
 
 	reqBody := types.CreateJobRequest{
 		Id:    "test-job-1",
@@ -1149,9 +1243,9 @@ func TestCreateJob_StorageError(t *testing.T) {
 }
 
 func TestGetJob_StorageError(t *testing.T) {
-	store := newMockStorage()
-	store.getErr = errors.New("database error")
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	repo.getErr = errors.New("database error")
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/test-job-1", nil)
 	rec := httptest.NewRecorder()
@@ -1164,14 +1258,14 @@ func TestGetJob_StorageError(t *testing.T) {
 }
 
 func TestUpdateJob_GPUUsage(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["test-job-1"] = &storage.Job{
+	repo.jobs["test-job-1"] = &domain.Job{
 		ID:        "test-job-1",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now(),
 	}
 
@@ -1203,14 +1297,14 @@ func TestUpdateJob_GPUUsage(t *testing.T) {
 }
 
 func TestRecordJobMetrics_WithGPU(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["test-job-1"] = &storage.Job{
+	repo.jobs["test-job-1"] = &domain.Job{
 		ID:        "test-job-1",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now(),
 	}
 
@@ -1245,10 +1339,10 @@ func TestRecordJobMetrics_WithGPU(t *testing.T) {
 }
 
 func TestDeleteJob_StorageError(t *testing.T) {
-	store := newMockStorage()
-	store.deleteErr = errors.New("database error")
-	store.jobs["test-job-1"] = &storage.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	repo.deleteErr = errors.New("database error")
+	repo.jobs["test-job-1"] = &domain.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodDelete, "/v1/jobs/test-job-1", nil)
 	rec := httptest.NewRecorder()
@@ -1262,16 +1356,16 @@ func TestDeleteJob_StorageError(t *testing.T) {
 }
 
 func TestUpdateJob_StorageError(t *testing.T) {
-	store := newMockStorage()
-	store.updateErr = errors.New("database error")
-	store.jobs["test-job-1"] = &storage.Job{
+	repo := newMockRepository()
+	repo.updateErr = errors.New("database error")
+	repo.jobs["test-job-1"] = &domain.Job{
 		ID:        "test-job-1",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now(),
 	}
-	srv := setupTestServer(store)
+	srv := setupTestServer(repo)
 
 	state := types.JobState("completed")
 	reqBody := types.UpdateJobRequest{State: &state}
@@ -1290,11 +1384,11 @@ func TestUpdateJob_StorageError(t *testing.T) {
 }
 
 func TestGetJobMetrics_WithFilters(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
-	store.jobs["test-job-1"] = &storage.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
-	store.samples["test-job-1"] = []*storage.MetricSample{
+	repo.jobs["test-job-1"] = &domain.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
+	repo.samples["test-job-1"] = []*domain.MetricSample{
 		{JobID: "test-job-1", Timestamp: time.Now(), CPUUsage: 50.0, MemoryUsageMB: 2048},
 	}
 
@@ -1318,10 +1412,10 @@ func TestGetJobMetrics_WithFilters(t *testing.T) {
 }
 
 func TestGetJobMetrics_StorageError(t *testing.T) {
-	store := newMockStorage()
-	store.metricsErr = errors.New("database error")
-	store.jobs["test-job-1"] = &storage.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	repo.metricsErr = errors.New("database error")
+	repo.jobs["test-job-1"] = &domain.Job{ID: "test-job-1", User: "testuser", Nodes: []string{"node-1"}}
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/test-job-1/metrics", nil)
 	rec := httptest.NewRecorder()
@@ -1335,16 +1429,16 @@ func TestGetJobMetrics_StorageError(t *testing.T) {
 }
 
 func TestRecordJobMetrics_StorageError(t *testing.T) {
-	store := newMockStorage()
-	store.recordErr = errors.New("database error")
-	store.jobs["test-job-1"] = &storage.Job{
+	repo := newMockRepository()
+	repo.recordErr = errors.New("database error")
+	repo.jobs["test-job-1"] = &domain.Job{
 		ID:        "test-job-1",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now(),
 	}
-	srv := setupTestServer(store)
+	srv := setupTestServer(repo)
 
 	reqBody := types.RecordMetricsRequest{
 		CpuUsage:      75.5,
@@ -1366,15 +1460,15 @@ func TestRecordJobMetrics_StorageError(t *testing.T) {
 }
 
 func TestRecordJobMetrics_InvalidJSON(t *testing.T) {
-	store := newMockStorage()
-	store.jobs["test-job-1"] = &storage.Job{
+	repo := newMockRepository()
+	repo.jobs["test-job-1"] = &domain.Job{
 		ID:        "test-job-1",
 		User:      "testuser",
 		Nodes:     []string{"node-1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now(),
 	}
-	srv := setupTestServer(store)
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/test-job-1/metrics", bytes.NewReader([]byte("invalid")))
 	req.Header.Set("Content-Type", "application/json")
@@ -1394,8 +1488,8 @@ func TestRecordJobMetrics_InvalidJSON(t *testing.T) {
 // =========================================================================
 
 func TestJobStartedEvent_Success(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	gpuVendor := types.Nvidia
 	gpuAllocation := 2
@@ -1445,7 +1539,7 @@ func TestJobStartedEvent_Success(t *testing.T) {
 	}
 
 	// Verify job was created in storage
-	job, err := store.GetJob(context.Background(), "test-job-123")
+	job, err := repo.GetJob(context.Background(), "test-job-123")
 	if err != nil {
 		t.Fatalf("failed to get job from storage: %v", err)
 	}
@@ -1453,13 +1547,13 @@ func TestJobStartedEvent_Success(t *testing.T) {
 	if job.User != "testuser" {
 		t.Errorf("expected user 'testuser', got '%s'", job.User)
 	}
-	if job.State != storage.JobStateRunning {
+	if job.State != domain.JobStateRunning {
 		t.Errorf("expected state 'running', got '%s'", job.State)
 	}
 	if job.NodeCount != 2 {
 		t.Errorf("expected node_count 2, got %d", job.NodeCount)
 	}
-	if job.GPUVendor != storage.GPUVendor(gpuVendor) {
+	if job.GPUVendor != domain.GPUVendor(gpuVendor) {
 		t.Errorf("expected gpu_vendor '%s', got '%s'", string(gpuVendor), job.GPUVendor)
 	}
 	if job.GPUCount != gpuAllocation {
@@ -1489,8 +1583,8 @@ func TestJobStartedEvent_Success(t *testing.T) {
 }
 
 func TestJobStartedEvent_Idempotent(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	event := types.JobStartedEvent{
 		JobId:     "test-job-idempotent",
@@ -1534,8 +1628,8 @@ func TestJobStartedEvent_Idempotent(t *testing.T) {
 }
 
 func TestJobStartedEvent_MissingRequiredFields(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	testCases := []struct {
 		name  string
@@ -1584,8 +1678,8 @@ func TestJobStartedEvent_MissingRequiredFields(t *testing.T) {
 }
 
 func TestJobStartedEvent_InvalidJSON(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/events/job-started", bytes.NewReader([]byte("invalid")))
 	req.Header.Set("Content-Type", "application/json")
@@ -1599,19 +1693,19 @@ func TestJobStartedEvent_InvalidJSON(t *testing.T) {
 }
 
 func TestJobFinishedEvent_Success(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	// Create a job first
 	startTime := time.Now().Add(-5 * time.Minute)
-	store.jobs["test-job-finish"] = &storage.Job{
+	repo.jobs["test-job-finish"] = &domain.Job{
 		ID:        "test-job-finish",
 		User:      "testuser",
 		Nodes:     []string{"node1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: startTime,
-		Scheduler: &storage.SchedulerInfo{
-			Type: storage.SchedulerTypeSlurm,
+		Scheduler: &domain.SchedulerInfo{
+			Type: domain.SchedulerTypeSlurm,
 		},
 	}
 
@@ -1644,8 +1738,8 @@ func TestJobFinishedEvent_Success(t *testing.T) {
 	}
 
 	// Verify job was updated in storage
-	job, _ := store.GetJob(context.Background(), "test-job-finish")
-	if job.State != storage.JobStateCompleted {
+	job, _ := repo.GetJob(context.Background(), "test-job-finish")
+	if job.State != domain.JobStateCompleted {
 		t.Errorf("expected state 'completed', got '%s'", job.State)
 	}
 	if job.EndTime == nil {
@@ -1660,18 +1754,18 @@ func TestJobFinishedEvent_Success(t *testing.T) {
 }
 
 func TestJobFinishedEvent_Failed(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	// Create a job first
-	store.jobs["test-job-fail"] = &storage.Job{
+	repo.jobs["test-job-fail"] = &domain.Job{
 		ID:        "test-job-fail",
 		User:      "testuser",
 		Nodes:     []string{"node1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now().Add(-1 * time.Minute),
-		Scheduler: &storage.SchedulerInfo{
-			Type: storage.SchedulerTypeSlurm,
+		Scheduler: &domain.SchedulerInfo{
+			Type: domain.SchedulerTypeSlurm,
 		},
 	}
 
@@ -1694,8 +1788,8 @@ func TestJobFinishedEvent_Failed(t *testing.T) {
 		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	job, _ := store.GetJob(context.Background(), "test-job-fail")
-	if job.State != storage.JobStateFailed {
+	job, _ := repo.GetJob(context.Background(), "test-job-fail")
+	if job.State != domain.JobStateFailed {
 		t.Errorf("expected state 'failed', got '%s'", job.State)
 	}
 	if job.Scheduler.ExitCode == nil || *job.Scheduler.ExitCode != 42 {
@@ -1704,15 +1798,15 @@ func TestJobFinishedEvent_Failed(t *testing.T) {
 }
 
 func TestJobFinishedEvent_Idempotent(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	// Create a job that's already completed
-	store.jobs["test-job-already-done"] = &storage.Job{
+	repo.jobs["test-job-already-done"] = &domain.Job{
 		ID:        "test-job-already-done",
 		User:      "testuser",
 		Nodes:     []string{"node1"},
-		State:     storage.JobStateCompleted, // Already terminal
+		State:     domain.JobStateCompleted, // Already terminal
 		StartTime: time.Now().Add(-1 * time.Minute),
 	}
 
@@ -1743,8 +1837,8 @@ func TestJobFinishedEvent_Idempotent(t *testing.T) {
 }
 
 func TestJobFinishedEvent_NotFound(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	exitCode := 0
 	event := types.JobFinishedEvent{
@@ -1767,8 +1861,8 @@ func TestJobFinishedEvent_NotFound(t *testing.T) {
 }
 
 func TestJobFinishedEvent_MissingJobId(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	event := types.JobFinishedEvent{
 		FinalState: types.Completed,
@@ -1788,8 +1882,8 @@ func TestJobFinishedEvent_MissingJobId(t *testing.T) {
 }
 
 func TestJobFinishedEvent_InvalidJSON(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/events/job-finished", bytes.NewReader([]byte("invalid")))
 	req.Header.Set("Content-Type", "application/json")
@@ -1803,18 +1897,18 @@ func TestJobFinishedEvent_InvalidJSON(t *testing.T) {
 }
 
 func TestJobFinishedEvent_CancelledState(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
 
 	// Create a job first
-	store.jobs["test-job-cancel"] = &storage.Job{
+	repo.jobs["test-job-cancel"] = &domain.Job{
 		ID:        "test-job-cancel",
 		User:      "testuser",
 		Nodes:     []string{"node1"},
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: time.Now().Add(-1 * time.Minute),
-		Scheduler: &storage.SchedulerInfo{
-			Type: storage.SchedulerTypeSlurm,
+		Scheduler: &domain.SchedulerInfo{
+			Type: domain.SchedulerTypeSlurm,
 		},
 	}
 
@@ -1835,8 +1929,8 @@ func TestJobFinishedEvent_CancelledState(t *testing.T) {
 		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	job, _ := store.GetJob(context.Background(), "test-job-cancel")
-	if job.State != storage.JobStateCancelled {
+	job, _ := repo.GetJob(context.Background(), "test-job-cancel")
+	if job.State != domain.JobStateCancelled {
 		t.Errorf("expected state 'cancelled', got '%s'", job.State)
 	}
 }

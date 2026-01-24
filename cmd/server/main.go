@@ -17,10 +17,10 @@ import (
 	"time"
 
 	"github.com/Avicted/hpc-job-observability-service/internal/api"
-	"github.com/Avicted/hpc-job-observability-service/internal/collector"
-	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
-	"github.com/Avicted/hpc-job-observability-service/internal/scheduler"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/collector"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/scheduler"
 	"github.com/joho/godotenv"
 )
 

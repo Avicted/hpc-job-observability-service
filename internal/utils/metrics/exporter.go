@@ -7,8 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Avicted/hpc-job-observability-service/internal/scheduler"
+	"github.com/Avicted/hpc-job-observability-service/internal/domain"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/scheduler"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -359,12 +360,12 @@ func (e *Exporter) Collect(ctx context.Context) error {
 	e.nodeCPULoad.Reset()
 
 	// Count jobs by state
-	stateCounts := map[storage.JobState]int{
-		storage.JobStatePending:   0,
-		storage.JobStateRunning:   0,
-		storage.JobStateCompleted: 0,
-		storage.JobStateFailed:    0,
-		storage.JobStateCancelled: 0,
+	stateCounts := map[domain.JobState]int{
+		domain.JobStatePending:   0,
+		domain.JobStateRunning:   0,
+		domain.JobStateCompleted: 0,
+		domain.JobStateFailed:    0,
+		domain.JobStateCancelled: 0,
 	}
 
 	// Node-level aggregation structures
@@ -395,7 +396,7 @@ func (e *Exporter) Collect(ctx context.Context) error {
 
 		// Calculate runtime for running jobs
 		var runtime float64
-		if job.State == storage.JobStateRunning {
+		if job.State == domain.JobStateRunning {
 			runtime = now.Sub(job.StartTime).Seconds()
 		} else if job.RuntimeSeconds > 0 {
 			runtime = job.RuntimeSeconds
@@ -411,7 +412,7 @@ func (e *Exporter) Collect(ctx context.Context) error {
 		}
 
 		// Aggregate metrics per node for running jobs only
-		if job.State == storage.JobStateRunning {
+		if job.State == domain.JobStateRunning {
 			for _, nodeName := range job.Nodes {
 				if _, exists := nodeMetrics[nodeName]; !exists {
 					nodeMetrics[nodeName] = &nodeStats{}
@@ -502,7 +503,7 @@ func (e *Exporter) Collect(ctx context.Context) error {
 }
 
 // UpdateJobMetrics updates metrics for a specific job.
-func (e *Exporter) UpdateJobMetrics(job *storage.Job) {
+func (e *Exporter) UpdateJobMetrics(job *domain.Job) {
 	node := ""
 	if len(job.Nodes) > 0 {
 		node = job.Nodes[0]
@@ -515,7 +516,37 @@ func (e *Exporter) UpdateJobMetrics(job *storage.Job) {
 	}
 
 	var runtime float64
-	if job.State == storage.JobStateRunning {
+	if job.State == domain.JobStateRunning {
+		runtime = time.Since(job.StartTime).Seconds()
+	} else if job.RuntimeSeconds > 0 {
+		runtime = job.RuntimeSeconds
+	}
+
+	e.jobRuntimeSeconds.With(labels).Set(runtime)
+	e.jobCPUUsagePercent.With(labels).Set(job.CPUUsage)
+	e.jobMemoryUsageBytes.With(labels).Set(float64(job.MemoryUsageMB) * 1024 * 1024)
+
+	if job.GPUUsage != nil {
+		e.jobGPUUsagePercent.With(labels).Set(*job.GPUUsage)
+	}
+}
+
+// UpdateJobMetricsDomain updates metrics for a domain.Job.
+// This is the preferred method for services using domain entities.
+func (e *Exporter) UpdateJobMetricsDomain(job *domain.Job) {
+	node := ""
+	if len(job.Nodes) > 0 {
+		node = job.Nodes[0]
+	}
+
+	labels := prometheus.Labels{
+		"job_id": job.ID,
+		"user":   job.User,
+		"node":   node,
+	}
+
+	var runtime float64
+	if job.State == domain.JobStateRunning {
 		runtime = time.Since(job.StartTime).Seconds()
 	} else if job.RuntimeSeconds > 0 {
 		runtime = job.RuntimeSeconds

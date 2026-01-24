@@ -489,7 +489,7 @@ func (d *Detector) getAMDMetricsLegacy(ctx context.Context) ([]DeviceMetrics, er
 }
 
 // parseAMDMetricsJSON parses JSON output from rocm-smi.
-func (d *Detector) parseAMDMetricsJSON(output []byte) ([]DeviceMetrics, error) {
+func (d *Detector) parseAMDMetricsJSON(_ []byte) ([]DeviceMetrics, error) {
 	// Simple JSON parsing - in production, use encoding/json
 	// For now, fall back to legacy parsing as JSON format varies significantly
 	return nil, fmt.Errorf("JSON parsing not implemented, using legacy")

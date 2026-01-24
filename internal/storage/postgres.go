@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Avicted/hpc-job-observability-service/internal/domain"
 	_ "github.com/lib/pq"
 )
 
@@ -145,7 +146,12 @@ func (s *PostgresStorage) Migrate() error {
 	return nil
 }
 
-func (s *PostgresStorage) insertJobAuditEvent(ctx context.Context, tx *sql.Tx, job *Job, changeType string, changedAt time.Time, audit *JobAuditInfo) error {
+// SeedDemoData creates sample jobs and metrics for demonstration purposes.
+func (s *PostgresStorage) SeedDemoData() error {
+	return s.baseStorage.SeedDemoData(s.CreateJob)
+}
+
+func (s *PostgresStorage) insertJobAuditEvent(ctx context.Context, tx *sql.Tx, job *domain.Job, changeType string, changedAt time.Time, audit *domain.AuditInfo) error {
 	snapshotJSON, err := marshalJobSnapshot(job)
 	if err != nil {
 		return err
@@ -159,7 +165,7 @@ func (s *PostgresStorage) insertJobAuditEvent(ctx context.Context, tx *sql.Tx, j
 
 // scanJobRow scans a database row into a Job struct, handling all nullable fields.
 // This helper eliminates duplicated null-checking code across query methods.
-func scanJobRow(job *Job, nodesStr string, nodeCount sql.NullInt64, endTime sql.NullTime, gpuUsage sql.NullFloat64,
+func scanJobRow(job *domain.Job, nodesStr string, nodeCount sql.NullInt64, endTime sql.NullTime, gpuUsage sql.NullFloat64,
 	externalJobID, schedulerType, rawState, partition, account, qos, stateReason sql.NullString,
 	submitTime, lastSampleAt sql.NullTime,
 	priority, exitCode, timeLimitMins sql.NullInt64,
@@ -233,9 +239,9 @@ func scanJobRow(job *Job, nodesStr string, nodeCount sql.NullInt64, endTime sql.
 		job.MaxGPUUsage = maxGPU.Float64
 	}
 	if externalJobID.Valid || rawState.Valid || partition.Valid || account.Valid || qos.Valid || submitTime.Valid || priority.Valid || exitCode.Valid || stateReason.Valid || timeLimitMins.Valid || schedulerType.Valid {
-		job.Scheduler = &SchedulerInfo{}
+		job.Scheduler = &domain.SchedulerInfo{}
 		if schedulerType.Valid {
-			job.Scheduler.Type = SchedulerType(schedulerType.String)
+			job.Scheduler.Type = domain.SchedulerType(schedulerType.String)
 		}
 		if externalJobID.Valid {
 			job.Scheduler.ExternalJobID = externalJobID.String
@@ -273,9 +279,10 @@ func scanJobRow(job *Job, nodesStr string, nodeCount sql.NullInt64, endTime sql.
 	}
 }
 
-func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id string) (*Job, error) {
-	job := &Job{}
+func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id string) (*domain.Job, error) {
+	job := &domain.Job{}
 	var nodesStr string
+	var stateStr string
 	var endTime sql.NullTime
 	var gpuUsage sql.NullFloat64
 
@@ -302,7 +309,7 @@ func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id strin
 		       cgroup_path, gpu_count, gpu_vendor, gpu_devices,
 		       created_at, updated_at
 		FROM jobs WHERE id = $1
-	`, id).Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &job.State, &job.StartTime, &endTime,
+	`, id).Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &stateStr, &job.StartTime, &endTime,
 		&job.RuntimeSeconds, &job.CPUUsage, &job.MemoryUsageMB, &gpuUsage,
 		&externalJobID, &schedulerType, &rawState, &partition, &account, &qos, &priority, &submitTime, &exitCode, &stateReason, &timeLimitMins,
 		&requestedCPUs, &allocatedCPUs, &requestedMemMB, &allocatedMemMB, &requestedGPUs, &allocatedGPUs,
@@ -312,12 +319,13 @@ func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id strin
 		&job.CreatedAt, &job.UpdatedAt)
 
 	if err == sql.ErrNoRows {
-		return nil, ErrJobNotFound
+		return nil, domain.ErrJobNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
 
+	job.State = domain.JobState(stateStr)
 	scanJobRow(job, nodesStr, nodeCount, endTime, gpuUsage,
 		externalJobID, schedulerType, rawState, partition, account, qos, stateReason,
 		submitTime, lastSampleAt,
@@ -337,7 +345,7 @@ func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id strin
 		job.GPUCount = int(gpuCount.Int64)
 	}
 	if gpuVendor.Valid {
-		job.GPUVendor = GPUVendor(gpuVendor.String)
+		job.GPUVendor = domain.GPUVendor(gpuVendor.String)
 	}
 	if gpuDevicesStr.Valid && gpuDevicesStr.String != "" {
 		job.GPUDevices = strings.Split(gpuDevicesStr.String, ",")
@@ -347,7 +355,7 @@ func (s *PostgresStorage) getJobByIDTx(ctx context.Context, tx *sql.Tx, id strin
 }
 
 // CreateJob inserts a new job into the database.
-func (s *PostgresStorage) CreateJob(ctx context.Context, job *Job) (err error) {
+func (s *PostgresStorage) CreateJob(ctx context.Context, job *domain.Job) (err error) {
 	auditInfo, err := auditInfoFromJobOrContext(ctx, job)
 	if err != nil {
 		return err
@@ -374,7 +382,7 @@ func (s *PostgresStorage) CreateJob(ctx context.Context, job *Job) (err error) {
 		return err
 	}
 	if exists {
-		return ErrJobAlreadyExists
+		return domain.ErrJobAlreadyExists
 	}
 
 	now := time.Now()
@@ -386,7 +394,7 @@ func (s *PostgresStorage) CreateJob(ctx context.Context, job *Job) (err error) {
 		job.StartTime = now
 	}
 	if job.State == "" {
-		job.State = JobStatePending
+		job.State = domain.JobStatePending
 	}
 
 	var externalJobID, schedulerType, rawState, partition, account, qos, stateReason string
@@ -421,7 +429,7 @@ func (s *PostgresStorage) CreateJob(ctx context.Context, job *Job) (err error) {
 			created_at, updated_at
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44)
-	`, job.ID, job.User, nodesStr, job.NodeCount, job.State, job.StartTime, job.EndTime, job.RuntimeSeconds,
+	`, job.ID, job.User, nodesStr, job.NodeCount, string(job.State), job.StartTime, job.EndTime, job.RuntimeSeconds,
 		job.CPUUsage, job.MemoryUsageMB, job.GPUUsage,
 		externalJobID, schedulerType, rawState, partition, account, qos, priority, submitTime, exitCode, stateReason, timeLimitMins,
 		job.RequestedCPUs, job.AllocatedCPUs, job.RequestedMemMB, job.AllocatedMemMB, job.RequestedGPUs, job.AllocatedGPUs,
@@ -444,9 +452,10 @@ func (s *PostgresStorage) CreateJob(ctx context.Context, job *Job) (err error) {
 }
 
 // GetJob retrieves a job by ID.
-func (s *PostgresStorage) GetJob(ctx context.Context, id string) (*Job, error) {
-	job := &Job{}
+func (s *PostgresStorage) GetJob(ctx context.Context, id string) (*domain.Job, error) {
+	job := &domain.Job{}
 	var nodesStr string
+	var stateStr string
 	var endTime sql.NullTime
 	var gpuUsage sql.NullFloat64
 	var nodeCount sql.NullInt64
@@ -472,7 +481,7 @@ func (s *PostgresStorage) GetJob(ctx context.Context, id string) (*Job, error) {
 		       cgroup_path, gpu_count, gpu_vendor, gpu_devices,
 		       created_at, updated_at
 		FROM jobs WHERE id = $1
-	`, id).Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &job.State, &job.StartTime, &endTime,
+	`, id).Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &stateStr, &job.StartTime, &endTime,
 		&job.RuntimeSeconds, &job.CPUUsage, &job.MemoryUsageMB, &gpuUsage,
 		&externalJobID, &schedulerType, &rawState, &partition, &account, &qos, &priority, &submitTime, &exitCode, &stateReason, &timeLimitMins,
 		&requestedCPUs, &allocatedCPUs, &requestedMemMB, &allocatedMemMB, &requestedGPUs, &allocatedGPUs,
@@ -482,12 +491,13 @@ func (s *PostgresStorage) GetJob(ctx context.Context, id string) (*Job, error) {
 		&job.CreatedAt, &job.UpdatedAt)
 
 	if err == sql.ErrNoRows {
-		return nil, ErrJobNotFound
+		return nil, domain.ErrJobNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
 
+	job.State = domain.JobState(stateStr)
 	scanJobRow(job, nodesStr, nodeCount, endTime, gpuUsage,
 		externalJobID, schedulerType, rawState, partition, account, qos, stateReason,
 		submitTime, lastSampleAt,
@@ -507,7 +517,7 @@ func (s *PostgresStorage) GetJob(ctx context.Context, id string) (*Job, error) {
 		job.GPUCount = int(gpuCount.Int64)
 	}
 	if gpuVendor.Valid {
-		job.GPUVendor = GPUVendor(gpuVendor.String)
+		job.GPUVendor = domain.GPUVendor(gpuVendor.String)
 	}
 	if gpuDevicesStr.Valid && gpuDevicesStr.String != "" {
 		job.GPUDevices = strings.Split(gpuDevicesStr.String, ",")
@@ -517,7 +527,7 @@ func (s *PostgresStorage) GetJob(ctx context.Context, id string) (*Job, error) {
 }
 
 // UpdateJob updates an existing job.
-func (s *PostgresStorage) UpdateJob(ctx context.Context, job *Job) (err error) {
+func (s *PostgresStorage) UpdateJob(ctx context.Context, job *domain.Job) (err error) {
 	auditInfo, err := auditInfoFromJobOrContext(ctx, job)
 	if err != nil {
 		return err
@@ -550,7 +560,7 @@ func (s *PostgresStorage) UpdateJob(ctx context.Context, job *Job) (err error) {
 	job.UpdatedAt = time.Now()
 
 	// Calculate runtime if job is completing
-	if job.State == JobStateCompleted || job.State == JobStateFailed || job.State == JobStateCancelled {
+	if job.State == domain.JobStateCompleted || job.State == domain.JobStateFailed || job.State == domain.JobStateCancelled {
 		if job.EndTime == nil {
 			now := time.Now()
 			job.EndTime = &now
@@ -580,14 +590,14 @@ func (s *PostgresStorage) UpdateJob(ctx context.Context, job *Job) (err error) {
 
 	// Prepare cgroup and GPU fields for UPDATE
 	var cgroupPath, gpuVendor, gpuDevicesStr *string
-	var gpuCount *int
+	var gpuCountPtr *int
 	if job.CgroupPath != "" {
 		cgroupPath = &job.CgroupPath
 	}
 	if job.GPUCount > 0 {
-		gpuCount = &job.GPUCount
+		gpuCountPtr = &job.GPUCount
 	}
-	if job.GPUVendor != "" && job.GPUVendor != GPUVendorNone {
+	if job.GPUVendor != "" && job.GPUVendor != domain.GPUVendorNone {
 		v := string(job.GPUVendor)
 		gpuVendor = &v
 	}
@@ -607,12 +617,12 @@ func (s *PostgresStorage) UpdateJob(ctx context.Context, job *Job) (err error) {
 		                cgroup_path = $31, gpu_count = $32, gpu_vendor = $33, gpu_devices = $34,
 		                updated_at = $35
 		WHERE id = $36
-	`, job.User, nodesStr, job.NodeCount, job.State, job.StartTime, job.EndTime, job.RuntimeSeconds,
+	`, job.User, nodesStr, job.NodeCount, string(job.State), job.StartTime, job.EndTime, job.RuntimeSeconds,
 		job.CPUUsage, job.MemoryUsageMB, job.GPUUsage,
 		externalJobID, schedulerType, rawState, partition, account, qos, priority, submitTime, exitCode, stateReason, timeLimitMins,
 		job.RequestedCPUs, job.AllocatedCPUs, job.RequestedMemMB, job.AllocatedMemMB, job.RequestedGPUs, job.AllocatedGPUs,
 		job.ClusterName, job.SchedulerInst, job.IngestVersion,
-		cgroupPath, gpuCount, gpuVendor, gpuDevicesStr,
+		cgroupPath, gpuCountPtr, gpuVendor, gpuDevicesStr,
 		job.UpdatedAt, job.ID)
 	if err != nil {
 		return err
@@ -623,7 +633,7 @@ func (s *PostgresStorage) UpdateJob(ctx context.Context, job *Job) (err error) {
 		return err
 	}
 	if rows == 0 {
-		return ErrJobNotFound
+		return domain.ErrJobNotFound
 	}
 
 	if err = s.insertJobAuditEvent(ctx, tx, job, "update", job.UpdatedAt, auditInfo); err != nil {
@@ -637,7 +647,7 @@ func (s *PostgresStorage) UpdateJob(ctx context.Context, job *Job) (err error) {
 }
 
 // UpsertJob creates a job if it doesn't exist, or updates it if it does.
-func (s *PostgresStorage) UpsertJob(ctx context.Context, job *Job) (err error) {
+func (s *PostgresStorage) UpsertJob(ctx context.Context, job *domain.Job) (err error) {
 	auditInfo, err := auditInfoFromJobOrContext(ctx, job)
 	if err != nil {
 		return err
@@ -675,7 +685,7 @@ func (s *PostgresStorage) UpsertJob(ctx context.Context, job *Job) (err error) {
 		job.StartTime = now
 	}
 	if job.State == "" {
-		job.State = JobStatePending
+		job.State = domain.JobStatePending
 	}
 
 	var externalJobID, schedulerType, rawState, partition, account, qos, stateReason string
@@ -697,7 +707,7 @@ func (s *PostgresStorage) UpsertJob(ctx context.Context, job *Job) (err error) {
 	}
 
 	// Calculate runtime if job is completing
-	if job.State == JobStateCompleted || job.State == JobStateFailed || job.State == JobStateCancelled {
+	if job.State == domain.JobStateCompleted || job.State == domain.JobStateFailed || job.State == domain.JobStateCancelled {
 		if job.EndTime != nil && !job.EndTime.IsZero() {
 			job.RuntimeSeconds = job.EndTime.Sub(job.StartTime).Seconds()
 		}
@@ -707,14 +717,14 @@ func (s *PostgresStorage) UpsertJob(ctx context.Context, job *Job) (err error) {
 
 	// Prepare cgroup and GPU fields for UPSERT
 	var cgroupPath, gpuVendor, gpuDevicesStr *string
-	var gpuCount *int
+	var gpuCountPtr *int
 	if job.CgroupPath != "" {
 		cgroupPath = &job.CgroupPath
 	}
 	if job.GPUCount > 0 {
-		gpuCount = &job.GPUCount
+		gpuCountPtr = &job.GPUCount
 	}
-	if job.GPUVendor != "" && job.GPUVendor != GPUVendorNone {
+	if job.GPUVendor != "" && job.GPUVendor != domain.GPUVendorNone {
 		v := string(job.GPUVendor)
 		gpuVendor = &v
 	}
@@ -771,13 +781,13 @@ func (s *PostgresStorage) UpsertJob(ctx context.Context, job *Job) (err error) {
 			gpu_vendor = COALESCE(EXCLUDED.gpu_vendor, jobs.gpu_vendor),
 			gpu_devices = COALESCE(EXCLUDED.gpu_devices, jobs.gpu_devices),
 			updated_at = EXCLUDED.updated_at
-	`, job.ID, job.User, nodesStr, job.NodeCount, job.State, job.StartTime, job.EndTime, job.RuntimeSeconds,
+	`, job.ID, job.User, nodesStr, job.NodeCount, string(job.State), job.StartTime, job.EndTime, job.RuntimeSeconds,
 		job.CPUUsage, job.MemoryUsageMB, job.GPUUsage,
 		externalJobID, schedulerType, rawState, partition, account, qos, priority, submitTime, exitCode, stateReason, timeLimitMins,
 		job.RequestedCPUs, job.AllocatedCPUs, job.RequestedMemMB, job.AllocatedMemMB, job.RequestedGPUs, job.AllocatedGPUs,
 		job.ClusterName, job.SchedulerInst, job.IngestVersion,
 		job.LastSampleAt, job.SampleCount, job.AvgCPUUsage, job.MaxCPUUsage, job.MaxMemUsageMB, job.AvgGPUUsage, job.MaxGPUUsage,
-		cgroupPath, gpuCount, gpuVendor, gpuDevicesStr,
+		cgroupPath, gpuCountPtr, gpuVendor, gpuDevicesStr,
 		job.CreatedAt, job.UpdatedAt)
 	if err != nil {
 		return err
@@ -825,7 +835,7 @@ func (s *PostgresStorage) DeleteJob(ctx context.Context, id string) (err error) 
 		return err
 	}
 	if rows == 0 {
-		return ErrJobNotFound
+		return domain.ErrJobNotFound
 	}
 
 	if err = s.insertJobAuditEvent(ctx, tx, job, "delete", time.Now(), auditInfo); err != nil {
@@ -839,7 +849,7 @@ func (s *PostgresStorage) DeleteJob(ctx context.Context, id string) (err error) 
 }
 
 // ListJobs returns jobs matching the filter criteria.
-func (s *PostgresStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Job, int, error) {
+func (s *PostgresStorage) ListJobs(ctx context.Context, filter domain.JobFilter) ([]*domain.Job, int, error) {
 	// Build query with filters
 	whereClause := []string{}
 	args := []interface{}{}
@@ -847,7 +857,7 @@ func (s *PostgresStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Jo
 
 	if filter.State != nil {
 		whereClause = append(whereClause, fmt.Sprintf("state = $%d", argIndex))
-		args = append(args, *filter.State)
+		args = append(args, string(*filter.State))
 		argIndex++
 	}
 	if filter.User != nil {
@@ -902,10 +912,11 @@ func (s *PostgresStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Jo
 	}
 	defer rows.Close()
 
-	jobs := []*Job{}
+	jobs := []*domain.Job{}
 	for rows.Next() {
-		job := &Job{}
+		job := &domain.Job{}
 		var nodesStr string
+		var stateStr string
 		var endTime sql.NullTime
 		var gpuUsage sql.NullFloat64
 		var nodeCount sql.NullInt64
@@ -921,7 +932,7 @@ func (s *PostgresStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Jo
 		var cgroupPath, gpuVendor, gpuDevicesStr sql.NullString
 		var gpuCount sql.NullInt64
 
-		if err := rows.Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &job.State, &job.StartTime, &endTime,
+		if err := rows.Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &stateStr, &job.StartTime, &endTime,
 			&job.RuntimeSeconds, &job.CPUUsage, &job.MemoryUsageMB, &gpuUsage,
 			&externalJobID, &schedulerType, &rawState, &partition, &account, &qos, &priority, &submitTime, &exitCode, &stateReason, &timeLimitMins,
 			&requestedCPUs, &allocatedCPUs, &requestedMemMB, &allocatedMemMB, &requestedGPUs, &allocatedGPUs,
@@ -932,6 +943,7 @@ func (s *PostgresStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Jo
 			return nil, 0, err
 		}
 
+		job.State = domain.JobState(stateStr)
 		scanJobRow(job, nodesStr, nodeCount, endTime, gpuUsage,
 			externalJobID, schedulerType, rawState, partition, account, qos, stateReason,
 			submitTime, lastSampleAt,
@@ -951,7 +963,7 @@ func (s *PostgresStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Jo
 			job.GPUCount = int(gpuCount.Int64)
 		}
 		if gpuVendor.Valid {
-			job.GPUVendor = GPUVendor(gpuVendor.String)
+			job.GPUVendor = domain.GPUVendor(gpuVendor.String)
 		}
 		if gpuDevicesStr.Valid && gpuDevicesStr.String != "" {
 			job.GPUDevices = strings.Split(gpuDevicesStr.String, ",")
@@ -964,7 +976,7 @@ func (s *PostgresStorage) ListJobs(ctx context.Context, filter JobFilter) ([]*Jo
 }
 
 // GetAllJobs returns all jobs (used for metrics collection).
-func (s *PostgresStorage) GetAllJobs(ctx context.Context) ([]*Job, error) {
+func (s *PostgresStorage) GetAllJobs(ctx context.Context) ([]*domain.Job, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,
 		       cpu_usage, memory_usage_mb, gpu_usage,
@@ -981,10 +993,11 @@ func (s *PostgresStorage) GetAllJobs(ctx context.Context) ([]*Job, error) {
 	}
 	defer rows.Close()
 
-	jobs := []*Job{}
+	jobs := []*domain.Job{}
 	for rows.Next() {
-		job := &Job{}
+		job := &domain.Job{}
 		var nodesStr string
+		var stateStr string
 		var endTime sql.NullTime
 		var gpuUsage sql.NullFloat64
 		var nodeCount sql.NullInt64
@@ -1000,7 +1013,7 @@ func (s *PostgresStorage) GetAllJobs(ctx context.Context) ([]*Job, error) {
 		var cgroupPath, gpuVendor, gpuDevicesStr sql.NullString
 		var gpuCount sql.NullInt64
 
-		if err := rows.Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &job.State, &job.StartTime, &endTime,
+		if err := rows.Scan(&job.ID, &job.User, &nodesStr, &nodeCount, &stateStr, &job.StartTime, &endTime,
 			&job.RuntimeSeconds, &job.CPUUsage, &job.MemoryUsageMB, &gpuUsage,
 			&externalJobID, &schedulerType, &rawState, &partition, &account, &qos, &priority, &submitTime, &exitCode, &stateReason, &timeLimitMins,
 			&requestedCPUs, &allocatedCPUs, &requestedMemMB, &allocatedMemMB, &requestedGPUs, &allocatedGPUs,
@@ -1011,6 +1024,7 @@ func (s *PostgresStorage) GetAllJobs(ctx context.Context) ([]*Job, error) {
 			return nil, err
 		}
 
+		job.State = domain.JobState(stateStr)
 		scanJobRow(job, nodesStr, nodeCount, endTime, gpuUsage,
 			externalJobID, schedulerType, rawState, partition, account, qos, stateReason,
 			submitTime, lastSampleAt,
@@ -1030,7 +1044,7 @@ func (s *PostgresStorage) GetAllJobs(ctx context.Context) ([]*Job, error) {
 			job.GPUCount = int(gpuCount.Int64)
 		}
 		if gpuVendor.Valid {
-			job.GPUVendor = GPUVendor(gpuVendor.String)
+			job.GPUVendor = domain.GPUVendor(gpuVendor.String)
 		}
 		if gpuDevicesStr.Valid && gpuDevicesStr.String != "" {
 			job.GPUDevices = strings.Split(gpuDevicesStr.String, ",")
@@ -1043,7 +1057,7 @@ func (s *PostgresStorage) GetAllJobs(ctx context.Context) ([]*Job, error) {
 }
 
 // RecordMetrics inserts a new metric sample.
-func (s *PostgresStorage) RecordMetrics(ctx context.Context, sample *MetricSample) error {
+func (s *PostgresStorage) RecordMetrics(ctx context.Context, sample *domain.MetricSample) error {
 	if sample.Timestamp.IsZero() {
 		sample.Timestamp = time.Now()
 	}
@@ -1095,14 +1109,14 @@ func (s *PostgresStorage) RecordMetrics(ctx context.Context, sample *MetricSampl
 }
 
 // GetJobMetrics retrieves metric samples for a job.
-func (s *PostgresStorage) GetJobMetrics(ctx context.Context, jobID string, filter MetricsFilter) ([]*MetricSample, int, error) {
+func (s *PostgresStorage) GetJobMetrics(ctx context.Context, jobID string, filter domain.MetricsFilter) ([]*domain.MetricSample, int, error) {
 	// Check if job exists
 	var exists bool
 	if err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM jobs WHERE id = $1)", jobID).Scan(&exists); err != nil {
 		return nil, 0, err
 	}
 	if !exists {
-		return nil, 0, ErrJobNotFound
+		return nil, 0, domain.ErrJobNotFound
 	}
 
 	whereClause := []string{"job_id = $1"}
@@ -1151,9 +1165,9 @@ func (s *PostgresStorage) GetJobMetrics(ctx context.Context, jobID string, filte
 	}
 	defer rows.Close()
 
-	samples := []*MetricSample{}
+	samples := []*domain.MetricSample{}
 	for rows.Next() {
-		sample := &MetricSample{}
+		sample := &domain.MetricSample{}
 		var gpuUsage sql.NullFloat64
 
 		if err := rows.Scan(&sample.ID, &sample.JobID, &sample.Timestamp, &sample.CPUUsage,
@@ -1171,8 +1185,8 @@ func (s *PostgresStorage) GetJobMetrics(ctx context.Context, jobID string, filte
 }
 
 // GetLatestMetrics retrieves the most recent metric sample for a job.
-func (s *PostgresStorage) GetLatestMetrics(ctx context.Context, jobID string) (*MetricSample, error) {
-	sample := &MetricSample{}
+func (s *PostgresStorage) GetLatestMetrics(ctx context.Context, jobID string) (*domain.MetricSample, error) {
+	sample := &domain.MetricSample{}
 	var gpuUsage sql.NullFloat64
 
 	err := s.db.QueryRowContext(ctx, `

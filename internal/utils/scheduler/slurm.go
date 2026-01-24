@@ -486,14 +486,6 @@ func parseIntStr(s string) int {
 	return v
 }
 
-func parseUnixTime(s string) time.Time {
-	ts := parseIntStr(s)
-	if ts <= 0 {
-		return time.Time{}
-	}
-	return time.Unix(int64(ts), 0)
-}
-
 func parseUnixTimeInt64(ts int64) time.Time {
 	if ts <= 0 {
 		return time.Time{}

@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/Avicted/hpc-job-observability-service/internal/api/types"
-	"github.com/Avicted/hpc-job-observability-service/internal/mapper"
-	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
+	"github.com/Avicted/hpc-job-observability-service/internal/domain"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/audit"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/mapper"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 )
 
 // EventService handles job lifecycle events from Slurm prolog/epilog scripts.
@@ -90,25 +93,25 @@ func (s *EventService) JobStarted(ctx context.Context, input JobStartedInput) (*
 			Status:  types.Skipped,
 			Message: "Job already registered",
 		}, nil
-	} else if err != storage.ErrJobNotFound {
+	} else if !errors.Is(err, domain.ErrJobNotFound) {
 		return nil, ErrInternalError
 	}
 
 	// Parse GPU vendor
-	gpuVendor := storage.GPUVendorNone
+	gpuVendor := domain.GPUVendorNone
 	if input.GPUVendor != nil {
-		gpuVendor = storage.GPUVendor(*input.GPUVendor)
+		gpuVendor = domain.GPUVendor(*input.GPUVendor)
 	}
 
 	// Create the job from the event
-	job := &storage.Job{
+	job := &domain.Job{
 		ID:        input.JobID,
 		User:      input.User,
 		Nodes:     input.NodeList,
 		NodeCount: len(input.NodeList),
-		State:     storage.JobStateRunning,
+		State:     domain.JobStateRunning,
 		StartTime: input.Timestamp,
-		Audit:     storage.NewAuditInfo("slurm-prolog", "lifecycle-event"),
+		Audit:     audit.NewAuditInfo("slurm-prolog", "lifecycle-event"),
 
 		// Cgroup and GPU info from the event
 		CgroupPath: derefString(input.CgroupPath),
@@ -136,8 +139,8 @@ func (s *EventService) JobStarted(ctx context.Context, input JobStartedInput) (*
 	}
 
 	// Set scheduler info
-	job.Scheduler = &storage.SchedulerInfo{
-		Type:          storage.SchedulerTypeSlurm,
+	job.Scheduler = &domain.SchedulerInfo{
+		Type:          domain.SchedulerTypeSlurm,
 		ExternalJobID: input.JobID,
 	}
 	if input.Partition != nil {
@@ -153,7 +156,7 @@ func (s *EventService) JobStarted(ctx context.Context, input JobStartedInput) (*
 	job.IngestVersion = "prolog-v1"
 
 	if err := s.store.CreateJob(ctx, job); err != nil {
-		if err == storage.ErrJobAlreadyExists {
+		if errors.Is(err, domain.ErrJobAlreadyExists) {
 			// Race condition - job was created between our check and create
 			return &JobStartedOutput{
 				JobID:   input.JobID,
@@ -216,7 +219,7 @@ func (s *EventService) JobFinished(ctx context.Context, input JobFinishedInput) 
 	// Get the existing job
 	job, err := s.store.GetJob(ctx, input.JobID)
 	if err != nil {
-		if err == storage.ErrJobNotFound {
+		if errors.Is(err, domain.ErrJobNotFound) {
 			return nil, ErrJobNotFound
 		}
 		return nil, ErrInternalError
@@ -232,7 +235,7 @@ func (s *EventService) JobFinished(ctx context.Context, input JobFinishedInput) 
 	}
 
 	// Map final state from the event
-	finalState := s.mapper.APIJobStateToStorage(input.FinalState)
+	finalState := s.mapper.APIJobStateToDomain(input.FinalState)
 	if finalState == "" {
 		return nil, &ValidationError{Message: "Invalid final_state"}
 	}
@@ -241,13 +244,13 @@ func (s *EventService) JobFinished(ctx context.Context, input JobFinishedInput) 
 	job.State = finalState
 	job.EndTime = &input.Timestamp
 	job.RuntimeSeconds = input.Timestamp.Sub(job.StartTime).Seconds()
-	job.Audit = storage.NewAuditInfo("slurm-epilog", "lifecycle-event")
+	job.Audit = audit.NewAuditInfo("slurm-epilog", "lifecycle-event")
 
 	// Set exit code if provided
 	if input.ExitCode != nil {
 		if job.Scheduler == nil {
-			job.Scheduler = &storage.SchedulerInfo{
-				Type:          storage.SchedulerTypeSlurm,
+			job.Scheduler = &domain.SchedulerInfo{
+				Type:          domain.SchedulerTypeSlurm,
 				ExternalJobID: input.JobID,
 			}
 		}

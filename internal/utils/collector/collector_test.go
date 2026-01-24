@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
-	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/domain"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 )
 
 // mockStorage implements storage.Storage for testing.
 type mockStorage struct {
 	mu                  sync.Mutex
-	jobs                []*storage.Job
-	metricsRecorded     []*storage.MetricSample
+	jobs                []*domain.Job
+	metricsRecorded     []*domain.MetricSample
 	getAllErr           error
 	recordMetricsErr    error
 	updateJobErr        error
@@ -23,11 +23,11 @@ type mockStorage struct {
 	recordMetricsCalled int
 }
 
-func (m *mockStorage) CreateJob(ctx context.Context, job *storage.Job) error {
+func (m *mockStorage) CreateJob(ctx context.Context, job *domain.Job) error {
 	return nil
 }
 
-func (m *mockStorage) GetJob(ctx context.Context, id string) (*storage.Job, error) {
+func (m *mockStorage) GetJob(ctx context.Context, id string) (*domain.Job, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, job := range m.jobs {
@@ -35,17 +35,17 @@ func (m *mockStorage) GetJob(ctx context.Context, id string) (*storage.Job, erro
 			return job, nil
 		}
 	}
-	return nil, storage.ErrJobNotFound
+	return nil, domain.ErrJobNotFound
 }
 
-func (m *mockStorage) UpdateJob(ctx context.Context, job *storage.Job) error {
+func (m *mockStorage) UpdateJob(ctx context.Context, job *domain.Job) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.updateJobCalled++
 	return m.updateJobErr
 }
 
-func (m *mockStorage) UpsertJob(ctx context.Context, job *storage.Job) error {
+func (m *mockStorage) UpsertJob(ctx context.Context, job *domain.Job) error {
 	return nil
 }
 
@@ -53,13 +53,13 @@ func (m *mockStorage) DeleteJob(ctx context.Context, id string) error {
 	return nil
 }
 
-func (m *mockStorage) ListJobs(ctx context.Context, filter storage.JobFilter) ([]*storage.Job, int, error) {
+func (m *mockStorage) ListJobs(ctx context.Context, filter domain.JobFilter) ([]*domain.Job, int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.jobs, len(m.jobs), nil
 }
 
-func (m *mockStorage) GetAllJobs(ctx context.Context) ([]*storage.Job, error) {
+func (m *mockStorage) GetAllJobs(ctx context.Context) ([]*domain.Job, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.getAllErr != nil {
@@ -68,7 +68,7 @@ func (m *mockStorage) GetAllJobs(ctx context.Context) ([]*storage.Job, error) {
 	return m.jobs, nil
 }
 
-func (m *mockStorage) RecordMetrics(ctx context.Context, sample *storage.MetricSample) error {
+func (m *mockStorage) RecordMetrics(ctx context.Context, sample *domain.MetricSample) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.recordMetricsCalled++
@@ -79,11 +79,11 @@ func (m *mockStorage) RecordMetrics(ctx context.Context, sample *storage.MetricS
 	return nil
 }
 
-func (m *mockStorage) GetJobMetrics(ctx context.Context, jobID string, filter storage.MetricsFilter) ([]*storage.MetricSample, int, error) {
+func (m *mockStorage) GetJobMetrics(ctx context.Context, jobID string, filter domain.MetricsFilter) ([]*domain.MetricSample, int, error) {
 	return nil, 0, nil
 }
 
-func (m *mockStorage) GetLatestMetrics(ctx context.Context, jobID string) (*storage.MetricSample, error) {
+func (m *mockStorage) GetLatestMetrics(ctx context.Context, jobID string) (*domain.MetricSample, error) {
 	return nil, nil
 }
 
@@ -137,7 +137,7 @@ func TestNewWithInterval(t *testing.T) {
 }
 
 func TestStartStop(t *testing.T) {
-	store := &mockStorage{jobs: []*storage.Job{}}
+	store := &mockStorage{jobs: []*domain.Job{}}
 	exporter := metrics.NewExporter(store)
 	collector := NewWithInterval(store, exporter, 100*time.Millisecond)
 
@@ -159,7 +159,7 @@ func TestStartStop(t *testing.T) {
 }
 
 func TestCollectOnce_NoJobs(t *testing.T) {
-	store := &mockStorage{jobs: []*storage.Job{}}
+	store := &mockStorage{jobs: []*domain.Job{}}
 	exporter := metrics.NewExporter(store)
 	collector := New(store, exporter)
 
@@ -169,12 +169,12 @@ func TestCollectOnce_NoJobs(t *testing.T) {
 func TestCollectOnce_WithRunningJob(t *testing.T) {
 	gpuUsage := 75.0
 	now := time.Now()
-	jobs := []*storage.Job{
+	jobs := []*domain.Job{
 		{
 			ID:            "job-1",
 			User:          "alice",
 			Nodes:         []string{"node-1"},
-			State:         storage.JobStateRunning,
+			State:         domain.JobStateRunning,
 			StartTime:     now.Add(-30 * time.Minute),
 			CPUUsage:      50.0,
 			MemoryUsageMB: 2048,
@@ -201,12 +201,12 @@ func TestCollectOnce_WithRunningJob(t *testing.T) {
 
 func TestCollectOnce_WithPendingJob(t *testing.T) {
 	now := time.Now()
-	jobs := []*storage.Job{
+	jobs := []*domain.Job{
 		{
 			ID:        "job-1",
 			User:      "alice",
 			Nodes:     []string{},
-			State:     storage.JobStatePending,
+			State:     domain.JobStatePending,
 			StartTime: now,
 		},
 	}
@@ -228,12 +228,12 @@ func TestCollectOnce_WithPendingJob(t *testing.T) {
 func TestCollectOnce_WithCompletedJob(t *testing.T) {
 	now := time.Now()
 	endTime := now.Add(-10 * time.Minute)
-	jobs := []*storage.Job{
+	jobs := []*domain.Job{
 		{
 			ID:             "job-1",
 			User:           "alice",
 			Nodes:          []string{"node-1"},
-			State:          storage.JobStateCompleted,
+			State:          domain.JobStateCompleted,
 			StartTime:      now.Add(-1 * time.Hour),
 			EndTime:        &endTime,
 			RuntimeSeconds: 3000,
@@ -257,12 +257,12 @@ func TestCollectOnce_WithCompletedJob(t *testing.T) {
 func TestCollectOnce_MultipleRunningJobs(t *testing.T) {
 	now := time.Now()
 	gpuUsage := 60.0
-	jobs := []*storage.Job{
+	jobs := []*domain.Job{
 		{
 			ID:            "job-1",
 			User:          "alice",
 			Nodes:         []string{"node-1"},
-			State:         storage.JobStateRunning,
+			State:         domain.JobStateRunning,
 			StartTime:     now.Add(-30 * time.Minute),
 			CPUUsage:      50.0,
 			MemoryUsageMB: 2048,
@@ -272,7 +272,7 @@ func TestCollectOnce_MultipleRunningJobs(t *testing.T) {
 			ID:            "job-2",
 			User:          "bob",
 			Nodes:         []string{"node-2"},
-			State:         storage.JobStateRunning,
+			State:         domain.JobStateRunning,
 			StartTime:     now.Add(-15 * time.Minute),
 			CPUUsage:      75.0,
 			MemoryUsageMB: 4096,
@@ -281,7 +281,7 @@ func TestCollectOnce_MultipleRunningJobs(t *testing.T) {
 			ID:        "job-3",
 			User:      "charlie",
 			Nodes:     []string{},
-			State:     storage.JobStatePending,
+			State:     domain.JobStatePending,
 			StartTime: now,
 		},
 	}
@@ -305,7 +305,7 @@ func TestCollectOnce_MultipleRunningJobs(t *testing.T) {
 
 func TestCollectOnce_GetAllJobsError(t *testing.T) {
 	store := &mockStorage{
-		jobs:      []*storage.Job{},
+		jobs:      []*domain.Job{},
 		getAllErr: errors.New("database error"),
 	}
 	exporter := metrics.NewExporter(store)
@@ -323,12 +323,12 @@ func TestCollectOnce_GetAllJobsError(t *testing.T) {
 
 func TestCollectOnce_RecordMetricsError(t *testing.T) {
 	now := time.Now()
-	jobs := []*storage.Job{
+	jobs := []*domain.Job{
 		{
 			ID:            "job-1",
 			User:          "alice",
 			Nodes:         []string{"node-1"},
-			State:         storage.JobStateRunning,
+			State:         domain.JobStateRunning,
 			StartTime:     now.Add(-30 * time.Minute),
 			CPUUsage:      50.0,
 			MemoryUsageMB: 2048,
@@ -357,12 +357,12 @@ func TestCollectOnce_RecordMetricsError(t *testing.T) {
 
 func TestCollectOnce_UpdateJobError(t *testing.T) {
 	now := time.Now()
-	jobs := []*storage.Job{
+	jobs := []*domain.Job{
 		{
 			ID:            "job-1",
 			User:          "alice",
 			Nodes:         []string{"node-1"},
-			State:         storage.JobStateRunning,
+			State:         domain.JobStateRunning,
 			StartTime:     now.Add(-30 * time.Minute),
 			CPUUsage:      50.0,
 			MemoryUsageMB: 2048,
@@ -391,12 +391,12 @@ func TestCollectOnce_UpdateJobError(t *testing.T) {
 
 func TestCollectorLoop(t *testing.T) {
 	now := time.Now()
-	jobs := []*storage.Job{
+	jobs := []*domain.Job{
 		{
 			ID:            "job-1",
 			User:          "alice",
 			Nodes:         []string{"node-1"},
-			State:         storage.JobStateRunning,
+			State:         domain.JobStateRunning,
 			StartTime:     now.Add(-30 * time.Minute),
 			CPUUsage:      50.0,
 			MemoryUsageMB: 2048,
@@ -515,12 +515,12 @@ func TestSimulateGPUUsage(t *testing.T) {
 
 func TestCollectOnce_JobWithoutGPU(t *testing.T) {
 	now := time.Now()
-	jobs := []*storage.Job{
+	jobs := []*domain.Job{
 		{
 			ID:            "job-1",
 			User:          "alice",
 			Nodes:         []string{"node-1"},
-			State:         storage.JobStateRunning,
+			State:         domain.JobStateRunning,
 			StartTime:     now.Add(-30 * time.Minute),
 			CPUUsage:      50.0,
 			MemoryUsageMB: 2048,
@@ -552,12 +552,12 @@ func TestCollectOnce_JobWithoutGPU(t *testing.T) {
 func TestCollectOnce_AllJobStates(t *testing.T) {
 	now := time.Now()
 	endTime := now.Add(-10 * time.Minute)
-	jobs := []*storage.Job{
-		{ID: "job-1", User: "user", Nodes: []string{"node"}, State: storage.JobStatePending, StartTime: now},
-		{ID: "job-2", User: "user", Nodes: []string{"node"}, State: storage.JobStateRunning, StartTime: now, CPUUsage: 50, MemoryUsageMB: 1024},
-		{ID: "job-3", User: "user", Nodes: []string{"node"}, State: storage.JobStateCompleted, StartTime: now, EndTime: &endTime},
-		{ID: "job-4", User: "user", Nodes: []string{"node"}, State: storage.JobStateFailed, StartTime: now, EndTime: &endTime},
-		{ID: "job-5", User: "user", Nodes: []string{"node"}, State: storage.JobStateCancelled, StartTime: now, EndTime: &endTime},
+	jobs := []*domain.Job{
+		{ID: "job-1", User: "user", Nodes: []string{"node"}, State: domain.JobStatePending, StartTime: now},
+		{ID: "job-2", User: "user", Nodes: []string{"node"}, State: domain.JobStateRunning, StartTime: now, CPUUsage: 50, MemoryUsageMB: 1024},
+		{ID: "job-3", User: "user", Nodes: []string{"node"}, State: domain.JobStateCompleted, StartTime: now, EndTime: &endTime},
+		{ID: "job-4", User: "user", Nodes: []string{"node"}, State: domain.JobStateFailed, StartTime: now, EndTime: &endTime},
+		{ID: "job-5", User: "user", Nodes: []string{"node"}, State: domain.JobStateCancelled, StartTime: now, EndTime: &endTime},
 	}
 
 	store := &mockStorage{jobs: jobs}
@@ -577,12 +577,12 @@ func TestCollectOnce_AllJobStates(t *testing.T) {
 func TestMetricSampleFields(t *testing.T) {
 	now := time.Now()
 	gpuUsage := 75.0
-	jobs := []*storage.Job{
+	jobs := []*domain.Job{
 		{
 			ID:            "job-1",
 			User:          "alice",
 			Nodes:         []string{"node-1"},
-			State:         storage.JobStateRunning,
+			State:         domain.JobStateRunning,
 			StartTime:     now.Add(-30 * time.Minute),
 			CPUUsage:      50.0,
 			MemoryUsageMB: 2048,

@@ -1,14 +1,18 @@
-// Package mapper provides conversion functions between storage models and API types.
-// All conversions between internal storage representations and external API types
+// Package mapper provides conversion functions between domain models and API types.
+// All conversions between internal domain representations and external API types
 // should go through this package to maintain separation of concerns.
+//
+// The mapper layer sits between API handlers and services, converting:
+//   - API request types → domain entities (for input)
+//   - Domain entities → API response types (for output)
 package mapper
 
 import (
 	"github.com/Avicted/hpc-job-observability-service/internal/api/types"
-	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/domain"
 )
 
-// Mapper handles conversions between storage and API types.
+// Mapper handles conversions between domain and API types.
 type Mapper struct{}
 
 // NewMapper creates a new Mapper instance.
@@ -16,9 +20,9 @@ func NewMapper() *Mapper {
 	return &Mapper{}
 }
 
-// StorageJobToAPI converts a storage.Job to a types.Job API response.
+// DomainJobToAPI converts a domain.Job to a types.Job API response.
 // This is used when returning job data to API clients.
-func (m *Mapper) StorageJobToAPI(job *storage.Job) types.Job {
+func (m *Mapper) DomainJobToAPI(job *domain.Job) types.Job {
 	if job == nil {
 		return types.Job{}
 	}
@@ -114,23 +118,23 @@ func (m *Mapper) StorageJobToAPI(job *storage.Job) types.Job {
 
 	// Convert scheduler info if present
 	if job.Scheduler != nil {
-		resp.Scheduler = m.StorageSchedulerToAPI(job.Scheduler)
+		resp.Scheduler = m.DomainSchedulerToAPI(job.Scheduler)
 	}
 
 	return resp
 }
 
-// StorageJobsToAPI converts a slice of storage.Job to a slice of types.Job.
-func (m *Mapper) StorageJobsToAPI(jobs []*storage.Job) []types.Job {
+// DomainJobsToAPI converts a slice of domain.Job to a slice of types.Job.
+func (m *Mapper) DomainJobsToAPI(jobs []*domain.Job) []types.Job {
 	result := make([]types.Job, len(jobs))
 	for i, job := range jobs {
-		result[i] = m.StorageJobToAPI(job)
+		result[i] = m.DomainJobToAPI(job)
 	}
 	return result
 }
 
-// StorageSchedulerToAPI converts a storage.SchedulerInfo to a types.SchedulerInfo.
-func (m *Mapper) StorageSchedulerToAPI(sched *storage.SchedulerInfo) *types.SchedulerInfo {
+// DomainSchedulerToAPI converts a domain.SchedulerInfo to a types.SchedulerInfo.
+func (m *Mapper) DomainSchedulerToAPI(sched *domain.SchedulerInfo) *types.SchedulerInfo {
 	if sched == nil {
 		return nil
 	}
@@ -177,16 +181,16 @@ func (m *Mapper) StorageSchedulerToAPI(sched *storage.SchedulerInfo) *types.Sche
 	return result
 }
 
-// APISchedulerToStorage converts a types.SchedulerInfo to a storage.SchedulerInfo.
-func (m *Mapper) APISchedulerToStorage(sched *types.SchedulerInfo) *storage.SchedulerInfo {
+// APISchedulerToDomain converts a types.SchedulerInfo to a domain.SchedulerInfo.
+func (m *Mapper) APISchedulerToDomain(sched *types.SchedulerInfo) *domain.SchedulerInfo {
 	if sched == nil {
 		return nil
 	}
 
-	result := &storage.SchedulerInfo{}
+	result := &domain.SchedulerInfo{}
 
 	if sched.Type != nil {
-		result.Type = storage.SchedulerType(*sched.Type)
+		result.Type = domain.SchedulerType(*sched.Type)
 	}
 	if sched.ExternalJobId != nil {
 		result.ExternalJobID = *sched.ExternalJobId
@@ -225,8 +229,8 @@ func (m *Mapper) APISchedulerToStorage(sched *types.SchedulerInfo) *storage.Sche
 	return result
 }
 
-// StorageMetricSampleToAPI converts a storage.MetricSample to a types.MetricSample.
-func (m *Mapper) StorageMetricSampleToAPI(sample *storage.MetricSample) types.MetricSample {
+// DomainMetricSampleToAPI converts a domain.MetricSample to a types.MetricSample.
+func (m *Mapper) DomainMetricSampleToAPI(sample *domain.MetricSample) types.MetricSample {
 	if sample == nil {
 		return types.MetricSample{}
 	}
@@ -238,39 +242,34 @@ func (m *Mapper) StorageMetricSampleToAPI(sample *storage.MetricSample) types.Me
 	}
 }
 
-// StorageMetricSamplesToAPI converts a slice of storage.MetricSample to a slice of types.MetricSample.
-func (m *Mapper) StorageMetricSamplesToAPI(samples []*storage.MetricSample) []types.MetricSample {
+// DomainMetricSamplesToAPI converts a slice of domain.MetricSample to a slice of types.MetricSample.
+func (m *Mapper) DomainMetricSamplesToAPI(samples []*domain.MetricSample) []types.MetricSample {
 	result := make([]types.MetricSample, len(samples))
 	for i, sample := range samples {
-		result[i] = m.StorageMetricSampleToAPI(sample)
+		result[i] = m.DomainMetricSampleToAPI(sample)
 	}
 	return result
 }
 
-// APIJobStateToStorage converts a types.JobState to a storage.JobState.
-func (m *Mapper) APIJobStateToStorage(state types.JobState) storage.JobState {
+// APIJobStateToDomain converts a types.JobState to a domain.JobState.
+func (m *Mapper) APIJobStateToDomain(state types.JobState) domain.JobState {
 	switch state {
 	case types.Pending:
-		return storage.JobStatePending
+		return domain.JobStatePending
 	case types.Running:
-		return storage.JobStateRunning
+		return domain.JobStateRunning
 	case types.Completed:
-		return storage.JobStateCompleted
+		return domain.JobStateCompleted
 	case types.Failed:
-		return storage.JobStateFailed
+		return domain.JobStateFailed
 	case types.Cancelled:
-		return storage.JobStateCancelled
+		return domain.JobStateCancelled
 	default:
 		return ""
 	}
 }
 
-// IsValidJobState returns true if the storage.JobState is valid.
-func (m *Mapper) IsValidJobState(state storage.JobState) bool {
-	switch state {
-	case storage.JobStatePending, storage.JobStateRunning, storage.JobStateCompleted, storage.JobStateFailed, storage.JobStateCancelled:
-		return true
-	default:
-		return false
-	}
+// IsValidJobState returns true if the domain.JobState is valid.
+func (m *Mapper) IsValidJobState(state domain.JobState) bool {
+	return state.IsValid()
 }

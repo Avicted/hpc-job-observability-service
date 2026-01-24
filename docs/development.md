@@ -10,6 +10,9 @@ This document covers development setup, workflows, and guidelines for contributi
 
 ## Project Structure
 
+The project follows a **clean architecture** with distinct layers.
+Please see the diagram in [Architecture](architecture.md) for details.
+
 ```
 hpc-job-observability-service/
 ├── cmd/
@@ -24,16 +27,28 @@ hpc-job-observability-service/
 ├── docs/                                   # Documentation
 ├── internal/
 │   ├── api/                                # HTTP handlers (thin) and generated types
-│   ├── cgroup/                             # Linux cgroups v2 metric collection
-│   ├── collector/                          # Background metric collector
+│   │   ├── handler.go                      # Thin HTTP handlers (≤50 lines each)
+│   │   ├── server/                         # Generated OpenAPI server interface
+│   │   └── types/                          # Generated OpenAPI types
+│   ├── domain/                             # Core business entities and errors
+│   │   └── job.go                          # Job, JobState, MetricSample, errors, etc.
 │   ├── e2e/                                # End-to-end integration tests
-│   ├── gpu/                                # NVIDIA/AMD GPU metric collection
-│   ├── mapper/                             # Storage <-> API mappers
-│   ├── metrics/                            # Prometheus exporter
 │   ├── scheduler/                          # Scheduler abstraction layer
 │   ├── service/                            # Domain services (business logic)
+│   │   ├── jobs.go                         # JobService
+│   │   ├── metrics.go                      # MetricsService
+│   │   └── events.go                       # EventService
 │   ├── slurmclient/                        # Generated Slurm REST API client
-│   └── storage/                            # Database layer (PostgreSQL)
+│   ├── storage/                            # Database layer (PostgreSQL)
+│   │   ├── storage.go                      # Storage interface using domain types
+│   │   └── postgres.go                     # PostgreSQL implementation
+│   └── utils/                              # Utility packages
+│       ├── audit/                          # Audit context for change tracking
+│       ├── cgroup/                         # Linux cgroups v2 metric collection
+│       ├── collector/                      # Background metric collector
+│       ├── gpu/                            # NVIDIA/AMD GPU metric collection
+│       ├── mapper/                         # Domain <-> API mappers
+│       └── metrics/                        # Prometheus exporter
 ├── scripts/                                # Utility scripts
 │   ├── slurm/                              # Prolog/epilog scripts
 │   ├── coverage.sh

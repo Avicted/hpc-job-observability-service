@@ -1,216 +1,38 @@
 // Package storage provides database storage for jobs and metrics.
 // It supports PostgreSQL as the primary backend.
+//
+// This package uses domain types directly - no separate storage types.
+// All persistence operations work with domain.Job, domain.MetricSample, etc.
 package storage
 
 import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/Avicted/hpc-job-observability-service/internal/domain"
 	"github.com/google/uuid"
 )
 
-// Common errors returned by storage operations.
-var (
-	ErrJobNotFound       = errors.New("job not found")
-	ErrJobAlreadyExists  = errors.New("job already exists")
-	ErrInvalidJobState   = errors.New("invalid job state")
-	ErrMissingAuditInfo  = errors.New("missing audit info")
-	ErrJobTerminalFrozen = errors.New("job is in terminal state and cannot be updated")
-)
-
-// JobState represents the current state of a job.
-type JobState string
-
-const (
-	JobStatePending   JobState = "pending"
-	JobStateRunning   JobState = "running"
-	JobStateCompleted JobState = "completed"
-	JobStateFailed    JobState = "failed"
-	JobStateCancelled JobState = "cancelled"
-)
-
-// IsTerminalState returns true if the job state is a final state (completed, failed, or cancelled).
-func (s JobState) IsTerminal() bool {
-	return s == JobStateCompleted || s == JobStateFailed || s == JobStateCancelled
-}
-
-// SchedulerType identifies the type of scheduler backend.
-type SchedulerType string
-
-const (
-	SchedulerTypeMock  SchedulerType = "mock"
-	SchedulerTypeSlurm SchedulerType = "slurm"
-)
-
-// GPUVendor identifies the GPU vendor for a job.
-type GPUVendor string
-
-const (
-	GPUVendorNone   GPUVendor = "none"
-	GPUVendorNvidia GPUVendor = "nvidia"
-	GPUVendorAMD    GPUVendor = "amd"
-	GPUVendorMixed  GPUVendor = "mixed" // For jobs spanning nodes with different GPU vendors
-)
-
-// SchedulerInfo contains metadata from the external scheduler.
-type SchedulerInfo struct {
-	Type          SchedulerType          `json:"type"`
-	ExternalJobID string                 `json:"external_job_id,omitempty"`
-	RawState      string                 `json:"raw_state,omitempty"`
-	SubmitTime    *time.Time             `json:"submit_time,omitempty"`
-	Partition     string                 `json:"partition,omitempty"`
-	Account       string                 `json:"account,omitempty"`
-	QoS           string                 `json:"qos,omitempty"`
-	Priority      *int64                 `json:"priority,omitempty"`
-	ExitCode      *int                   `json:"exit_code,omitempty"`
-	StateReason   string                 `json:"state_reason,omitempty"`
-	TimeLimitMins *int                   `json:"time_limit_minutes,omitempty"`
-	Extra         map[string]interface{} `json:"extra,omitempty"`
-}
-
-// JobAuditInfo contains metadata for auditing job changes.
-type JobAuditInfo struct {
-	ChangedBy     string `json:"changed_by"`
-	Source        string `json:"source"`
-	CorrelationID string `json:"correlation_id"`
-}
-
-// Job represents a batch job with its metadata and current resource usage.
-type Job struct {
-	ID             string     `json:"id"`
-	User           string     `json:"user"`
-	Nodes          []string   `json:"nodes"`
-	NodeCount      int        `json:"node_count,omitempty"`
-	State          JobState   `json:"state"`
-	StartTime      time.Time  `json:"start_time"`
-	EndTime        *time.Time `json:"end_time,omitempty"`
-	RuntimeSeconds float64    `json:"runtime_seconds,omitempty"`
-	CPUUsage       float64    `json:"cpu_usage"`
-	MemoryUsageMB  int64      `json:"memory_usage_mb"`
-	GPUUsage       *float64   `json:"gpu_usage,omitempty"`
-	RequestedCPUs  int64      `json:"requested_cpus,omitempty"`
-	AllocatedCPUs  int64      `json:"allocated_cpus,omitempty"`
-	RequestedMemMB int64      `json:"requested_memory_mb,omitempty"`
-	AllocatedMemMB int64      `json:"allocated_memory_mb,omitempty"`
-	RequestedGPUs  int64      `json:"requested_gpus,omitempty"`
-	AllocatedGPUs  int64      `json:"allocated_gpus,omitempty"`
-	ClusterName    string     `json:"cluster_name,omitempty"`
-	SchedulerInst  string     `json:"scheduler_instance,omitempty"`
-	IngestVersion  string     `json:"ingest_version,omitempty"`
-	LastSampleAt   *time.Time `json:"last_sample_at,omitempty"`
-	SampleCount    int64      `json:"sample_count,omitempty"`
-	AvgCPUUsage    float64    `json:"avg_cpu_usage,omitempty"`
-	MaxCPUUsage    float64    `json:"max_cpu_usage,omitempty"`
-	MaxMemUsageMB  int64      `json:"max_memory_usage_mb,omitempty"`
-	AvgGPUUsage    float64    `json:"avg_gpu_usage,omitempty"`
-	MaxGPUUsage    float64    `json:"max_gpu_usage,omitempty"`
-	// Cgroup and GPU fields for real resource tracking
-	CgroupPath string         `json:"cgroup_path,omitempty"` // Path to job's cgroup (e.g., /sys/fs/cgroup/slurm/job_123)
-	GPUCount   int            `json:"gpu_count,omitempty"`   // Number of GPUs allocated to this job
-	GPUVendor  GPUVendor      `json:"gpu_vendor,omitempty"`  // GPU vendor (nvidia, amd, mixed, none)
-	GPUDevices []string       `json:"gpu_devices,omitempty"` // GPU device IDs (e.g., ["GPU-abc123", "GPU-def456"])
-	Scheduler  *SchedulerInfo `json:"scheduler,omitempty"`
-	Audit      *JobAuditInfo  `json:"audit,omitempty"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
-}
-
-// JobSnapshot represents a full snapshot of job data for audit logging.
-type JobSnapshot struct {
-	ID             string         `json:"id"`
-	User           string         `json:"user"`
-	Nodes          []string       `json:"nodes"`
-	NodeCount      int            `json:"node_count,omitempty"`
-	State          JobState       `json:"state"`
-	StartTime      time.Time      `json:"start_time"`
-	EndTime        *time.Time     `json:"end_time,omitempty"`
-	RuntimeSeconds float64        `json:"runtime_seconds,omitempty"`
-	CPUUsage       float64        `json:"cpu_usage"`
-	MemoryUsageMB  int64          `json:"memory_usage_mb"`
-	GPUUsage       *float64       `json:"gpu_usage,omitempty"`
-	RequestedCPUs  int64          `json:"requested_cpus,omitempty"`
-	AllocatedCPUs  int64          `json:"allocated_cpus,omitempty"`
-	RequestedMemMB int64          `json:"requested_memory_mb,omitempty"`
-	AllocatedMemMB int64          `json:"allocated_memory_mb,omitempty"`
-	RequestedGPUs  int64          `json:"requested_gpus,omitempty"`
-	AllocatedGPUs  int64          `json:"allocated_gpus,omitempty"`
-	ClusterName    string         `json:"cluster_name,omitempty"`
-	SchedulerInst  string         `json:"scheduler_instance,omitempty"`
-	IngestVersion  string         `json:"ingest_version,omitempty"`
-	LastSampleAt   *time.Time     `json:"last_sample_at,omitempty"`
-	SampleCount    int64          `json:"sample_count,omitempty"`
-	AvgCPUUsage    float64        `json:"avg_cpu_usage,omitempty"`
-	MaxCPUUsage    float64        `json:"max_cpu_usage,omitempty"`
-	MaxMemUsageMB  int64          `json:"max_memory_usage_mb,omitempty"`
-	AvgGPUUsage    float64        `json:"avg_gpu_usage,omitempty"`
-	MaxGPUUsage    float64        `json:"max_gpu_usage,omitempty"`
-	CgroupPath     string         `json:"cgroup_path,omitempty"`
-	GPUCount       int            `json:"gpu_count,omitempty"`
-	GPUVendor      GPUVendor      `json:"gpu_vendor,omitempty"`
-	GPUDevices     []string       `json:"gpu_devices,omitempty"`
-	Scheduler      *SchedulerInfo `json:"scheduler,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-}
-
-// JobAuditEvent represents a persisted audit entry for a job change.
-type JobAuditEvent struct {
-	ID            int64        `json:"id"`
-	JobID         string       `json:"job_id"`
-	ChangeType    string       `json:"change_type"`
-	ChangedAt     time.Time    `json:"changed_at"`
-	ChangedBy     string       `json:"changed_by"`
-	Source        string       `json:"source"`
-	CorrelationID string       `json:"correlation_id"`
-	Snapshot      *JobSnapshot `json:"snapshot"`
-}
-
-// MetricSample represents a single point-in-time resource usage measurement.
-type MetricSample struct {
-	ID            int64     `json:"id"`
-	JobID         string    `json:"job_id"`
-	Timestamp     time.Time `json:"timestamp"`
-	CPUUsage      float64   `json:"cpu_usage"`
-	MemoryUsageMB int64     `json:"memory_usage_mb"`
-	GPUUsage      *float64  `json:"gpu_usage,omitempty"`
-}
-
-// JobFilter contains optional filters for listing jobs.
-type JobFilter struct {
-	State  *JobState
-	User   *string
-	Node   *string
-	Limit  int
-	Offset int
-}
-
-// MetricsFilter contains optional filters for listing metrics.
-type MetricsFilter struct {
-	StartTime *time.Time
-	EndTime   *time.Time
-	Limit     int
-}
-
 // Storage defines the interface for job and metrics persistence.
+// All methods work directly with domain types.
 type Storage interface {
 	// Job operations
-	CreateJob(ctx context.Context, job *Job) error
-	GetJob(ctx context.Context, id string) (*Job, error)
-	UpdateJob(ctx context.Context, job *Job) error
-	UpsertJob(ctx context.Context, job *Job) error
+	CreateJob(ctx context.Context, job *domain.Job) error
+	GetJob(ctx context.Context, id string) (*domain.Job, error)
+	UpdateJob(ctx context.Context, job *domain.Job) error
+	UpsertJob(ctx context.Context, job *domain.Job) error
 	DeleteJob(ctx context.Context, id string) error
-	ListJobs(ctx context.Context, filter JobFilter) ([]*Job, int, error)
-	GetAllJobs(ctx context.Context) ([]*Job, error)
+	ListJobs(ctx context.Context, filter domain.JobFilter) ([]*domain.Job, int, error)
+	GetAllJobs(ctx context.Context) ([]*domain.Job, error)
 
 	// Metrics operations
-	RecordMetrics(ctx context.Context, sample *MetricSample) error
-	GetJobMetrics(ctx context.Context, jobID string, filter MetricsFilter) ([]*MetricSample, int, error)
-	GetLatestMetrics(ctx context.Context, jobID string) (*MetricSample, error)
+	RecordMetrics(ctx context.Context, sample *domain.MetricSample) error
+	GetJobMetrics(ctx context.Context, jobID string, filter domain.MetricsFilter) ([]*domain.MetricSample, int, error)
+	GetLatestMetrics(ctx context.Context, jobID string) (*domain.MetricSample, error)
 	DeleteMetricsBefore(cutoff time.Time) error
 
 	// Lifecycle operations
@@ -223,19 +45,19 @@ type Storage interface {
 type auditInfoContextKey struct{}
 
 // WithAuditInfo attaches audit info to a context.
-func WithAuditInfo(ctx context.Context, info *JobAuditInfo) context.Context {
+func WithAuditInfo(ctx context.Context, info *domain.AuditInfo) context.Context {
 	return context.WithValue(ctx, auditInfoContextKey{}, info)
 }
 
 // GetAuditInfo retrieves audit info from a context.
-func GetAuditInfo(ctx context.Context) (*JobAuditInfo, bool) {
-	info, ok := ctx.Value(auditInfoContextKey{}).(*JobAuditInfo)
+func GetAuditInfo(ctx context.Context) (*domain.AuditInfo, bool) {
+	info, ok := ctx.Value(auditInfoContextKey{}).(*domain.AuditInfo)
 	return info, ok
 }
 
 // NewAuditInfo creates audit info with a new correlation ID.
-func NewAuditInfo(changedBy, source string) *JobAuditInfo {
-	return &JobAuditInfo{
+func NewAuditInfo(changedBy, source string) *domain.AuditInfo {
+	return &domain.AuditInfo{
 		ChangedBy:     strings.TrimSpace(changedBy),
 		Source:        strings.TrimSpace(source),
 		CorrelationID: uuid.NewString(),
@@ -243,25 +65,25 @@ func NewAuditInfo(changedBy, source string) *JobAuditInfo {
 }
 
 // NewAuditInfoWithCorrelation creates audit info with an explicit correlation ID.
-func NewAuditInfoWithCorrelation(changedBy, source, correlationID string) *JobAuditInfo {
-	return &JobAuditInfo{
+func NewAuditInfoWithCorrelation(changedBy, source, correlationID string) *domain.AuditInfo {
+	return &domain.AuditInfo{
 		ChangedBy:     strings.TrimSpace(changedBy),
 		Source:        strings.TrimSpace(source),
 		CorrelationID: strings.TrimSpace(correlationID),
 	}
 }
 
-func validateAuditInfo(info *JobAuditInfo) error {
+func validateAuditInfo(info *domain.AuditInfo) error {
 	if info == nil {
-		return ErrMissingAuditInfo
+		return domain.ErrMissingAuditInfo
 	}
 	if strings.TrimSpace(info.ChangedBy) == "" || strings.TrimSpace(info.Source) == "" || strings.TrimSpace(info.CorrelationID) == "" {
-		return ErrMissingAuditInfo
+		return domain.ErrMissingAuditInfo
 	}
 	return nil
 }
 
-func auditInfoFromJobOrContext(ctx context.Context, job *Job) (*JobAuditInfo, error) {
+func auditInfoFromJobOrContext(ctx context.Context, job *domain.Job) (*domain.AuditInfo, error) {
 	if job != nil && job.Audit != nil {
 		if err := validateAuditInfo(job.Audit); err != nil {
 			return nil, err
@@ -277,14 +99,14 @@ func auditInfoFromJobOrContext(ctx context.Context, job *Job) (*JobAuditInfo, er
 		}
 		return info, nil
 	}
-	return nil, ErrMissingAuditInfo
+	return nil, domain.ErrMissingAuditInfo
 }
 
-func buildJobSnapshot(job *Job) *JobSnapshot {
+func buildJobSnapshot(job *domain.Job) *domain.JobSnapshot {
 	if job == nil {
 		return nil
 	}
-	return &JobSnapshot{
+	return &domain.JobSnapshot{
 		ID:             job.ID,
 		User:           job.User,
 		Nodes:          append([]string(nil), job.Nodes...),
@@ -322,7 +144,7 @@ func buildJobSnapshot(job *Job) *JobSnapshot {
 	}
 }
 
-func marshalJobSnapshot(job *Job) ([]byte, error) {
+func marshalJobSnapshot(job *domain.Job) ([]byte, error) {
 	snapshot := buildJobSnapshot(job)
 	if snapshot == nil {
 		return nil, fmt.Errorf("job snapshot is nil")
@@ -350,9 +172,13 @@ func (s *baseStorage) Close() error {
 }
 
 // SeedDemoData creates sample jobs and metrics for demonstration purposes.
-func (s *baseStorage) SeedDemoData() error {
-	ctx := context.Background()
+// Uses proper audit info for all job creation to maintain audit trail consistency.
+func (s *baseStorage) SeedDemoData(createJob func(ctx context.Context, job *domain.Job) error) error {
 	now := time.Now()
+
+	// Create a system audit context for demo data seeding
+	auditInfo := NewAuditInfo("system", "seed-demo")
+	ctx := WithAuditInfo(context.Background(), auditInfo)
 
 	// User names for demo jobs
 	users := []string{"Alice", "Bob", "Liam", "Sofia", "Noah", "Olivia", "Ethan", "Mia", "Lucas", "Ava",
@@ -367,10 +193,10 @@ func (s *baseStorage) SeedDemoData() error {
 		"Marcus", "Josephine", "Paul", "Matilda", "Oscar", "Agnes", "Tobias", "Edith", "Emma", "Diana"}
 
 	partitions := []string{"gpu", "compute", "batch", "debug"}
-	states := []JobState{JobStateRunning, JobStateCompleted, JobStateFailed, JobStateCancelled, JobStatePending}
+	states := []domain.JobState{domain.JobStateRunning, domain.JobStateCompleted, domain.JobStateFailed, domain.JobStateCancelled, domain.JobStatePending}
 
 	jobCount := 100
-	demoJobs := make([]*Job, 0, jobCount)
+	demoJobs := make([]*domain.Job, 0, jobCount)
 
 	for i := 1; i <= jobCount; i++ {
 		user := users[i%len(users)]
@@ -391,7 +217,7 @@ func (s *baseStorage) SeedDemoData() error {
 			startTime = submitTime.Add(5 * time.Minute)
 		}
 
-		job := &Job{
+		job := &domain.Job{
 			ID:            jobID,
 			User:          user,
 			Nodes:         nodes,
@@ -399,6 +225,7 @@ func (s *baseStorage) SeedDemoData() error {
 			StartTime:     startTime,
 			CPUUsage:      25 + float64(i%75),
 			MemoryUsageMB: int64(1024 * (1 + i%16)),
+			Audit:         auditInfo,
 		}
 
 		// Add GPU usage for GPU partition jobs
@@ -408,15 +235,15 @@ func (s *baseStorage) SeedDemoData() error {
 
 		// Set end time and runtime for completed/failed/cancelled jobs
 		switch state {
-		case JobStateCompleted:
+		case domain.JobStateCompleted:
 			end := startTime.Add(time.Duration(30+i) * time.Minute)
 			job.EndTime = &end
 			job.RuntimeSeconds = end.Sub(startTime).Seconds()
-		case JobStateFailed:
+		case domain.JobStateFailed:
 			end := startTime.Add(time.Duration(10+i) * time.Minute)
 			job.EndTime = &end
 			job.RuntimeSeconds = end.Sub(startTime).Seconds()
-		case JobStateCancelled:
+		case domain.JobStateCancelled:
 			end := startTime.Add(time.Duration(5+i) * time.Minute)
 			job.EndTime = &end
 			job.RuntimeSeconds = end.Sub(startTime).Seconds()
@@ -428,14 +255,14 @@ func (s *baseStorage) SeedDemoData() error {
 	for _, job := range demoJobs {
 		job.CreatedAt = job.StartTime
 		job.UpdatedAt = now
-		if err := s.createJobInternal(ctx, job); err != nil && !errors.Is(err, ErrJobAlreadyExists) {
+		if err := createJob(ctx, job); err != nil && err != domain.ErrJobAlreadyExists {
 			return fmt.Errorf("failed to seed job %s: %w", job.ID, err)
 		}
 	}
 
 	// Generate historical metrics for running and completed jobs
 	for _, job := range demoJobs {
-		if job.State == JobStateRunning || job.State == JobStateCompleted {
+		if job.State == domain.JobStateRunning || job.State == domain.JobStateCompleted {
 			if err := s.seedJobMetrics(ctx, job, now); err != nil {
 				return fmt.Errorf("failed to seed metrics for job %s: %w", job.ID, err)
 			}
@@ -445,62 +272,7 @@ func (s *baseStorage) SeedDemoData() error {
 	return nil
 }
 
-func (s *baseStorage) createJobInternal(ctx context.Context, job *Job) error {
-	// Check if job already exists
-	var exists bool
-	err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM jobs WHERE id = $1)", job.ID).Scan(&exists)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return ErrJobAlreadyExists
-	}
-
-	if job.NodeCount == 0 && len(job.Nodes) > 0 {
-		job.NodeCount = len(job.Nodes)
-	}
-
-	var externalJobID, schedulerType, rawState, partition, account, qos, stateReason string
-	var submitTime *time.Time
-	var priority *int64
-	var exitCode, timeLimitMins *int
-	if job.Scheduler != nil {
-		externalJobID = job.Scheduler.ExternalJobID
-		schedulerType = string(job.Scheduler.Type)
-		rawState = job.Scheduler.RawState
-		partition = job.Scheduler.Partition
-		account = job.Scheduler.Account
-		qos = job.Scheduler.QoS
-		submitTime = job.Scheduler.SubmitTime
-		priority = job.Scheduler.Priority
-		exitCode = job.Scheduler.ExitCode
-		stateReason = job.Scheduler.StateReason
-		timeLimitMins = job.Scheduler.TimeLimitMins
-	}
-
-	nodesStr := strings.Join(job.Nodes, ",")
-	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO jobs (
-			id, user_name, nodes, node_count, state, start_time, end_time, runtime_seconds,
-			cpu_usage, memory_usage_mb, gpu_usage,
-			external_job_id, scheduler_type, raw_state, partition, account, qos, priority, submit_time, exit_code, state_reason, time_limit_minutes,
-			requested_cpus, allocated_cpus, requested_memory_mb, allocated_memory_mb, requested_gpus, allocated_gpus,
-			cluster_name, scheduler_instance, ingest_version,
-			last_sample_at, sample_count, avg_cpu_usage, max_cpu_usage, max_memory_usage_mb, avg_gpu_usage, max_gpu_usage,
-			created_at, updated_at
-		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
-	`, job.ID, job.User, nodesStr, job.NodeCount, job.State, job.StartTime, job.EndTime, job.RuntimeSeconds,
-		job.CPUUsage, job.MemoryUsageMB, job.GPUUsage,
-		externalJobID, schedulerType, rawState, partition, account, qos, priority, submitTime, exitCode, stateReason, timeLimitMins,
-		job.RequestedCPUs, job.AllocatedCPUs, job.RequestedMemMB, job.AllocatedMemMB, job.RequestedGPUs, job.AllocatedGPUs,
-		job.ClusterName, job.SchedulerInst, job.IngestVersion,
-		job.LastSampleAt, job.SampleCount, job.AvgCPUUsage, job.MaxCPUUsage, job.MaxMemUsageMB, job.AvgGPUUsage, job.MaxGPUUsage,
-		job.CreatedAt, job.UpdatedAt)
-	return err
-}
-
-func (s *baseStorage) seedJobMetrics(ctx context.Context, job *Job, now time.Time) error {
+func (s *baseStorage) seedJobMetrics(ctx context.Context, job *domain.Job, now time.Time) error {
 	// Generate metrics samples every minute for the job's duration
 	endTime := now
 	if job.EndTime != nil {
@@ -518,7 +290,7 @@ func (s *baseStorage) seedJobMetrics(ctx context.Context, job *Job, now time.Tim
 		cpuVariation := (float64(t.Unix()%10) - 5) * 2
 		memVariation := int64((t.Unix() % 5) * 100)
 
-		sample := &MetricSample{
+		sample := &domain.MetricSample{
 			JobID:         job.ID,
 			Timestamp:     t,
 			CPUUsage:      clamp(job.CPUUsage+cpuVariation, 0, 100),
@@ -544,10 +316,6 @@ func (s *baseStorage) seedJobMetrics(ctx context.Context, job *Job, now time.Tim
 
 func floatPtr(f float64) *float64 {
 	return &f
-}
-
-func timePtr(t time.Time) *time.Time {
-	return &t
 }
 
 func clamp(val, minVal, maxVal float64) float64 {
