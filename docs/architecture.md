@@ -9,12 +9,12 @@ The HPC Job Observability Service is a microservice designed to track and monito
 ## System Architecture
 
 ```
-                                    ┌─────────────────────────────────────┐
-                                    │         External Systems            │
-                                    │  (HPC Schedulers, Monitoring Tools) │
-                                    └──────────────┬──────────────────────┘
-                                                   │
-                                                   ▼
+                        ┌─────────────────────────────────────┐
+                        │         External Systems            │
+                        │  (HPC Schedulers, Monitoring Tools) │
+                        └──────────────┬──────────────────────┘
+                                       │
+                                       ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                           HPC Observability Service                          │
 │                                                                              │
