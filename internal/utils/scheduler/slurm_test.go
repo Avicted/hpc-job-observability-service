@@ -577,3 +577,20 @@ func TestSlurmJobSource_Ping_Error(t *testing.T) {
 		t.Error("Expected error for unavailable service")
 	}
 }
+
+func TestSlurmJobSource_GetJobMetrics(t *testing.T) {
+	// GetJobMetrics always returns nil, nil because Slurm REST API
+	// does not provide time-series metrics directly
+	client := &mockSlurmClient{}
+	source := NewSlurmJobSourceWithClient(SlurmConfig{}, client)
+
+	ctx := context.Background()
+	metrics, err := source.GetJobMetrics(ctx, "12345")
+
+	if err != nil {
+		t.Errorf("GetJobMetrics() error = %v, want nil", err)
+	}
+	if metrics != nil {
+		t.Errorf("GetJobMetrics() = %v, want nil", metrics)
+	}
+}

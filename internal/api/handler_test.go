@@ -13,6 +13,7 @@ import (
 	"github.com/Avicted/hpc-job-observability-service/internal/api/server"
 	"github.com/Avicted/hpc-job-observability-service/internal/api/types"
 	"github.com/Avicted/hpc-job-observability-service/internal/domain"
+	"github.com/Avicted/hpc-job-observability-service/internal/service"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/mapper"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
@@ -1932,5 +1933,113 @@ func TestJobFinishedEvent_CancelledState(t *testing.T) {
 	job, _ := repo.GetJob(context.Background(), "test-job-cancel")
 	if job.State != domain.JobStateCancelled {
 		t.Errorf("expected state 'cancelled', got '%s'", job.State)
+	}
+}
+
+// TestHandleServiceError_ErrInvalidJobState tests that ErrInvalidJobState returns 400.
+func TestHandleServiceError_ErrInvalidJobState(t *testing.T) {
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
+
+	// Create a job with terminal state
+	repo.jobs["terminal-job"] = &domain.Job{
+		ID:    "terminal-job",
+		User:  "testuser",
+		Nodes: []string{"node1"},
+		State: domain.JobStateCompleted,
+	}
+
+	// Try to update job to invalid state - this should trigger validation error
+	state := types.JobState("invalid_state")
+	reqBody := types.UpdateJobRequest{
+		State: &state,
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPatch, "/v1/jobs/terminal-job", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	params := server.UpdateJobParams{
+		XChangedBy: "api",
+		XSource:    "test",
+	}
+	srv.UpdateJob(rec, req, "terminal-job", params)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400 for invalid state, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandleServiceError_ErrJobTerminalFrozen tests that ErrJobTerminalFrozen is properly mapped
+// to HTTP 409 Conflict. Since this error is defined in the service layer but not currently
+// returned by any code path, this test ensures the handler mapping remains correct.
+func TestHandleServiceError_ErrJobTerminalFrozen(t *testing.T) {
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
+
+	rec := httptest.NewRecorder()
+
+	// Directly invoke handleServiceError with ErrJobTerminalFrozen
+	srv.handleServiceError(rec, service.ErrJobTerminalFrozen)
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("expected status 409 for ErrJobTerminalFrozen, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var errResp types.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errResp.Error != "conflict" {
+		t.Errorf("expected error code 'conflict', got %s", errResp.Error)
+	}
+}
+
+// TestHandleServiceError_ErrInvalidJobStateDirect tests the direct mapping of ErrInvalidJobState to 400.
+func TestHandleServiceError_ErrInvalidJobStateDirect(t *testing.T) {
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
+
+	rec := httptest.NewRecorder()
+
+	// Directly invoke handleServiceError with ErrInvalidJobState
+	srv.handleServiceError(rec, service.ErrInvalidJobState)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400 for ErrInvalidJobState, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var errResp types.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errResp.Error != "validation_error" {
+		t.Errorf("expected error code 'validation_error', got %s", errResp.Error)
+	}
+}
+
+// TestHandleServiceError_UnknownError tests that unknown errors return 500 with error message.
+func TestHandleServiceError_UnknownError(t *testing.T) {
+	repo := newMockRepository()
+	srv := setupTestServer(repo)
+
+	// Set up the mock to return an unknown error
+	repo.getErr = errors.New("unexpected database error")
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/jobs/some-job", nil)
+	rec := httptest.NewRecorder()
+
+	srv.GetJob(rec, req, "some-job")
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500 for unknown error, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var errResp types.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errResp.Error != "internal_error" {
+		t.Errorf("expected error code 'internal_error', got %s", errResp.Error)
 	}
 }

@@ -62,9 +62,10 @@ func TestNewContext(t *testing.T) {
 
 			// Check trimmed values
 			wantChangedBy := "user1"
-			if tt.name == "without correlation ID generates UUID" {
+			switch tt.name {
+			case "without correlation ID generates UUID":
 				wantChangedBy = "user2"
-			} else if tt.name == "trims whitespace" {
+			case "trims whitespace":
 				wantChangedBy = "user3"
 			}
 			if ctx.ChangedBy != wantChangedBy {

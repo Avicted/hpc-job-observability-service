@@ -21,6 +21,8 @@ type mockStorage struct {
 	updateErr    error
 	deleteErr    error
 	listErr      error
+	metricsErr   error
+	recordErr    error
 	metricsStore []*domain.MetricSample
 }
 
@@ -104,11 +106,17 @@ func (m *mockStorage) GetAllJobs(ctx context.Context) ([]*domain.Job, error) {
 }
 
 func (m *mockStorage) RecordMetrics(ctx context.Context, sample *domain.MetricSample) error {
+	if m.recordErr != nil {
+		return m.recordErr
+	}
 	m.metricsStore = append(m.metricsStore, sample)
 	return nil
 }
 
 func (m *mockStorage) GetJobMetrics(ctx context.Context, jobID string, filter domain.MetricsFilter) ([]*domain.MetricSample, int, error) {
+	if m.metricsErr != nil {
+		return nil, 0, m.metricsErr
+	}
 	var result []*domain.MetricSample
 	for _, s := range m.metricsStore {
 		if s.JobID == jobID {
@@ -145,9 +153,6 @@ func (m *mockStorage) Close() error {
 func (m *mockStorage) SeedDemoData() error {
 	return nil
 }
-
-// mockExporter provides a no-op metrics exporter for testing.
-type mockExporter struct{}
 
 func newMockExporter() *metrics.Exporter {
 	// Create a real exporter with the mock storage - it won't actually record metrics in tests
@@ -501,5 +506,151 @@ func TestValidationError_Error(t *testing.T) {
 	err := &ValidationError{Message: "test error"}
 	if err.Error() != "test error" {
 		t.Errorf("Error() = %q, want %q", err.Error(), "test error")
+	}
+}
+
+func TestJobService_GetJob_InternalError(t *testing.T) {
+	store := newMockStorage()
+	store.getErr = errors.New("database connection failed")
+	exporter := newMockExporter()
+	m := mapper.NewMapper()
+	svc := NewJobService(store, exporter, m)
+
+	_, err := svc.GetJob(context.Background(), "any-job")
+	if !errors.Is(err, ErrInternalError) {
+		t.Errorf("expected ErrInternalError, got %v", err)
+	}
+}
+
+func TestJobService_ListJobs_Error(t *testing.T) {
+	store := newMockStorage()
+	store.listErr = errors.New("database error")
+	exporter := newMockExporter()
+	m := mapper.NewMapper()
+	svc := NewJobService(store, exporter, m)
+
+	_, err := svc.ListJobs(context.Background(), ListJobsInput{})
+	if !errors.Is(err, ErrInternalError) {
+		t.Errorf("expected ErrInternalError, got %v", err)
+	}
+}
+
+func TestJobService_CreateJob_InternalError(t *testing.T) {
+	store := newMockStorage()
+	store.createErr = errors.New("database error")
+	exporter := newMockExporter()
+	m := mapper.NewMapper()
+	svc := NewJobService(store, exporter, m)
+
+	input := CreateJobInput{
+		ID:    "job-err",
+		User:  "user",
+		Nodes: []string{"node1"},
+		Audit: testAuditContext(),
+	}
+
+	_, err := svc.CreateJob(context.Background(), input)
+	if !errors.Is(err, ErrInternalError) {
+		t.Errorf("expected ErrInternalError, got %v", err)
+	}
+}
+
+func TestJobService_UpdateJob_StorageError(t *testing.T) {
+	store := newMockStorage()
+	store.jobs["job-upderr"] = &domain.Job{ID: "job-upderr", User: "user", State: domain.JobStateRunning}
+	store.updateErr = errors.New("database error")
+	exporter := newMockExporter()
+	m := mapper.NewMapper()
+	svc := NewJobService(store, exporter, m)
+
+	input := UpdateJobInput{Audit: testAuditContext()}
+	_, err := svc.UpdateJob(context.Background(), "job-upderr", input)
+	if !errors.Is(err, ErrInternalError) {
+		t.Errorf("expected ErrInternalError, got %v", err)
+	}
+}
+
+func TestJobService_UpdateJob_GetError(t *testing.T) {
+	store := newMockStorage()
+	store.getErr = errors.New("database error")
+	exporter := newMockExporter()
+	m := mapper.NewMapper()
+	svc := NewJobService(store, exporter, m)
+
+	input := UpdateJobInput{Audit: testAuditContext()}
+	_, err := svc.UpdateJob(context.Background(), "any-job", input)
+	if !errors.Is(err, ErrInternalError) {
+		t.Errorf("expected ErrInternalError, got %v", err)
+	}
+}
+
+func TestJobService_DeleteJob_StorageError(t *testing.T) {
+	store := newMockStorage()
+	store.jobs["job-delerr"] = &domain.Job{ID: "job-delerr", User: "user"}
+	store.deleteErr = errors.New("database error")
+	exporter := newMockExporter()
+	m := mapper.NewMapper()
+	svc := NewJobService(store, exporter, m)
+
+	err := svc.DeleteJob(context.Background(), "job-delerr", testAuditContext())
+	if !errors.Is(err, ErrInternalError) {
+		t.Errorf("expected ErrInternalError, got %v", err)
+	}
+}
+
+func TestJobService_UpdateJob_WithGPUUsage(t *testing.T) {
+	store := newMockStorage()
+	store.jobs["job-gpu"] = &domain.Job{ID: "job-gpu", User: "user", State: domain.JobStateRunning}
+	exporter := newMockExporter()
+	m := mapper.NewMapper()
+	svc := NewJobService(store, exporter, m)
+
+	gpuUsage := 85.5
+	input := UpdateJobInput{
+		GPUUsage: &gpuUsage,
+		Audit:    testAuditContext(),
+	}
+
+	job, err := svc.UpdateJob(context.Background(), "job-gpu", input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if job.GPUUsage == nil || *job.GPUUsage != 85.5 {
+		t.Errorf("GPUUsage = %v, want 85.5", job.GPUUsage)
+	}
+}
+
+func TestJobService_ListJobs_AllFilters(t *testing.T) {
+	store := newMockStorage()
+	store.jobs["job-1"] = &domain.Job{ID: "job-1", User: "alice", State: domain.JobStateRunning, Nodes: []string{"node1"}}
+	store.jobs["job-2"] = &domain.Job{ID: "job-2", User: "bob", State: domain.JobStateCompleted, Nodes: []string{"node2"}}
+	exporter := newMockExporter()
+	m := mapper.NewMapper()
+	svc := NewJobService(store, exporter, m)
+
+	user := "alice"
+	state := "running"
+	node := "node1"
+	limit := 10
+	offset := 0
+
+	input := ListJobsInput{
+		User:   &user,
+		State:  &state,
+		Node:   &node,
+		Limit:  &limit,
+		Offset: &offset,
+	}
+
+	output, err := svc.ListJobs(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if output.Limit != 10 {
+		t.Errorf("Limit = %d, want 10", output.Limit)
+	}
+	if output.Offset != 0 {
+		t.Errorf("Offset = %d, want 0", output.Offset)
 	}
 }

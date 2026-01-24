@@ -489,3 +489,96 @@ func TestDerefStringSlice(t *testing.T) {
 		t.Errorf("derefStringSlice(nil) = %v, want nil", got)
 	}
 }
+
+// TestEventService_JobStarted_GetJobInternalError tests the internal error path
+// when GetJob fails with an error other than ErrJobNotFound.
+func TestEventService_JobStarted_GetJobInternalError(t *testing.T) {
+	store := newMockStorage()
+	store.getErr = errors.New("database connection failed")
+	exporter := newMockExporter()
+	m := mapper.NewMapper()
+	svc := NewEventService(store, exporter, m)
+
+	input := JobStartedInput{
+		JobID:     "job-internal-error",
+		User:      "user",
+		NodeList:  []string{"node1"},
+		Timestamp: time.Now(),
+	}
+
+	_, err := svc.JobStarted(context.Background(), input)
+	if !errors.Is(err, ErrInternalError) {
+		t.Errorf("expected ErrInternalError, got %v", err)
+	}
+}
+
+// TestEventService_JobStarted_CreateJobInternalError tests the internal error path
+// when CreateJob fails with an error other than ErrJobAlreadyExists.
+func TestEventService_JobStarted_CreateJobInternalError(t *testing.T) {
+	store := newMockStorage()
+	store.createErr = errors.New("database write failed")
+	exporter := newMockExporter()
+	m := mapper.NewMapper()
+	svc := NewEventService(store, exporter, m)
+
+	input := JobStartedInput{
+		JobID:     "job-create-error",
+		User:      "user",
+		NodeList:  []string{"node1"},
+		Timestamp: time.Now(),
+	}
+
+	_, err := svc.JobStarted(context.Background(), input)
+	if !errors.Is(err, ErrInternalError) {
+		t.Errorf("expected ErrInternalError, got %v", err)
+	}
+}
+
+// TestEventService_JobFinished_GetJobInternalError tests the internal error path
+// when GetJob fails with an error other than ErrJobNotFound.
+func TestEventService_JobFinished_GetJobInternalError(t *testing.T) {
+	store := newMockStorage()
+	store.getErr = errors.New("database connection failed")
+	exporter := newMockExporter()
+	m := mapper.NewMapper()
+	svc := NewEventService(store, exporter, m)
+
+	input := JobFinishedInput{
+		JobID:      "job-internal-error",
+		FinalState: types.Completed,
+		Timestamp:  time.Now(),
+	}
+
+	_, err := svc.JobFinished(context.Background(), input)
+	if !errors.Is(err, ErrInternalError) {
+		t.Errorf("expected ErrInternalError, got %v", err)
+	}
+}
+
+// TestEventService_JobFinished_UpdateJobInternalError tests the internal error path
+// when UpdateJob fails.
+func TestEventService_JobFinished_UpdateJobInternalError(t *testing.T) {
+	store := newMockStorage()
+	// Add a running job first
+	store.jobs["job-update-error"] = &domain.Job{
+		ID:        "job-update-error",
+		User:      "user",
+		State:     domain.JobStateRunning,
+		StartTime: time.Now().Add(-time.Hour),
+	}
+	store.updateErr = errors.New("database write failed")
+	exporter := newMockExporter()
+	m := mapper.NewMapper()
+	svc := NewEventService(store, exporter, m)
+
+	input := JobFinishedInput{
+		JobID:      "job-update-error",
+		FinalState: types.Completed,
+		Timestamp:  time.Now(),
+	}
+
+	_, err := svc.JobFinished(context.Background(), input)
+	if !errors.Is(err, ErrInternalError) {
+		t.Errorf("expected ErrInternalError, got %v", err)
+	}
+}

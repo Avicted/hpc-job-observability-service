@@ -666,3 +666,156 @@ func TestCollect_RunningJobRuntime(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
+
+func TestUpdateJobMetricsDomain_RunningJob(t *testing.T) {
+	store := &mockStorage{}
+	exporter := NewExporter(store)
+
+	gpuUsage := 75.0
+	job := &domain.Job{
+		ID:             "job-domain-1",
+		User:           "testuser",
+		Nodes:          []string{"node-1", "node-2"},
+		State:          domain.JobStateRunning,
+		StartTime:      time.Now().Add(-30 * time.Minute),
+		CPUUsage:       65.5,
+		MemoryUsageMB:  4096,
+		GPUUsage:       &gpuUsage,
+		RuntimeSeconds: 0, // Running job uses time.Since
+	}
+
+	// Should not panic
+	exporter.UpdateJobMetricsDomain(job)
+}
+
+func TestUpdateJobMetricsDomain_CompletedJob(t *testing.T) {
+	store := &mockStorage{}
+	exporter := NewExporter(store)
+
+	endTime := time.Now()
+	job := &domain.Job{
+		ID:             "job-domain-2",
+		User:           "testuser",
+		Nodes:          []string{"node-1"},
+		State:          domain.JobStateCompleted,
+		StartTime:      time.Now().Add(-time.Hour),
+		EndTime:        &endTime,
+		CPUUsage:       85.0,
+		MemoryUsageMB:  8192,
+		GPUUsage:       nil,
+		RuntimeSeconds: 3600,
+	}
+
+	// Should not panic
+	exporter.UpdateJobMetricsDomain(job)
+}
+
+func TestUpdateJobMetricsDomain_NoNodes(t *testing.T) {
+	store := &mockStorage{}
+	exporter := NewExporter(store)
+
+	job := &domain.Job{
+		ID:            "job-domain-3",
+		User:          "testuser",
+		Nodes:         []string{}, // Empty nodes
+		State:         domain.JobStatePending,
+		StartTime:     time.Now(),
+		CPUUsage:      0,
+		MemoryUsageMB: 0,
+	}
+
+	// Should not panic with empty nodes
+	exporter.UpdateJobMetricsDomain(job)
+}
+
+func TestUpdateGPUDeviceMetrics(t *testing.T) {
+	store := &mockStorage{}
+	exporter := NewExporter(store)
+
+	metrics := []GPUDeviceMetric{
+		{
+			JobID:          "job-gpu-1",
+			Node:           "node-1",
+			Vendor:         "nvidia",
+			DeviceID:       "0",
+			Utilization:    85.5,
+			MemoryUsedMB:   4096,
+			PowerWatts:     250.0,
+			TemperatureCel: 72.0,
+		},
+		{
+			JobID:          "job-gpu-1",
+			Node:           "node-1",
+			Vendor:         "nvidia",
+			DeviceID:       "1",
+			Utilization:    90.0,
+			MemoryUsedMB:   6144,
+			PowerWatts:     280.0,
+			TemperatureCel: 75.0,
+		},
+	}
+
+	// Should not panic
+	exporter.UpdateGPUDeviceMetrics(metrics)
+}
+
+func TestUpdateGPUDeviceMetrics_Empty(t *testing.T) {
+	store := &mockStorage{}
+	exporter := NewExporter(store)
+
+	// Should not panic with empty slice
+	exporter.UpdateGPUDeviceMetrics([]GPUDeviceMetric{})
+}
+
+func TestUpdateGPUDeviceMetrics_NoPowerOrTemp(t *testing.T) {
+	store := &mockStorage{}
+	exporter := NewExporter(store)
+
+	metrics := []GPUDeviceMetric{
+		{
+			JobID:          "job-gpu-2",
+			Node:           "node-1",
+			Vendor:         "amd",
+			DeviceID:       "0",
+			Utilization:    50.0,
+			MemoryUsedMB:   2048,
+			PowerWatts:     0, // Not available
+			TemperatureCel: 0, // Not available
+		},
+	}
+
+	// Should not panic
+	exporter.UpdateGPUDeviceMetrics(metrics)
+}
+
+func TestClearGPUDeviceMetrics(t *testing.T) {
+	store := &mockStorage{}
+	exporter := NewExporter(store)
+
+	// First add some metrics
+	metrics := []GPUDeviceMetric{
+		{
+			JobID:          "job-clear",
+			Node:           "node-1",
+			Vendor:         "nvidia",
+			DeviceID:       "0",
+			Utilization:    75.0,
+			MemoryUsedMB:   4096,
+			PowerWatts:     200.0,
+			TemperatureCel: 65.0,
+		},
+	}
+	exporter.UpdateGPUDeviceMetrics(metrics)
+
+	// Then clear them
+	exporter.ClearGPUDeviceMetrics("job-clear")
+	// Should not panic
+}
+
+func TestClearGPUDeviceMetrics_NonExistent(t *testing.T) {
+	store := &mockStorage{}
+	exporter := NewExporter(store)
+
+	// Should not panic even if job doesn't exist
+	exporter.ClearGPUDeviceMetrics("nonexistent-job")
+}

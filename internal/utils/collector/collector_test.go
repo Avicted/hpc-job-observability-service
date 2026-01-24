@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Avicted/hpc-job-observability-service/internal/domain"
+	"github.com/Avicted/hpc-job-observability-service/internal/utils/cgroup"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 )
 
@@ -618,5 +619,127 @@ func TestMetricSampleFields(t *testing.T) {
 	}
 	if sample.GPUUsage == nil {
 		t.Error("expected GPU usage to be set")
+	}
+}
+
+func TestCleanupPrevStats(t *testing.T) {
+	store := &mockStorage{}
+	exporter := metrics.NewExporter(store)
+	collector := New(store, exporter)
+
+	// Initially, prevStats should be empty (or will be populated with nil check)
+	// Add some stats first by simulating a collection with cgroup
+	jobID := "test-job-123"
+
+	// Manually add an entry to prevStats via the calculateCPUPercent path
+	// We need to access the internal map, so we'll use the method directly
+	collector.prevStatsMu.Lock()
+	collector.prevStats[jobID] = &cgroup.Stats{
+		CPUUsageUsec: 1000000,
+		Timestamp:    time.Now(),
+	}
+	collector.prevStatsMu.Unlock()
+
+	// Verify the entry exists
+	collector.prevStatsMu.Lock()
+	_, exists := collector.prevStats[jobID]
+	collector.prevStatsMu.Unlock()
+	if !exists {
+		t.Fatal("expected prevStats entry to exist before cleanup")
+	}
+
+	// Cleanup
+	collector.CleanupPrevStats(jobID)
+
+	// Verify entry is removed
+	collector.prevStatsMu.Lock()
+	_, exists = collector.prevStats[jobID]
+	collector.prevStatsMu.Unlock()
+	if exists {
+		t.Error("expected prevStats entry to be removed after cleanup")
+	}
+
+	// Cleanup non-existent key should not panic
+	collector.CleanupPrevStats("non-existent-job")
+}
+
+func TestCalculateCPUPercent(t *testing.T) {
+	store := &mockStorage{}
+	exporter := metrics.NewExporter(store)
+	collector := New(store, exporter)
+
+	jobID := "test-job-cpu"
+
+	// First call with no previous stats should store current and return 0
+	now := time.Now()
+	firstStats := &cgroup.Stats{
+		CPUUsageUsec: 1000000, // 1 second
+		Timestamp:    now,
+	}
+
+	result := collector.calculateCPUPercent(jobID, firstStats, 1)
+	// First call returns 0 because there's no previous stats to compare
+	if result != 0 {
+		t.Logf("First call returned %f (expected 0 for no previous stats)", result)
+	}
+
+	// Second call with new stats should calculate delta
+	secondStats := &cgroup.Stats{
+		CPUUsageUsec: 2000000, // 2 seconds (1 second delta)
+		Timestamp:    now.Add(time.Second),
+	}
+
+	result = collector.calculateCPUPercent(jobID, secondStats, 1)
+	// With 1 CPU, 1 second of CPU time in 1 second = 100%
+	if result != 100.0 {
+		t.Logf("Second call returned %f%% (expected around 100%% for 1 CPU)", result)
+	}
+
+	// Third call with 4 CPUs
+	thirdStats := &cgroup.Stats{
+		CPUUsageUsec: 3000000, // 3 seconds total (1 second delta)
+		Timestamp:    now.Add(2 * time.Second),
+	}
+
+	result = collector.calculateCPUPercent(jobID, thirdStats, 4)
+	// With 4 CPUs, 1 second of CPU time in 1 second = 25%
+	if result != 25.0 {
+		t.Logf("Third call returned %f%% (expected around 25%% for 4 CPUs)", result)
+	}
+
+	// Cleanup
+	collector.CleanupPrevStats(jobID)
+}
+
+func TestCollectGPUMetrics_NoDetector(t *testing.T) {
+	store := &mockStorage{}
+	exporter := metrics.NewExporter(store)
+	collector := New(store, exporter) // gpuDetector is nil by default
+
+	job := &domain.Job{
+		ID:         "job-gpu-1",
+		GPUDevices: []string{"0", "1"},
+	}
+
+	result := collector.collectGPUMetrics(context.Background(), job)
+	if result != nil {
+		t.Error("expected nil result when gpuDetector is nil")
+	}
+}
+
+func TestCollectGPUMetrics_NoGPUDevices(t *testing.T) {
+	store := &mockStorage{}
+	exporter := metrics.NewExporter(store)
+	collector := New(store, exporter)
+	// Even if we had a detector, with no GPU devices it should return nil
+
+	job := &domain.Job{
+		ID:         "job-gpu-2",
+		GPUDevices: []string{}, // Empty GPU devices
+	}
+
+	result := collector.collectGPUMetrics(context.Background(), job)
+	if result != nil {
+		t.Error("expected nil result when job has no GPU devices")
 	}
 }

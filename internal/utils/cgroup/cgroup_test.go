@@ -274,3 +274,76 @@ func TestIsCgroupV2(t *testing.T) {
 		t.Error("expected true with cgroup.controllers file")
 	}
 }
+
+func TestFindCgroupForJob(t *testing.T) {
+	// Create a temporary directory structure
+	tmpDir, err := os.MkdirTemp("", "cgroup-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	reader := NewReaderWithRoot(tmpDir)
+
+	// Test 1: No cgroup exists for job
+	_, err = reader.FindCgroupForJob("nonexistent")
+	if err == nil {
+		t.Error("expected error for non-existent job cgroup")
+	}
+
+	// Test 2: Standard Slurm path exists
+	standardPath := filepath.Join(tmpDir, SlurmCgroupPrefix, "job_12345")
+	if err := os.MkdirAll(standardPath, 0755); err != nil {
+		t.Fatalf("failed to create standard cgroup path: %v", err)
+	}
+
+	path, err := reader.FindCgroupForJob("12345")
+	if err != nil {
+		t.Fatalf("FindCgroupForJob failed for standard path: %v", err)
+	}
+	if path != standardPath {
+		t.Errorf("expected path %s, got %s", standardPath, path)
+	}
+
+	// Test 3: Alternative uid_ path
+	uidPath := filepath.Join(tmpDir, "slurm", "uid_99999")
+	if err := os.MkdirAll(uidPath, 0755); err != nil {
+		t.Fatalf("failed to create uid cgroup path: %v", err)
+	}
+
+	path, err = reader.FindCgroupForJob("99999")
+	if err != nil {
+		t.Fatalf("FindCgroupForJob failed for uid path: %v", err)
+	}
+	if path != uidPath {
+		t.Errorf("expected path %s, got %s", uidPath, path)
+	}
+
+	// Test 4: Alternative job_ path in slurm directory
+	jobPath := filepath.Join(tmpDir, "slurm", "job_88888")
+	if err := os.MkdirAll(jobPath, 0755); err != nil {
+		t.Fatalf("failed to create job cgroup path: %v", err)
+	}
+
+	path, err = reader.FindCgroupForJob("88888")
+	if err != nil {
+		t.Fatalf("FindCgroupForJob failed for job_ path: %v", err)
+	}
+	if path != jobPath {
+		t.Errorf("expected path %s, got %s", jobPath, path)
+	}
+
+	// Test 5: system.slice slurmstepd scope path
+	scopePath := filepath.Join(tmpDir, "system.slice", "slurmstepd-job_77777.scope")
+	if err := os.MkdirAll(scopePath, 0755); err != nil {
+		t.Fatalf("failed to create scope cgroup path: %v", err)
+	}
+
+	path, err = reader.FindCgroupForJob("77777")
+	if err != nil {
+		t.Fatalf("FindCgroupForJob failed for scope path: %v", err)
+	}
+	if path != scopePath {
+		t.Errorf("expected path %s, got %s", scopePath, path)
+	}
+}
