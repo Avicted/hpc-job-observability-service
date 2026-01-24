@@ -402,3 +402,78 @@ func TestJobFilter_CombinedFilters(t *testing.T) {
 		t.Errorf("Expected job-1, got %s", jobs[0].ID)
 	}
 }
+
+func TestMockJobSource_ListNodes(t *testing.T) {
+	ctx := context.Background()
+	source := NewMockJobSource()
+
+	nodes, err := source.ListNodes(ctx)
+	if err != nil {
+		t.Fatalf("ListNodes() error = %v", err)
+	}
+
+	// Should return 50 mock nodes
+	if len(nodes) != 50 {
+		t.Errorf("ListNodes() returned %d nodes, want 50", len(nodes))
+	}
+
+	// Check first node properties
+	if len(nodes) > 0 {
+		node := nodes[0]
+		if node.Name != "node-01" {
+			t.Errorf("First node name = %q, want node-01", node.Name)
+		}
+		if node.State != NodeStateIdle && node.State != NodeStateAllocated {
+			t.Errorf("First node state = %v, want idle or allocated", node.State)
+		}
+		if node.CPUs < 32 {
+			t.Errorf("First node CPUs = %d, want >= 32", node.CPUs)
+		}
+		if node.RealMemoryMB < 128*1024 {
+			t.Errorf("First node RealMemoryMB = %d, want >= 131072", node.RealMemoryMB)
+		}
+	}
+}
+
+func TestMockJobSource_ListNodes_WithRunningJobs(t *testing.T) {
+	ctx := context.Background()
+	source := NewMockJobSource()
+
+	// Add a running job on node-01
+	source.AddJob(&Job{
+		ID:            "job-on-node",
+		User:          "testuser",
+		Nodes:         []string{"node-01"},
+		State:         JobStateRunning,
+		CPUUsage:      50.0,
+		MemoryUsageMB: 4096,
+	})
+
+	nodes, err := source.ListNodes(ctx)
+	if err != nil {
+		t.Fatalf("ListNodes() error = %v", err)
+	}
+
+	// Find node-01
+	var node01 *Node
+	for _, n := range nodes {
+		if n.Name == "node-01" {
+			node01 = n
+			break
+		}
+	}
+
+	if node01 == nil {
+		t.Fatal("node-01 not found in ListNodes result")
+	}
+
+	// Node with running job should be allocated
+	if node01.State != NodeStateAllocated {
+		t.Errorf("node-01 state = %v, want allocated", node01.State)
+	}
+
+	// Should have allocated resources
+	if node01.AllocatedCPUs == 0 {
+		t.Error("node-01 AllocatedCPUs = 0, want > 0")
+	}
+}
