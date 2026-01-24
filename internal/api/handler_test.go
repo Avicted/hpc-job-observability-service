@@ -12,6 +12,7 @@ import (
 
 	"github.com/Avicted/hpc-job-observability-service/internal/api/server"
 	"github.com/Avicted/hpc-job-observability-service/internal/api/types"
+	"github.com/Avicted/hpc-job-observability-service/internal/mapper"
 	"github.com/Avicted/hpc-job-observability-service/internal/metrics"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
 )
@@ -950,8 +951,7 @@ func TestRoutes(t *testing.T) {
 }
 
 func TestStorageJobToAPI_WithSchedulerInfo(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	m := mapper.NewMapper()
 
 	submitTime := time.Now().Add(-1 * time.Hour)
 	priority := int64(100)
@@ -1001,7 +1001,7 @@ func TestStorageJobToAPI_WithSchedulerInfo(t *testing.T) {
 		},
 	}
 
-	resp := srv.storageJobToAPI(job)
+	resp := m.StorageJobToAPI(job)
 
 	if resp.Id != "test-job-1" {
 		t.Errorf("expected ID 'test-job-1', got %s", resp.Id)
@@ -1027,10 +1027,9 @@ func TestStorageJobToAPI_WithSchedulerInfo(t *testing.T) {
 }
 
 func TestApiSchedulerToStorage(t *testing.T) {
-	store := newMockStorage()
-	srv := setupTestServer(store)
+	m := mapper.NewMapper()
 
-	result := srv.apiSchedulerToStorage(nil)
+	result := m.APISchedulerToStorage(nil)
 	if result != nil {
 		t.Error("expected nil result for nil input")
 	}
@@ -1062,7 +1061,7 @@ func TestApiSchedulerToStorage(t *testing.T) {
 		Extra:            &map[string]interface{}{"key": "value"},
 	}
 
-	result = srv.apiSchedulerToStorage(apiSched)
+	result = m.APISchedulerToStorage(apiSched)
 
 	if result.Type != storage.SchedulerTypeSlurm {
 		t.Errorf("expected type 'slurm', got %s", result.Type)
@@ -1079,6 +1078,8 @@ func TestApiSchedulerToStorage(t *testing.T) {
 }
 
 func TestIsValidState(t *testing.T) {
+	m := mapper.NewMapper()
+
 	validStates := []storage.JobState{
 		storage.JobStatePending,
 		storage.JobStateRunning,
@@ -1088,14 +1089,14 @@ func TestIsValidState(t *testing.T) {
 	}
 
 	for _, state := range validStates {
-		if !isValidState(state) {
+		if !m.IsValidJobState(state) {
 			t.Errorf("expected state %s to be valid", state)
 		}
 	}
 
 	invalidStates := []storage.JobState{"invalid", "unknown", ""}
 	for _, state := range invalidStates {
-		if isValidState(state) {
+		if m.IsValidJobState(state) {
 			t.Errorf("expected state %s to be invalid", state)
 		}
 	}

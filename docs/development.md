@@ -23,13 +23,15 @@ hpc-job-observability-service/
 │   └── prometheus/                         # Prometheus config
 ├── docs/                                   # Documentation
 ├── internal/
-│   ├── api/                                # HTTP handlers and generated types
+│   ├── api/                                # HTTP handlers (thin) and generated types
 │   ├── cgroup/                             # Linux cgroups v2 metric collection
 │   ├── collector/                          # Background metric collector
 │   ├── e2e/                                # End-to-end integration tests
 │   ├── gpu/                                # NVIDIA/AMD GPU metric collection
+│   ├── mapper/                             # Storage <-> API mappers
 │   ├── metrics/                            # Prometheus exporter
 │   ├── scheduler/                          # Scheduler abstraction layer
+│   ├── service/                            # Domain services (business logic)
 │   ├── slurmclient/                        # Generated Slurm REST API client
 │   └── storage/                            # Database layer (PostgreSQL)
 ├── scripts/                                # Utility scripts
