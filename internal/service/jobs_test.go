@@ -14,7 +14,7 @@ import (
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 )
 
-// mockStorage implements storage.Storage for testing services.
+// mockStorage implements storage.Store for testing services.
 type mockStorage struct {
 	jobs         map[string]*domain.Job
 	createErr    error

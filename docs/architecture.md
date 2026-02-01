@@ -74,7 +74,7 @@ The HPC Job Observability Service is a microservice designed to track and monito
 ┌─────────────────────────────────────────────────────────────────┐
 │                  Service Layer (internal/service)               │
 │  - Business logic, validation, orchestration                    │
-│  - Depends on storage.Storage interface                         │
+│  - Depends on storage.Store interface                           │
 │  - Uses domain entities exclusively                             │
 │  - Updates Prometheus metrics via Exporter                      │
 └─────────────────────────────────────────────────────────────────┘
@@ -92,7 +92,7 @@ The HPC Job Observability Service is a microservice designed to track and monito
 ┌─────────────────────────────────────────────────────────────────┐
 │                 Storage Layer (internal/storage)                │
 │  - Persistence interfaces using domain entities directly        │
-│  - PostgresStorage implements storage.Storage                   │
+│  - postgres.Store implements storage.Store                      │
 │  - Handles database operations, migrations, audit logging       │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -100,7 +100,7 @@ The HPC Job Observability Service is a microservice designed to track and monito
 **Key principles:**
 - **Domain** has zero dependencies - it's the innermost layer containing entities and errors
 - **Storage** interface uses domain types directly (no separate repository layer)
-- **Services** depend on storage.Storage interface (not concrete implementations)
+- **Services** depend on storage.Store root interface (not concrete implementations)
 - **Handlers** are thin HTTP glue (≤50 lines per endpoint)
 - **Mapper** converts between domain and API types
 
@@ -152,7 +152,7 @@ The service layer (`internal/service`) contains business logic and orchestration
 - **MetricsService**: Metric recording and retrieval, aggregation
 - **EventService**: Job lifecycle events (prolog/epilog handling)
 
-Services depend on `storage.Storage` interface, not concrete implementations.
+Services depend on `storage.Store` root interface, not concrete implementations.
 
 ### Storage Layer
 
