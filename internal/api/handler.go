@@ -1,5 +1,5 @@
 // Package api provides the HTTP API server for the HPC Job Observability Service.
-// It implements the generated ServerInterface from the OpenAPI spec.
+// It implements the generated StrictServerInterface from the OpenAPI spec.
 //
 // Handlers in this package are thin HTTP glue that:
 //   - Parse and validate HTTP requests
@@ -11,8 +11,7 @@
 package api
 
 import (
-	"encoding/json"
-	"net/http"
+	"context"
 	"strings"
 	"time"
 
@@ -24,9 +23,11 @@ import (
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/mapper"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
+	echoSwagger "github.com/swaggo/echo-swagger"
 )
 
-// Server implements the generated ServerInterface.
+// Server implements the generated StrictServerInterface.
 type Server struct {
 	store          storage.Store
 	exporter       *metrics.Exporter
@@ -36,8 +37,8 @@ type Server struct {
 	mapper         *mapper.Mapper
 }
 
-// Ensure Server implements ServerInterface
-var _ server.ServerInterface = (*Server)(nil)
+// Ensure Server implements StrictServerInterface
+var _ server.StrictServerInterface = (*Server)(nil)
 
 // NewServer creates a new API server with all required services.
 func NewServer(store storage.Store, exporter *metrics.Exporter) *Server {
@@ -52,407 +53,721 @@ func NewServer(store storage.Store, exporter *metrics.Exporter) *Server {
 	}
 }
 
-// Routes returns an HTTP handler with all API routes configured.
-func (s *Server) Routes() http.Handler {
-	mux := http.NewServeMux()
+// RegisterRoutes registers all API routes with the Echo instance.
+func (s *Server) RegisterRoutes(e *echo.Echo) {
+	// Create strict handler
+	strictHandler := server.NewStrictHandler(s, nil)
 
-	// Use generated handler with /v1 prefix
-	wrapper := server.ServerInterfaceWrapper{
-		Handler:          s,
-		ErrorHandlerFunc: s.handleError,
+	// Register API routes with /v1 prefix
+	v1 := e.Group("/v1")
+	server.RegisterHandlers(v1, strictHandler)
+
+	// OpenAPI spec endpoint
+	e.GET("/openapi.json", s.serveOpenAPISpec)
+
+	// Swagger UI endpoint
+	e.GET("/swagger/*", echoSwagger.EchoWrapHandler(echoSwagger.URL("/openapi.json")))
+
+	// Prometheus metrics endpoint (no /v1 prefix)
+	// Use the exporter's handler to include custom metrics
+	e.GET("/metrics", echo.WrapHandler(s.exporter.Handler()))
+}
+
+// serveOpenAPISpec serves the embedded OpenAPI specification as JSON
+func (s *Server) serveOpenAPISpec(c echo.Context) error {
+	swagger, err := server.GetSwagger()
+	if err != nil {
+		return echo.NewHTTPError(500, "Failed to load OpenAPI spec")
 	}
-
-	// Health check
-	mux.HandleFunc("GET /v1/health", wrapper.GetHealth)
-
-	// Jobs endpoints
-	mux.HandleFunc("GET /v1/jobs", wrapper.ListJobs)
-	mux.HandleFunc("POST /v1/jobs", wrapper.CreateJob)
-	mux.HandleFunc("GET /v1/jobs/{jobId}", wrapper.GetJob)
-	mux.HandleFunc("PATCH /v1/jobs/{jobId}", wrapper.UpdateJob)
-	mux.HandleFunc("DELETE /v1/jobs/{jobId}", wrapper.DeleteJob)
-
-	// Metrics endpoints
-	mux.HandleFunc("GET /v1/jobs/{jobId}/metrics", wrapper.GetJobMetrics)
-	mux.HandleFunc("POST /v1/jobs/{jobId}/metrics", wrapper.RecordJobMetrics)
-
-	// Job lifecycle event endpoints (for Slurm prolog/epilog scripts)
-	mux.HandleFunc("POST /v1/events/job-started", wrapper.JobStartedEvent)
-	mux.HandleFunc("POST /v1/events/job-finished", wrapper.JobFinishedEvent)
-
-	// Prometheus metrics endpoint
-	mux.Handle("GET /metrics", s.exporter.Handler())
-
-	// Wrap with middleware
-	return s.withMiddleware(mux)
+	return c.JSON(200, swagger)
 }
 
-func (s *Server) withMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Add common headers
-		w.Header().Set("Content-Type", "application/json")
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (s *Server) handleError(w http.ResponseWriter, r *http.Request, err error) {
-	s.writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-}
-
-// GetHealth implements ServerInterface.GetHealth
-func (s *Server) GetHealth(w http.ResponseWriter, r *http.Request) {
+// GetHealth implements StrictServerInterface.GetHealth
+func (s *Server) GetHealth(ctx context.Context, request server.GetHealthRequestObject) (server.GetHealthResponseObject, error) {
 	version := "1.0.0"
-	resp := types.HealthResponse{
-		Status:    types.Healthy,
+	return server.GetHealth200JSONResponse{
+		Status:    server.Healthy,
 		Timestamp: time.Now(),
 		Version:   &version,
-	}
-	s.writeJSON(w, http.StatusOK, resp)
+	}, nil
 }
 
-// ListJobs implements ServerInterface.ListJobs
-func (s *Server) ListJobs(w http.ResponseWriter, r *http.Request, params server.ListJobsParams) {
+// ListJobs implements StrictServerInterface.ListJobs
+func (s *Server) ListJobs(ctx context.Context, request server.ListJobsRequestObject) (server.ListJobsResponseObject, error) {
 	var stateStr *string
-	if params.State != nil {
-		s := string(*params.State)
+	if request.Params.State != nil {
+		s := string(*request.Params.State)
 		stateStr = &s
 	}
 
 	input := service.ListJobsInput{
 		State:  stateStr,
-		User:   params.User,
-		Node:   params.Node,
-		Limit:  params.Limit,
-		Offset: params.Offset,
+		User:   request.Params.User,
+		Node:   request.Params.Node,
+		Limit:  request.Params.Limit,
+		Offset: request.Params.Offset,
 	}
 
-	output, err := s.jobService.ListJobs(r.Context(), input)
+	output, err := s.jobService.ListJobs(ctx, input)
 	if err != nil {
-		s.handleServiceError(w, err)
-		return
+		return s.handleListJobsError(err), nil
 	}
 
-	resp := types.JobListResponse{
-		Jobs:   s.mapper.DomainJobsToAPI(output.Jobs),
+	return server.ListJobs200JSONResponse{
+		Jobs:   typesJobsToServer(s.mapper.DomainJobsToAPI(output.Jobs)),
 		Total:  output.Total,
 		Limit:  output.Limit,
 		Offset: output.Offset,
-	}
-	s.writeJSON(w, http.StatusOK, resp)
+	}, nil
 }
 
-// CreateJob implements ServerInterface.CreateJob
-func (s *Server) CreateJob(w http.ResponseWriter, r *http.Request, params server.CreateJobParams) {
-	audit, ok := s.auditFromParams(w, params.XChangedBy, params.XSource, params.XCorrelationId)
-	if !ok {
-		return
+// CreateJob implements StrictServerInterface.CreateJob
+func (s *Server) CreateJob(ctx context.Context, request server.CreateJobRequestObject) (server.CreateJobResponseObject, error) {
+	auditCtx, err := s.auditFromParams(request.Params.XChangedBy, request.Params.XSource, request.Params.XCorrelationId)
+	if err != nil {
+		return server.CreateJob400JSONResponse{
+			Error:   "validation_error",
+			Message: err.Error(),
+		}, nil
 	}
 
-	var req types.CreateJobRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
-		return
+	if request.Body == nil {
+		return server.CreateJob400JSONResponse{
+			Error:   "invalid_request",
+			Message: "Request body is required",
+		}, nil
 	}
 
 	input := service.CreateJobInput{
-		ID:        req.Id,
-		User:      req.User,
-		Nodes:     req.Nodes,
-		Scheduler: req.Scheduler,
-		Audit:     audit,
+		ID:        request.Body.Id,
+		User:      request.Body.User,
+		Nodes:     request.Body.Nodes,
+		Scheduler: serverSchedulerInfoToTypes(request.Body.Scheduler),
+		Audit:     auditCtx,
 	}
 
-	job, err := s.jobService.CreateJob(r.Context(), input)
+	job, err := s.jobService.CreateJob(ctx, input)
 	if err != nil {
-		s.handleServiceError(w, err)
-		return
+		return s.handleCreateJobError(err), nil
 	}
 
-	s.writeJSON(w, http.StatusCreated, s.mapper.DomainJobToAPI(job))
+	return server.CreateJob201JSONResponse(typesJobToServer(s.mapper.DomainJobToAPI(job))), nil
 }
 
-// GetJob implements ServerInterface.GetJob
-func (s *Server) GetJob(w http.ResponseWriter, r *http.Request, jobId server.JobId) {
-	job, err := s.jobService.GetJob(r.Context(), string(jobId))
+// GetJob implements StrictServerInterface.GetJob
+func (s *Server) GetJob(ctx context.Context, request server.GetJobRequestObject) (server.GetJobResponseObject, error) {
+	job, err := s.jobService.GetJob(ctx, string(request.JobId))
 	if err != nil {
-		s.handleServiceError(w, err)
-		return
+		return s.handleGetJobError(err), nil
 	}
-	s.writeJSON(w, http.StatusOK, s.mapper.DomainJobToAPI(job))
+	return server.GetJob200JSONResponse(typesJobToServer(s.mapper.DomainJobToAPI(job))), nil
 }
 
-// UpdateJob implements ServerInterface.UpdateJob
-func (s *Server) UpdateJob(w http.ResponseWriter, r *http.Request, jobId server.JobId, params server.UpdateJobParams) {
-	audit, ok := s.auditFromParams(w, params.XChangedBy, params.XSource, params.XCorrelationId)
-	if !ok {
-		return
+// UpdateJob implements StrictServerInterface.UpdateJob
+func (s *Server) UpdateJob(ctx context.Context, request server.UpdateJobRequestObject) (server.UpdateJobResponseObject, error) {
+	auditCtx, err := s.auditFromParams(request.Params.XChangedBy, request.Params.XSource, request.Params.XCorrelationId)
+	if err != nil {
+		return server.UpdateJob400JSONResponse{
+			Error:   "validation_error",
+			Message: err.Error(),
+		}, nil
 	}
 
-	var req types.UpdateJobRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
-		return
+	if request.Body == nil {
+		return server.UpdateJob400JSONResponse{
+			Error:   "invalid_request",
+			Message: "Request body is required",
+		}, nil
+	}
+
+	var state *types.JobState
+	if request.Body.State != nil {
+		v := serverJobStateToTypes(*request.Body.State)
+		state = &v
 	}
 
 	input := service.UpdateJobInput{
-		State:    req.State,
-		CPUUsage: req.CpuUsage,
-		GPUUsage: req.GpuUsage,
-		Audit:    audit,
+		State:    state,
+		CPUUsage: request.Body.CpuUsage,
+		GPUUsage: request.Body.GpuUsage,
+		Audit:    auditCtx,
 	}
-	if req.MemoryUsageMb != nil {
-		v := *req.MemoryUsageMb
+	if request.Body.MemoryUsageMb != nil {
+		v := *request.Body.MemoryUsageMb
 		input.MemoryUsageMB = &v
 	}
 
-	job, err := s.jobService.UpdateJob(r.Context(), string(jobId), input)
+	job, err := s.jobService.UpdateJob(ctx, string(request.JobId), input)
 	if err != nil {
-		s.handleServiceError(w, err)
-		return
+		return s.handleUpdateJobError(err), nil
 	}
 
-	s.writeJSON(w, http.StatusOK, s.mapper.DomainJobToAPI(job))
+	return server.UpdateJob200JSONResponse(typesJobToServer(s.mapper.DomainJobToAPI(job))), nil
 }
 
-// DeleteJob implements ServerInterface.DeleteJob
-func (s *Server) DeleteJob(w http.ResponseWriter, r *http.Request, jobId server.JobId, params server.DeleteJobParams) {
-	audit, ok := s.auditFromParams(w, params.XChangedBy, params.XSource, params.XCorrelationId)
-	if !ok {
-		return
+// DeleteJob implements StrictServerInterface.DeleteJob
+func (s *Server) DeleteJob(ctx context.Context, request server.DeleteJobRequestObject) (server.DeleteJobResponseObject, error) {
+	auditCtx, err := s.auditFromParams(request.Params.XChangedBy, request.Params.XSource, request.Params.XCorrelationId)
+	if err != nil {
+		return nil, err
 	}
 
-	if err := s.jobService.DeleteJob(r.Context(), string(jobId), audit); err != nil {
-		s.handleServiceError(w, err)
-		return
+	if err := s.jobService.DeleteJob(ctx, string(request.JobId), auditCtx); err != nil {
+		return s.handleDeleteJobError(err), nil
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	return server.DeleteJob204Response{}, nil
 }
 
-// GetJobMetrics implements ServerInterface.GetJobMetrics
-func (s *Server) GetJobMetrics(w http.ResponseWriter, r *http.Request, jobId server.JobId, params server.GetJobMetricsParams) {
+// GetJobMetrics implements StrictServerInterface.GetJobMetrics
+func (s *Server) GetJobMetrics(ctx context.Context, request server.GetJobMetricsRequestObject) (server.GetJobMetricsResponseObject, error) {
 	input := service.GetMetricsInput{
-		JobID:     string(jobId),
-		StartTime: params.StartTime,
-		EndTime:   params.EndTime,
-		Limit:     params.Limit,
+		JobID:     string(request.JobId),
+		StartTime: request.Params.StartTime,
+		EndTime:   request.Params.EndTime,
+		Limit:     request.Params.Limit,
 	}
 
-	output, err := s.metricsService.GetJobMetrics(r.Context(), input)
+	output, err := s.metricsService.GetJobMetrics(ctx, input)
 	if err != nil {
-		s.handleServiceError(w, err)
-		return
+		return s.handleGetJobMetricsError(err), nil
 	}
 
-	resp := types.JobMetricsResponse{
-		JobId:   string(jobId),
-		Samples: s.mapper.DomainMetricSamplesToAPI(output.Samples),
+	return server.GetJobMetrics200JSONResponse{
+		JobId:   string(request.JobId),
+		Samples: typesMetricSamplesToServer(s.mapper.DomainMetricSamplesToAPI(output.Samples)),
 		Total:   output.Total,
-	}
-	s.writeJSON(w, http.StatusOK, resp)
+	}, nil
 }
 
-// RecordJobMetrics implements ServerInterface.RecordJobMetrics
-func (s *Server) RecordJobMetrics(w http.ResponseWriter, r *http.Request, jobId server.JobId) {
-	audit, ok := s.auditFromRequest(w, r)
-	if !ok {
-		return
+// RecordJobMetrics implements StrictServerInterface.RecordJobMetrics
+func (s *Server) RecordJobMetrics(ctx context.Context, request server.RecordJobMetricsRequestObject) (server.RecordJobMetricsResponseObject, error) {
+	auditCtx, err := s.auditFromParams(request.Params.XChangedBy, request.Params.XSource, request.Params.XCorrelationId)
+	if err != nil {
+		return server.RecordJobMetrics400JSONResponse{
+			Error:   "validation_error",
+			Message: err.Error(),
+		}, nil
 	}
 
-	var req types.RecordMetricsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
-		return
+	if request.Body == nil {
+		return server.RecordJobMetrics400JSONResponse{
+			Error:   "invalid_request",
+			Message: "Request body is required",
+		}, nil
 	}
 
 	input := service.RecordMetricsInput{
-		JobID:         string(jobId),
-		CPUUsage:      req.CpuUsage,
-		MemoryUsageMB: req.MemoryUsageMb,
-		GPUUsage:      req.GpuUsage,
-		Audit:         audit,
+		JobID:         string(request.JobId),
+		CPUUsage:      request.Body.CpuUsage,
+		MemoryUsageMB: request.Body.MemoryUsageMb,
+		GPUUsage:      request.Body.GpuUsage,
+		Audit:         auditCtx,
 	}
 
-	output, err := s.metricsService.RecordJobMetrics(r.Context(), input)
+	output, err := s.metricsService.RecordJobMetrics(ctx, input)
 	if err != nil {
-		s.handleServiceError(w, err)
-		return
+		return s.handleRecordJobMetricsError(err), nil
 	}
 
-	s.writeJSON(w, http.StatusCreated, s.mapper.DomainMetricSampleToAPI(output.Sample))
+	return server.RecordJobMetrics201JSONResponse(typesMetricSampleToServer(s.mapper.DomainMetricSampleToAPI(output.Sample))), nil
 }
 
-// JobStartedEvent implements ServerInterface.JobStartedEvent
+// JobStartedEvent implements StrictServerInterface.JobStartedEvent
 // This endpoint receives job started events from Slurm prolog scripts.
-func (s *Server) JobStartedEvent(w http.ResponseWriter, r *http.Request) {
-	var event types.JobStartedEvent
-	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
-		s.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
-		return
+func (s *Server) JobStartedEvent(ctx context.Context, request server.JobStartedEventRequestObject) (server.JobStartedEventResponseObject, error) {
+	if request.Body == nil {
+		return server.JobStartedEvent400JSONResponse{
+			Error:   "invalid_request",
+			Message: "Request body is required",
+		}, nil
 	}
 
 	input := service.JobStartedInput{
-		JobID:              event.JobId,
-		User:               event.User,
-		NodeList:           event.NodeList,
-		Timestamp:          event.Timestamp,
-		CgroupPath:         event.CgroupPath,
-		GPUVendor:          event.GpuVendor,
-		GPUDevices:         event.GpuDevices,
-		GPUAllocation:      event.GpuAllocation,
-		CPUAllocation:      event.CpuAllocation,
-		MemoryAllocationMB: event.MemoryAllocationMb,
-		Partition:          event.Partition,
-		Account:            event.Account,
+		JobID:              request.Body.JobId,
+		User:               request.Body.User,
+		NodeList:           request.Body.NodeList,
+		Timestamp:          request.Body.Timestamp,
+		CgroupPath:         request.Body.CgroupPath,
+		GPUVendor:          serverGPUVendorToTypes(request.Body.GpuVendor),
+		GPUDevices:         request.Body.GpuDevices,
+		GPUAllocation:      request.Body.GpuAllocation,
+		CPUAllocation:      request.Body.CpuAllocation,
+		MemoryAllocationMB: request.Body.MemoryAllocationMb,
+		Partition:          request.Body.Partition,
+		Account:            request.Body.Account,
 	}
 
-	output, err := s.eventService.JobStarted(r.Context(), input)
+	output, err := s.eventService.JobStarted(ctx, input)
 	if err != nil {
-		// Log the actual error for debugging
-		println("JobStartedEvent error:", err.Error())
-		s.handleServiceError(w, err)
-		return
+		return s.handleJobStartedEventError(err), nil
 	}
 
-	resp := types.JobEventResponse{
+	return server.JobStartedEvent200JSONResponse{
 		JobId:   output.JobID,
-		Status:  output.Status,
+		Status:  server.JobEventResponseStatus(output.Status),
 		Message: ptrString(output.Message),
-	}
-	s.writeJSON(w, http.StatusOK, resp)
+	}, nil
 }
 
-// JobFinishedEvent implements ServerInterface.JobFinishedEvent
+// JobFinishedEvent implements StrictServerInterface.JobFinishedEvent
 // This endpoint receives job finished events from Slurm epilog scripts.
-func (s *Server) JobFinishedEvent(w http.ResponseWriter, r *http.Request) {
-	var event types.JobFinishedEvent
-	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
-		s.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
-		return
+func (s *Server) JobFinishedEvent(ctx context.Context, request server.JobFinishedEventRequestObject) (server.JobFinishedEventResponseObject, error) {
+	if request.Body == nil {
+		return server.JobFinishedEvent400JSONResponse{
+			Error:   "invalid_request",
+			Message: "Request body is required",
+		}, nil
 	}
 
 	input := service.JobFinishedInput{
-		JobID:      event.JobId,
-		FinalState: event.FinalState,
-		Timestamp:  event.Timestamp,
-		ExitCode:   event.ExitCode,
-		Signal:     event.Signal,
+		JobID:      request.Body.JobId,
+		FinalState: serverJobStateToTypes(request.Body.FinalState),
+		Timestamp:  request.Body.Timestamp,
+		ExitCode:   request.Body.ExitCode,
+		Signal:     request.Body.Signal,
 	}
 
-	output, err := s.eventService.JobFinished(r.Context(), input)
+	output, err := s.eventService.JobFinished(ctx, input)
 	if err != nil {
-		s.handleServiceError(w, err)
-		return
+		return s.handleJobFinishedEventError(err), nil
 	}
 
-	resp := types.JobEventResponse{
+	return server.JobFinishedEvent200JSONResponse{
 		JobId:   output.JobID,
-		Status:  output.Status,
+		Status:  server.JobEventResponseStatus(output.Status),
 		Message: ptrString(output.Message),
-	}
-	s.writeJSON(w, http.StatusOK, resp)
+	}, nil
 }
 
 // Audit context helpers
 
-// validateAuditInfo validates the required audit fields and generates a correlation ID if needed.
-func (s *Server) validateAuditInfo(w http.ResponseWriter, changedBy, source, correlationID string) (string, string, string, bool) {
+// auditFromParams extracts audit info from request params and validates it.
+func (s *Server) auditFromParams(changedBy string, source string, correlationID *string) (*audit.Context, error) {
 	changedBy = strings.TrimSpace(changedBy)
 	source = strings.TrimSpace(source)
-	correlationID = strings.TrimSpace(correlationID)
 
 	if changedBy == "" {
-		s.writeError(w, http.StatusBadRequest, "validation_error", "X-Changed-By header is required")
-		return "", "", "", false
+		return nil, echo.NewHTTPError(400, "X-Changed-By header is required")
 	}
 	if source == "" {
-		s.writeError(w, http.StatusBadRequest, "validation_error", "X-Source header is required")
-		return "", "", "", false
-	}
-	if correlationID == "" {
-		correlationID = uuid.NewString()
-	}
-	w.Header().Set("X-Correlation-Id", correlationID)
-	return changedBy, source, correlationID, true
-}
-
-func (s *Server) auditFromRequest(w http.ResponseWriter, r *http.Request) (*audit.Context, bool) {
-	changedBy := r.Header.Get("X-Changed-By")
-	source := r.Header.Get("X-Source")
-	correlationID := r.Header.Get("X-Correlation-Id")
-
-	changedBy, source, correlationID, ok := s.validateAuditInfo(w, changedBy, source, correlationID)
-	if !ok {
-		return nil, false
+		return nil, echo.NewHTTPError(400, "X-Source header is required")
 	}
 
-	return &audit.Context{
-		ChangedBy:     changedBy,
-		Source:        source,
-		CorrelationID: correlationID,
-	}, true
-}
-
-func (s *Server) auditFromParams(w http.ResponseWriter, changedBy string, source string, correlationID *string) (*audit.Context, bool) {
 	finalCorrelationID := ""
 	if correlationID != nil {
-		finalCorrelationID = *correlationID
+		finalCorrelationID = strings.TrimSpace(*correlationID)
 	}
-
-	changedBy, source, finalCorrelationID, ok := s.validateAuditInfo(w, changedBy, source, finalCorrelationID)
-	if !ok {
-		return nil, false
+	if finalCorrelationID == "" {
+		finalCorrelationID = uuid.NewString()
 	}
 
 	return &audit.Context{
 		ChangedBy:     changedBy,
 		Source:        source,
 		CorrelationID: finalCorrelationID,
-	}, true
+	}, nil
 }
 
-// Response helpers
+// auditFromEchoContext extracts audit info from Echo context headers.
+func (s *Server) auditFromEchoContext(c echo.Context) (*audit.Context, error) {
+	changedBy := strings.TrimSpace(c.Request().Header.Get("X-Changed-By"))
+	source := strings.TrimSpace(c.Request().Header.Get("X-Source"))
+	correlationID := strings.TrimSpace(c.Request().Header.Get("X-Correlation-Id"))
 
-func (s *Server) writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(data)
+	if changedBy == "" {
+		return nil, echo.NewHTTPError(400, "X-Changed-By header is required")
+	}
+	if source == "" {
+		return nil, echo.NewHTTPError(400, "X-Source header is required")
+	}
+	if correlationID == "" {
+		correlationID = uuid.NewString()
+	}
+
+	// Set correlation ID in response header
+	c.Response().Header().Set("X-Correlation-Id", correlationID)
+
+	return &audit.Context{
+		ChangedBy:     changedBy,
+		Source:        source,
+		CorrelationID: correlationID,
+	}, nil
 }
 
-func (s *Server) writeError(w http.ResponseWriter, status int, errCode, message string) {
-	s.writeJSON(w, status, types.ErrorResponse{
-		Error:   errCode,
-		Message: message,
-	})
-}
-
-// handleServiceError maps service errors to HTTP responses.
-func (s *Server) handleServiceError(w http.ResponseWriter, err error) {
+// handleServiceError maps service errors to appropriate response objects.
+// This returns the error response as a ResponseObject, not as an error.
+func (s *Server) handleServiceError(err error) (interface{}, error) {
 	switch err {
 	case service.ErrJobNotFound:
-		s.writeError(w, http.StatusNotFound, "not_found", "Job not found")
+		return server.GetJob404JSONResponse{
+			Error:   "not_found",
+			Message: "Job not found",
+		}, nil
 	case service.ErrJobAlreadyExists:
-		s.writeError(w, http.StatusConflict, "conflict", "Job with this ID already exists")
+		return server.CreateJob409JSONResponse{
+			Error:   "conflict",
+			Message: "Job with this ID already exists",
+		}, nil
 	case service.ErrInvalidJobState:
-		s.writeError(w, http.StatusBadRequest, "validation_error", "Invalid job state")
+		return server.UpdateJob400JSONResponse{
+			Error:   "validation_error",
+			Message: "Invalid job state",
+		}, nil
 	case service.ErrJobTerminalFrozen:
-		s.writeError(w, http.StatusConflict, "conflict", "Job is in terminal state and cannot be updated")
+		// Map to 400 since UpdateJob doesn't have 409 in OpenAPI spec
+		return server.UpdateJob400JSONResponse{
+			Error:   "conflict",
+			Message: "Job is in terminal state and cannot be updated",
+		}, nil
 	case service.ErrInternalError:
-		// Log the actual error for debugging
-		println("Internal error:", err.Error())
-		s.writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		return server.GetJob500JSONResponse{
+			Error:   "internal_error",
+			Message: "Internal server error",
+		}, nil
 	default:
 		// Check for ValidationError
 		if ve, ok := err.(*service.ValidationError); ok {
-			s.writeError(w, http.StatusBadRequest, "validation_error", ve.Message)
-			return
+			return server.CreateJob400JSONResponse{
+				Error:   "validation_error",
+				Message: ve.Message,
+			}, nil
 		}
-		// Log unexpected errors
-		println("Unexpected error:", err.Error())
-		s.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		// Return generic internal error for unexpected errors
+		return server.GetJob500JSONResponse{
+			Error:   "internal_error",
+			Message: err.Error(),
+		}, nil
+	}
+}
+
+// handleJobStartedEventError maps service errors to JobStartedEvent response types
+func (s *Server) handleJobStartedEventError(err error) server.JobStartedEventResponseObject {
+	switch err {
+	case service.ErrInternalError:
+		return server.JobStartedEvent500JSONResponse{
+			Error:   "internal_error",
+			Message: "Internal server error",
+		}
+	default:
+		if ve, ok := err.(*service.ValidationError); ok {
+			return server.JobStartedEvent400JSONResponse{
+				Error:   "validation_error",
+				Message: ve.Message,
+			}
+		}
+		return server.JobStartedEvent500JSONResponse{
+			Error:   "internal_error",
+			Message: err.Error(),
+		}
+	}
+}
+
+// handleJobFinishedEventError maps service errors to JobFinishedEvent response types
+func (s *Server) handleJobFinishedEventError(err error) server.JobFinishedEventResponseObject {
+	switch err {
+	case service.ErrJobNotFound:
+		return server.JobFinishedEvent404JSONResponse{
+			Error:   "not_found",
+			Message: "Job not found",
+		}
+	case service.ErrInternalError:
+		return server.JobFinishedEvent500JSONResponse{
+			Error:   "internal_error",
+			Message: "Internal server error",
+		}
+	default:
+		if ve, ok := err.(*service.ValidationError); ok {
+			return server.JobFinishedEvent400JSONResponse{
+				Error:   "validation_error",
+				Message: ve.Message,
+			}
+		}
+		return server.JobFinishedEvent500JSONResponse{
+			Error:   "internal_error",
+			Message: err.Error(),
+		}
+	}
+}
+
+// handleListJobsError maps service errors to ListJobs response types
+func (s *Server) handleListJobsError(err error) server.ListJobsResponseObject {
+	return server.ListJobs500JSONResponse{
+		Error:   "internal_error",
+		Message: err.Error(),
+	}
+}
+
+// handleGetJobError maps service errors to GetJob response types
+func (s *Server) handleGetJobError(err error) server.GetJobResponseObject {
+	if err == service.ErrJobNotFound {
+		return server.GetJob404JSONResponse{
+			Error:   "not_found",
+			Message: "Job not found",
+		}
+	}
+	return server.GetJob500JSONResponse{
+		Error:   "internal_error",
+		Message: err.Error(),
+	}
+}
+
+// handleUpdateJobError maps service errors to UpdateJob response types
+func (s *Server) handleUpdateJobError(err error) server.UpdateJobResponseObject {
+	switch err {
+	case service.ErrJobNotFound:
+		return server.UpdateJob404JSONResponse{
+			Error:   "not_found",
+			Message: "Job not found",
+		}
+	case service.ErrInvalidJobState, service.ErrJobTerminalFrozen:
+		return server.UpdateJob400JSONResponse{
+			Error:   "validation_error",
+			Message: err.Error(),
+		}
+	default:
+		if ve, ok := err.(*service.ValidationError); ok {
+			return server.UpdateJob400JSONResponse{
+				Error:   "validation_error",
+				Message: ve.Message,
+			}
+		}
+		return server.UpdateJob500JSONResponse{
+			Error:   "internal_error",
+			Message: err.Error(),
+		}
+	}
+}
+
+// handleDeleteJobError maps service errors to DeleteJob response types
+func (s *Server) handleDeleteJobError(err error) server.DeleteJobResponseObject {
+	if err == service.ErrJobNotFound {
+		return server.DeleteJob404JSONResponse{
+			Error:   "not_found",
+			Message: "Job not found",
+		}
+	}
+	return server.DeleteJob500JSONResponse{
+		Error:   "internal_error",
+		Message: err.Error(),
+	}
+}
+
+// handleGetJobMetricsError maps service errors to GetJobMetrics response types
+func (s *Server) handleGetJobMetricsError(err error) server.GetJobMetricsResponseObject {
+	if err == service.ErrJobNotFound {
+		return server.GetJobMetrics404JSONResponse{
+			Error:   "not_found",
+			Message: "Job not found",
+		}
+	}
+	return server.GetJobMetrics500JSONResponse{
+		Error:   "internal_error",
+		Message: err.Error(),
+	}
+}
+
+// handleRecordJobMetricsError maps service errors to RecordJobMetrics response types
+func (s *Server) handleRecordJobMetricsError(err error) server.RecordJobMetricsResponseObject {
+	switch err {
+	case service.ErrJobNotFound:
+		return server.RecordJobMetrics404JSONResponse{
+			Error:   "not_found",
+			Message: "Job not found",
+		}
+	default:
+		if ve, ok := err.(*service.ValidationError); ok {
+			return server.RecordJobMetrics400JSONResponse{
+				Error:   "validation_error",
+				Message: ve.Message,
+			}
+		}
+		return server.RecordJobMetrics500JSONResponse{
+			Error:   "internal_error",
+			Message: err.Error(),
+		}
+	}
+}
+
+// handleCreateJobError maps service errors to CreateJob response types
+func (s *Server) handleCreateJobError(err error) server.CreateJobResponseObject {
+	switch err {
+	case service.ErrJobAlreadyExists:
+		return server.CreateJob409JSONResponse{
+			Error:   "conflict",
+			Message: "Job with this ID already exists",
+		}
+	default:
+		if ve, ok := err.(*service.ValidationError); ok {
+			return server.CreateJob400JSONResponse{
+				Error:   "validation_error",
+				Message: ve.Message,
+			}
+		}
+		return server.CreateJob500JSONResponse{
+			Error:   "internal_error",
+			Message: err.Error(),
+		}
 	}
 }
 
 func ptrString(s string) *string {
 	return &s
+}
+
+// Type conversion helpers between types and server packages
+// Both packages have the same types generated from OpenAPI spec,
+// but we need to convert between them as they're different types.
+
+func serverJobToTypes(j server.Job) types.Job {
+	return types.Job{
+		Id:                j.Id,
+		User:              j.User,
+		Nodes:             j.Nodes,
+		State:             types.JobState(j.State),
+		StartTime:         j.StartTime,
+		EndTime:           j.EndTime,
+		CpuUsage:          j.CpuUsage,
+		MemoryUsageMb:     j.MemoryUsageMb,
+		GpuUsage:          j.GpuUsage,
+		RuntimeSeconds:    j.RuntimeSeconds,
+		LastSampleAt:      j.LastSampleAt,
+		NodeCount:         j.NodeCount,
+		RequestedCpus:     j.RequestedCpus,
+		AllocatedCpus:     j.AllocatedCpus,
+		RequestedMemoryMb: j.RequestedMemoryMb,
+		AllocatedMemoryMb: j.AllocatedMemoryMb,
+		RequestedGpus:     j.RequestedGpus,
+		AllocatedGpus:     j.AllocatedGpus,
+		ClusterName:       j.ClusterName,
+		SchedulerInstance: j.SchedulerInstance,
+		IngestVersion:     j.IngestVersion,
+		SampleCount:       j.SampleCount,
+		AvgCpuUsage:       j.AvgCpuUsage,
+		MaxCpuUsage:       j.MaxCpuUsage,
+		MaxMemoryUsageMb:  j.MaxMemoryUsageMb,
+		AvgGpuUsage:       j.AvgGpuUsage,
+		MaxGpuUsage:       j.MaxGpuUsage,
+		Scheduler:         serverSchedulerInfoToTypes(j.Scheduler),
+	}
+}
+
+func typesJobToServer(j types.Job) server.Job {
+	return server.Job{
+		Id:                j.Id,
+		User:              j.User,
+		Nodes:             j.Nodes,
+		State:             server.JobState(j.State),
+		StartTime:         j.StartTime,
+		EndTime:           j.EndTime,
+		CpuUsage:          j.CpuUsage,
+		MemoryUsageMb:     j.MemoryUsageMb,
+		GpuUsage:          j.GpuUsage,
+		RuntimeSeconds:    j.RuntimeSeconds,
+		LastSampleAt:      j.LastSampleAt,
+		NodeCount:         j.NodeCount,
+		RequestedCpus:     j.RequestedCpus,
+		AllocatedCpus:     j.AllocatedCpus,
+		RequestedMemoryMb: j.RequestedMemoryMb,
+		AllocatedMemoryMb: j.AllocatedMemoryMb,
+		RequestedGpus:     j.RequestedGpus,
+		AllocatedGpus:     j.AllocatedGpus,
+		ClusterName:       j.ClusterName,
+		SchedulerInstance: j.SchedulerInstance,
+		IngestVersion:     j.IngestVersion,
+		SampleCount:       j.SampleCount,
+		AvgCpuUsage:       j.AvgCpuUsage,
+		MaxCpuUsage:       j.MaxCpuUsage,
+		MaxMemoryUsageMb:  j.MaxMemoryUsageMb,
+		AvgGpuUsage:       j.AvgGpuUsage,
+		MaxGpuUsage:       j.MaxGpuUsage,
+		Scheduler:         typesSchedulerInfoToServer(j.Scheduler),
+	}
+}
+
+func typesJobsToServer(jobs []types.Job) []server.Job {
+	result := make([]server.Job, len(jobs))
+	for i, job := range jobs {
+		result[i] = typesJobToServer(job)
+	}
+	return result
+}
+
+func serverSchedulerInfoToTypes(s *server.SchedulerInfo) *types.SchedulerInfo {
+	if s == nil {
+		return nil
+	}
+	var t *types.SchedulerInfoType
+	if s.Type != nil {
+		v := types.SchedulerInfoType(*s.Type)
+		t = &v
+	}
+	return &types.SchedulerInfo{
+		Type:             t,
+		ExternalJobId:    s.ExternalJobId,
+		Account:          s.Account,
+		Partition:        s.Partition,
+		Qos:              s.Qos,
+		Priority:         s.Priority,
+		SubmitTime:       s.SubmitTime,
+		TimeLimitMinutes: s.TimeLimitMinutes,
+		RawState:         s.RawState,
+		StateReason:      s.StateReason,
+		ExitCode:         s.ExitCode,
+		Extra:            s.Extra,
+	}
+}
+
+func typesSchedulerInfoToServer(s *types.SchedulerInfo) *server.SchedulerInfo {
+	if s == nil {
+		return nil
+	}
+	var t *server.SchedulerInfoType
+	if s.Type != nil {
+		v := server.SchedulerInfoType(*s.Type)
+		t = &v
+	}
+	return &server.SchedulerInfo{
+		Type:             t,
+		ExternalJobId:    s.ExternalJobId,
+		Account:          s.Account,
+		Partition:        s.Partition,
+		Qos:              s.Qos,
+		Priority:         s.Priority,
+		SubmitTime:       s.SubmitTime,
+		TimeLimitMinutes: s.TimeLimitMinutes,
+		RawState:         s.RawState,
+		StateReason:      s.StateReason,
+		ExitCode:         s.ExitCode,
+		Extra:            s.Extra,
+	}
+}
+
+func typesMetricSamplesToServer(samples []types.MetricSample) []server.MetricSample {
+	result := make([]server.MetricSample, len(samples))
+	for i, sample := range samples {
+		result[i] = typesMetricSampleToServer(sample)
+	}
+	return result
+}
+
+func typesMetricSampleToServer(s types.MetricSample) server.MetricSample {
+	return server.MetricSample{
+		Timestamp:     s.Timestamp,
+		CpuUsage:      s.CpuUsage,
+		MemoryUsageMb: s.MemoryUsageMb,
+		GpuUsage:      s.GpuUsage,
+	}
+}
+
+func serverGPUVendorToTypes(v *server.GPUVendor) *types.GPUVendor {
+	if v == nil {
+		return nil
+	}
+	tv := types.GPUVendor(*v)
+	return &tv
+}
+
+func serverJobStateToTypes(s server.JobState) types.JobState {
+	return types.JobState(s)
 }

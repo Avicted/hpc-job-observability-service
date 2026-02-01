@@ -23,6 +23,7 @@ import (
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/scheduler"
 	"github.com/joho/godotenv"
+	"github.com/labstack/echo/v4"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -137,17 +138,21 @@ func main() {
 
 	// Initialize API server
 	apiServer := api.NewServer(store, metricsExporter)
-	mux := apiServer.Routes()
 
-	// Create HTTP server
+	// Create Echo instance
+	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
+
+	// Register all routes
+	apiServer.RegisterRoutes(e)
+
+	// Configure server timeouts
 	addr := cfg.Host + ":" + strconv.Itoa(cfg.Port)
-	server := &http.Server{
-		Addr:         addr,
-		Handler:      mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
+	e.Server.Addr = addr
+	e.Server.ReadTimeout = 15 * time.Second
+	e.Server.WriteTimeout = 15 * time.Second
+	e.Server.IdleTimeout = 60 * time.Second
 
 	// Graceful shutdown
 	done := make(chan os.Signal, 1)
@@ -155,7 +160,7 @@ func main() {
 
 	go func() {
 		log.Printf("Starting server on %s", addr)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
 	}()
@@ -166,7 +171,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := server.Shutdown(ctx); err != nil {
+	if err := e.Shutdown(ctx); err != nil {
 		log.Fatalf("Server shutdown failed: %v", err)
 	}
 	log.Println("Server stopped")

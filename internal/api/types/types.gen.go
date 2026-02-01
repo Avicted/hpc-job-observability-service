@@ -436,6 +436,18 @@ type GetJobMetricsParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// RecordJobMetricsParams defines parameters for RecordJobMetrics.
+type RecordJobMetricsParams struct {
+	// XChangedBy Identifier of the actor/system performing the change
+	XChangedBy ChangedByHeader `json:"X-Changed-By"`
+
+	// XSource Source system initiating the change (api, syncer, scheduler)
+	XSource SourceHeader `json:"X-Source"`
+
+	// XCorrelationId Correlation ID for tracing multi-step updates
+	XCorrelationId *CorrelationIdHeader `json:"X-Correlation-Id,omitempty"`
+}
+
 // JobFinishedEventJSONRequestBody defines body for JobFinishedEvent for application/json ContentType.
 type JobFinishedEventJSONRequestBody = JobFinishedEvent
 

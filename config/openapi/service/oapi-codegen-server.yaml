@@ -5,7 +5,8 @@
 package: server
 output: server.gen.go
 generate:
-  std-http-server: true
+  echo-server: true
+  strict-server: true
   models: true
   embedded-spec: true
 output-options:

@@ -364,6 +364,9 @@ paths:
       operationId: recordJobMetrics
       parameters:
         - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/ChangedByHeader'
+        - $ref: '#/components/parameters/SourceHeader'
+        - $ref: '#/components/parameters/CorrelationIdHeader'
       requestBody:
         required: true
         content:
