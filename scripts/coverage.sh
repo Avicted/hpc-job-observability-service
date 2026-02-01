@@ -51,9 +51,9 @@ PKGS=$(go list ./... | grep -vE "$EXCLUDE_REGEX")
 
 # Silence go test output when we only care about zero coverage
 if [[ "$SHOW_ZERO_ONLY" == true || "$FAIL_ON_ZERO" == true ]]; then
-  go test $PKGS -cover -coverprofile=coverage.out > /dev/null
+  go test $PKGS -cover -coverprofile=coverage.out -timeout=5m > /dev/null
 else
-  go test $PKGS -cover -coverprofile=coverage.out
+  go test $PKGS -cover -coverprofile=coverage.out -timeout=5m
 fi
 
 if [[ "$FAIL_ON_ZERO" == true ]]; then
