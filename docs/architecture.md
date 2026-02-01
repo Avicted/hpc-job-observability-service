@@ -156,12 +156,80 @@ Services depend on `storage.Storage` interface, not concrete implementations.
 
 ### Storage Layer
 
-The storage layer (`internal/storage`) provides a PostgreSQL-backed implementation that supports:
-- Job CRUD operations using domain entities directly
-- Metrics recording and retrieval
-- Automatic schema migrations
-- Retention-based cleanup
-- Audit event logging with correlation IDs
+The storage layer (`internal/storage`) provides a PostgreSQL-backed implementation using **pgx/v5** with connection pooling via **pgxpool**. The implementation is organized into specialized sub-stores that support:
+
+- **Job CRUD operations** using domain entities directly
+- **Metrics recording and retrieval** with batch operations for efficiency
+- **Automatic schema migrations** on startup
+- **Retention-based cleanup** for historical metrics
+- **Audit event logging** with correlation IDs for traceability
+- **Transaction support** for atomic multi-step operations
+- **Prometheus metrics** for storage operation observability
+
+#### Storage Architecture
+
+The storage implementation uses a **sub-store pattern** for separation of concerns:
+
+```go
+type Store struct {
+    pool *pgxpool.Pool  // Connection pool managed by pgx
+    // Prometheus metrics for observability
+}
+
+// Sub-stores accessible via:
+store.Jobs()    // JobStore - Job CRUD operations
+store.Metrics() // MetricStore - Metrics recording and retrieval
+store.Audit()   // AuditStore - Audit event logging
+```
+
+**Key Design Features:**
+
+1. **DBTX Interface**: An abstraction that allows storage methods to work with both pooled connections (`*pgxpool.Pool`) and transactions (`pgx.Tx`) without exposing pgx types outside the storage layer.
+
+2. **Connection Pooling**: Uses `pgxpool` for efficient connection management with configurable pool size, connection lifetime, and idle connection limits.
+
+3. **Transaction Support**: The `WithTx()` method provides transactional operations with automatic rollback on error or panic:
+   ```go
+   store.WithTx(ctx, func(tx storage.Tx) error {
+       // All operations within this function share a transaction
+       return tx.Jobs().CreateJob(ctx, job)
+   })
+   ```
+
+4. **Batch Operations**: Metrics can be recorded in batches using `pgx.Batch` for improved throughput:
+   ```go
+   store.RecordMetricsBatch(ctx, samples)  // Efficient bulk insert
+   ```
+
+5. **Observability**: All storage operations are instrumented with Prometheus metrics:
+   - `storage_operation_duration_seconds` - Histogram of operation durations
+   - `storage_operation_errors_total` - Counter of errors by type
+
+6. **Error Classification**: Errors are classified for monitoring:
+   - `not_found` - Entity not found
+   - `conflict` - Unique constraint violation
+   - `job_terminal` - Attempt to modify completed job
+   - `invalid_input` - Validation error
+   - `context_canceled` / `context_deadline` - Context errors
+   - `unknown` - Other errors
+
+#### Connection Pool Configuration
+
+The PostgreSQL connection pool can be configured via `Config` struct:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `MaxConns` | 25 | Maximum concurrent connections |
+| `MinConns` | 5 | Minimum idle connections |
+| `MaxConnLifetime` | 5 minutes | Maximum connection reuse duration |
+| `MaxConnIdleTime` | 30 seconds | Maximum connection idle time |
+
+**Implementation Files:**
+- `internal/storage/postgres/store.go` - Main store, connection pooling, transactions
+- `internal/storage/postgres/jobs.go` - Job persistence operations
+- `internal/storage/postgres/metrics.go` - Metrics recording and retrieval
+- `internal/storage/postgres/audit.go` - Audit event logging
+- `internal/storage/postgres/queries.go` - SQL query constants
 
 #### Jobs Table Schema
 
