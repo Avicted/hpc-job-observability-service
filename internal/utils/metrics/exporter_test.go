@@ -102,10 +102,6 @@ func (m *mockStorage) Close() error {
 	return nil
 }
 
-func (m *mockStorage) SeedDemoData(ctx context.Context) error {
-	return nil
-}
-
 // mockScheduler implements scheduler.JobSource for testing.
 type mockScheduler struct {
 	nodes    []*scheduler.Node

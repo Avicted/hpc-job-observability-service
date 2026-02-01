@@ -125,10 +125,6 @@ func (m *mockStorage) Close() error {
 	return nil
 }
 
-func (m *mockStorage) SeedDemoData(ctx context.Context) error {
-	return nil
-}
-
 func TestNew(t *testing.T) {
 	store := &mockStorage{}
 	exporter := metrics.NewExporter(store)

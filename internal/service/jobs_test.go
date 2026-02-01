@@ -175,10 +175,6 @@ func (m *mockStorage) Close() error {
 	return nil
 }
 
-func (m *mockStorage) SeedDemoData(ctx context.Context) error {
-	return nil
-}
-
 func newMockExporter() *metrics.Exporter {
 	// Create a real exporter with the mock storage - it won't actually record metrics in tests
 	return metrics.NewExporter(newMockStorage())

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Avicted/hpc-job-observability-service/internal/api"
+	"github.com/Avicted/hpc-job-observability-service/internal/domain"
 	"github.com/Avicted/hpc-job-observability-service/internal/storage/postgres"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/collector"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
@@ -98,8 +99,17 @@ func main() {
 	// Demo data is only useful for testing without a real scheduler
 	if cfg.SeedDemo && cfg.SchedulerBackend == "mock" {
 		log.Println("Seeding demo data (mock backend)...")
-		if err := store.SeedDemoData(ctx); err != nil {
-			log.Fatalf("Failed to seed demo data: %v", err)
+
+		// Generate demo jobs in the mock scheduler
+		if mockSource, ok := jobSource.(*scheduler.MockJobSource); ok {
+			mockSource.GenerateDemoJobs()
+			log.Println("Generated 100 demo jobs in mock scheduler")
+
+			// Sync generated jobs to database
+			if err := syncMockJobsToStorage(ctx, mockSource, store); err != nil {
+				log.Fatalf("Failed to sync mock jobs to storage: %v", err)
+			}
+			log.Println("Synced demo jobs to database")
 		}
 	} else if cfg.SeedDemo && cfg.SchedulerBackend != "mock" {
 		log.Println("Note: SEED_DEMO is ignored when using slurm backend (jobs created via prolog/epilog events)")
@@ -268,6 +278,102 @@ func waitForSlurmReady(baseURL string, timeout time.Duration) error {
 	return fmt.Errorf("slurmrestd not reachable at %s. If using Docker Compose, run with --profile slurm and wait for the slurm container to be healthy", baseURL)
 }
 
+// syncMockJobsToStorage syncs jobs from the mock scheduler to the database.
+// This is used when SEED_DEMO=true to populate the database with demo data.
+func syncMockJobsToStorage(ctx context.Context, mockSource *scheduler.MockJobSource, store *postgres.Store) error {
+	// Get all jobs from mock scheduler
+	jobs, err := mockSource.ListJobs(ctx, scheduler.JobFilter{Limit: 1000})
+	if err != nil {
+		return fmt.Errorf("failed to list mock jobs: %w", err)
+	}
+
+	log.Printf("Syncing %d jobs to database...", len(jobs))
+
+	// Convert scheduler jobs to domain jobs and upsert
+	for _, schedJob := range jobs {
+		domainJob := schedulerJobToDomain(schedJob)
+
+		// Add audit info for demo seeding
+		domainJob.Audit = &domain.AuditInfo{
+			ChangedBy:     "system",
+			Source:        "mock-seed",
+			CorrelationID: fmt.Sprintf("seed-%s", domainJob.ID),
+		}
+
+		if err := store.UpsertJob(ctx, domainJob); err != nil {
+			log.Printf("Warning: Failed to upsert job %s: %v", domainJob.ID, err)
+			continue
+		}
+
+		// Sync metrics if available
+		if schedJob.State == scheduler.JobStateRunning || schedJob.State == scheduler.JobStateCompleted {
+			metrics, err := mockSource.GetJobMetrics(ctx, schedJob.ID)
+			if err == nil && len(metrics) > 0 {
+				// Convert metrics to domain format
+				domainMetrics := make([]*domain.MetricSample, 0, len(metrics))
+				for _, m := range metrics {
+					domainMetrics = append(domainMetrics, &domain.MetricSample{
+						JobID:         m.JobID,
+						Timestamp:     m.Timestamp,
+						CPUUsage:      m.CPUUsage,
+						MemoryUsageMB: m.MemoryUsageMB,
+						GPUUsage:      m.GPUUsage,
+					})
+				}
+
+				// Use batch insert for efficiency
+				if err := store.RecordMetricsBatch(ctx, domainMetrics); err != nil {
+					log.Printf("Warning: Failed to record metrics for job %s: %v", domainJob.ID, err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// schedulerJobToDomain converts a scheduler.Job to a domain.Job.
+func schedulerJobToDomain(schedJob *scheduler.Job) *domain.Job {
+	domainJob := &domain.Job{
+		ID:             schedJob.ID,
+		User:           schedJob.User,
+		Nodes:          schedJob.Nodes,
+		NodeCount:      schedJob.NodeCount,
+		State:          domain.JobState(schedJob.State),
+		StartTime:      schedJob.StartTime,
+		EndTime:        schedJob.EndTime,
+		RuntimeSeconds: schedJob.RuntimeSeconds,
+		CPUUsage:       schedJob.CPUUsage,
+		MemoryUsageMB:  schedJob.MemoryUsageMB,
+		GPUUsage:       schedJob.GPUUsage,
+		RequestedCPUs:  schedJob.RequestedCPUs,
+		AllocatedCPUs:  schedJob.AllocatedCPUs,
+		RequestedMemMB: schedJob.RequestedMemMB,
+		AllocatedMemMB: schedJob.AllocatedMemMB,
+		RequestedGPUs:  schedJob.RequestedGPUs,
+		AllocatedGPUs:  schedJob.AllocatedGPUs,
+	}
+
+	if schedJob.Scheduler != nil {
+		domainJob.Scheduler = &domain.SchedulerInfo{
+			Type:          domain.SchedulerType(schedJob.Scheduler.Type),
+			ExternalJobID: schedJob.Scheduler.ExternalJobID,
+			RawState:      schedJob.Scheduler.RawState,
+			SubmitTime:    schedJob.Scheduler.SubmitTime,
+			Partition:     schedJob.Scheduler.Partition,
+			Account:       schedJob.Scheduler.Account,
+			QoS:           schedJob.Scheduler.QoS,
+			Priority:      schedJob.Scheduler.Priority,
+			ExitCode:      schedJob.Scheduler.ExitCode,
+			StateReason:   schedJob.Scheduler.StateReason,
+			TimeLimitMins: schedJob.Scheduler.TimeLimitMins,
+			Extra:         schedJob.Scheduler.Extra,
+		}
+	}
+
+	return domainJob
+}
+
 // runRetentionCleanup periodically removes old metric samples based on retention policy.
 func runRetentionCleanup(store *postgres.Store, retentionDays int) {
 	ticker := time.NewTicker(1 * time.Hour)
@@ -277,10 +383,10 @@ func runRetentionCleanup(store *postgres.Store, retentionDays int) {
 		cutoff := time.Now().AddDate(0, 0, -retentionDays)
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		if err := store.DeleteMetricsBefore(ctx, cutoff); err != nil {
-			cancel()
 			log.Printf("Retention cleanup error: %v", err)
 		} else {
 			log.Printf("Retention cleanup completed, removed samples older than %v", cutoff)
 		}
+		cancel()
 	}
 }

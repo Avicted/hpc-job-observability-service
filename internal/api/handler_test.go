@@ -184,10 +184,6 @@ func (m *mockRepository) Close() error {
 	return nil
 }
 
-func (m *mockRepository) SeedDemoData(ctx context.Context) error {
-	return nil
-}
-
 // mockStorage for metrics.Exporter (which still uses storage.Storage)
 type mockStorage struct {
 	jobs    map[string]*domain.Job
@@ -296,10 +292,6 @@ func (m *mockStorage) Migrate(ctx context.Context) error {
 }
 
 func (m *mockStorage) Close() error {
-	return nil
-}
-
-func (m *mockStorage) SeedDemoData(ctx context.Context) error {
 	return nil
 }
 

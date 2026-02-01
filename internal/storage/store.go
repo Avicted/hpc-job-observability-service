@@ -84,9 +84,6 @@ type Store interface {
 	// Migrate runs database schema migrations.
 	Migrate(ctx context.Context) error
 
-	// SeedDemoData populates the database with demo data for development/testing.
-	SeedDemoData(ctx context.Context) error
-
 	// Close releases all resources associated with the store.
 	Close() error
 }
