@@ -1728,6 +1728,9 @@
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
             "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
@@ -1754,7 +1757,7 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -1764,13 +1767,12 @@
         "x": 16,
         "y": 111
       },
-      "id": 23,
+      "id": 26,
       "options": {
         "legend": {
           "calcs": [
             "last",
-            "max",
-            "mean"
+            "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
@@ -1785,22 +1787,26 @@
       "pluginVersion": "12.4.0-20648027705",
       "targets": [
         {
-          "expr": "go_gc_duration_seconds{job=\"hpc-observability\",quantile=\"0.5\"}",
-          "legendFormat": "GC p50",
+          "expr": "process_resident_memory_bytes{job=\"hpc-observability\"}",
+          "hide": true,
+          "legendFormat": "RSS (Resident)",
           "refId": "A"
         },
         {
-          "expr": "go_gc_duration_seconds{job=\"hpc-observability\",quantile=\"0.75\"}",
-          "legendFormat": "GC p75",
+          "expr": "process_virtual_memory_bytes{job=\"hpc-observability\"}",
+          "hide": true,
+          "legendFormat": "VMS (Virtual)",
           "refId": "B"
         },
         {
-          "expr": "go_gc_duration_seconds{job=\"hpc-observability\",quantile=\"1\"}",
-          "legendFormat": "GC p100 (max)",
+          "editorMode": "code",
+          "expr": "sum(rate(process_cpu_seconds_total{job=\"hpc-observability\"}[1m])) * 100",
+          "legendFormat": "CPU Usage Rate",
+          "range": true,
           "refId": "C"
         }
       ],
-      "title": "GC Duration (Stop-the-World)",
+      "title": "Process CPU",
       "type": "timeseries"
     },
     {
@@ -2017,7 +2023,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -2027,12 +2033,13 @@
         "x": 16,
         "y": 124
       },
-      "id": 26,
+      "id": 23,
       "options": {
         "legend": {
           "calcs": [
             "last",
-            "max"
+            "max",
+            "mean"
           ],
           "displayMode": "table",
           "placement": "bottom",
@@ -2047,22 +2054,22 @@
       "pluginVersion": "12.4.0-20648027705",
       "targets": [
         {
-          "expr": "process_resident_memory_bytes{job=\"hpc-observability\"}",
-          "legendFormat": "RSS (Resident)",
+          "expr": "go_gc_duration_seconds{job=\"hpc-observability\",quantile=\"0.5\"}",
+          "legendFormat": "GC p50",
           "refId": "A"
         },
         {
-          "expr": "process_virtual_memory_bytes{job=\"hpc-observability\"}",
-          "legendFormat": "VMS (Virtual)",
+          "expr": "go_gc_duration_seconds{job=\"hpc-observability\",quantile=\"0.75\"}",
+          "legendFormat": "GC p75",
           "refId": "B"
         },
         {
-          "expr": "rate(process_cpu_seconds_total{job=\"hpc-observability\"}[5m])",
-          "legendFormat": "CPU Usage Rate",
+          "expr": "go_gc_duration_seconds{job=\"hpc-observability\",quantile=\"1\"}",
+          "legendFormat": "GC p100 (max)",
           "refId": "C"
         }
       ],
-      "title": "Process Memory & CPU",
+      "title": "GC Duration (Stop-the-World)",
       "type": "timeseries"
     }
   ],
@@ -2177,6 +2184,6 @@
   "timezone": "browser",
   "title": "HPC Job Observability",
   "uid": "hpc-jobs",
-  "version": 2,
+  "version": 1,
   "weekStart": ""
 }

@@ -39,9 +39,16 @@ hpc-job-observability-service/
 │   │   ├── metrics.go                      # MetricsService
 │   │   └── events.go                       # EventService
 │   ├── slurmclient/                        # Generated Slurm REST API client
-│   ├── storage/                            # Database layer (PostgreSQL)
-│   │   ├── storage.go                      # Storage interface using domain types
-│   │   └── postgres.go                     # PostgreSQL implementation
+│   ├── storage/                            # Database layer
+│   │   ├── errors.go                       # Storage error definitions
+│   │   ├── store.go                        # Storage interface using domain types
+│   │   └── postgres/                       # PostgreSQL implementation
+│   │       ├── audit.go                    # Audit event operations
+│   │       ├── jobs.go                     # Job CRUD operations
+│   │       ├── metrics.go                  # Metrics recording operations
+│   │       ├── postgres_test.go            # Integration tests
+│   │       ├── queries.go                  # SQL schema definitions
+│   │       └── store.go                    # Root store with sub-stores
 │   └── utils/                              # Utility packages
 │       ├── audit/                          # Audit context for change tracking
 │       ├── cgroup/                         # Linux cgroups v2 metric collection
