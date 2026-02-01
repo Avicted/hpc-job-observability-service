@@ -4,6 +4,11 @@ A microservice for tracking and monitoring HPC (High Performance Computing) job 
 
 > This service integrates with Slurm via prolog/epilog scripts to provide real-time job tracking and resource monitoring. It collects CPU, memory, and GPU metrics from running jobs using Linux cgroups v2, stores historical data in PostgreSQL, and exports metrics in Prometheus format for Grafana dashboards.
 
+## The Problem
+In many HPC clusters, it is difficult for both administrators and users to understand how resources are actually utilized during a job’s execution. Common questions such as “Is my job using the GPU?” or “Did it fail due to running out of memory?” are surprisingly hard to answer without detailed, job-scoped time-series metrics.
+
+Traditional monitoring solutions typically aggregate metrics at the host or node level, which obscures the behavior of individual jobs and makes debugging performance issues or failures time-consuming and error-prone.
+
 ## Features
 
 - **Slurm Integration**: Event-based integration via prolog/epilog scripts
