@@ -611,8 +611,8 @@ func (e *Exporter) IncrementJobsTotal() {
 
 // Handler returns an HTTP handler for the /metrics endpoint.
 func (e *Exporter) Handler() http.Handler {
-	registry := prometheus.NewRegistry()
-	if err := e.Register(registry); err != nil {
+	// Use the default registry so storage metrics registered with prometheus.Register() are included
+	if err := e.Register(prometheus.DefaultRegisterer); err != nil {
 		// If registration fails, just log and continue with default registry
 		return promhttp.Handler()
 	}
@@ -622,9 +622,7 @@ func (e *Exporter) Handler() http.Handler {
 		_ = err // Log but continue
 	}
 
-	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{
-		EnableOpenMetrics: true,
-	})
+	return promhttp.Handler()
 }
 
 // DefaultHandler returns a handler that uses the default Prometheus registry.

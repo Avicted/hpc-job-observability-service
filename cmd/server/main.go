@@ -84,11 +84,18 @@ func main() {
 	defer store.Close()
 
 	// Register storage Prometheus metrics
-	for _, collector := range store.GetMetrics() {
+	log.Println("Registering storage metrics...")
+	storageMetrics := store.GetMetrics()
+	log.Printf("Got %d metrics from store", len(storageMetrics))
+	for i, collector := range storageMetrics {
+		log.Printf("Registering metric %d: %T", i, collector)
 		if err := prometheus.Register(collector); err != nil {
-			log.Printf("Warning: Failed to register storage metric: %v", err)
+			log.Printf("Warning: Failed to register storage metric %d (%T): %v", i, collector, err)
+		} else {
+			log.Printf("Successfully registered storage metric %d: %T", i, collector)
 		}
 	}
+	log.Println("Storage metrics registration complete")
 
 	// Run migrations
 	if err := store.Migrate(ctx); err != nil {
