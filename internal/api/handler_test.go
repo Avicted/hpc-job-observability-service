@@ -19,7 +19,7 @@ import (
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 )
 
-// mockRepository implements storage.Storage for testing.
+// mockRepository implements storage.Store for testing.
 type mockRepository struct {
 	jobs    map[string]*domain.Job
 	samples map[string][]*domain.MetricSample
@@ -184,7 +184,7 @@ func (m *mockRepository) Close() error {
 	return nil
 }
 
-// mockStorage for metrics.Exporter (which still uses storage.Storage)
+// mockStorage for metrics.Exporter (implements storage.Store)
 type mockStorage struct {
 	jobs    map[string]*domain.Job
 	samples map[string][]*domain.MetricSample
