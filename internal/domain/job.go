@@ -11,10 +11,8 @@ import (
 	"time"
 )
 
-// Common errors returned by storage and service operations.
+// Domain business logic errors for constraint violations.
 var (
-	ErrJobNotFound       = errors.New("job not found")
-	ErrJobAlreadyExists  = errors.New("job already exists")
 	ErrInvalidJobState   = errors.New("invalid job state")
 	ErrMissingAuditInfo  = errors.New("missing audit info")
 	ErrJobTerminalFrozen = errors.New("job is in terminal state and cannot be updated")

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Avicted/hpc-job-observability-service/internal/api/types"
@@ -16,13 +17,13 @@ import (
 // EventService handles job lifecycle events from Slurm prolog/epilog scripts.
 // It implements idempotent event processing for job start and finish events.
 type EventService struct {
-	store    storage.Storage
+	store    storage.Store
 	exporter *metrics.Exporter
 	mapper   *mapper.Mapper
 }
 
 // NewEventService creates a new EventService with the given dependencies.
-func NewEventService(store storage.Storage, exporter *metrics.Exporter, mapper *mapper.Mapper) *EventService {
+func NewEventService(store storage.Store, exporter *metrics.Exporter, mapper *mapper.Mapper) *EventService {
 	return &EventService{
 		store:    store,
 		exporter: exporter,
@@ -93,8 +94,9 @@ func (s *EventService) JobStarted(ctx context.Context, input JobStartedInput) (*
 			Status:  types.Skipped,
 			Message: "Job already registered",
 		}, nil
-	} else if !errors.Is(err, domain.ErrJobNotFound) {
-		return nil, ErrInternalError
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		// Log the unexpected error
+		return nil, fmt.Errorf("failed to check if job exists: %w", err)
 	}
 
 	// Parse GPU vendor
@@ -156,7 +158,7 @@ func (s *EventService) JobStarted(ctx context.Context, input JobStartedInput) (*
 	job.IngestVersion = "prolog-v1"
 
 	if err := s.store.CreateJob(ctx, job); err != nil {
-		if errors.Is(err, domain.ErrJobAlreadyExists) {
+		if errors.Is(err, storage.ErrConflict) {
 			// Race condition - job was created between our check and create
 			return &JobStartedOutput{
 				JobID:   input.JobID,
@@ -164,7 +166,8 @@ func (s *EventService) JobStarted(ctx context.Context, input JobStartedInput) (*
 				Message: "Job already registered (race condition)",
 			}, nil
 		}
-		return nil, ErrInternalError
+		// Return the original error so we can see what went wrong
+		return nil, fmt.Errorf("failed to create job: %w", err)
 	}
 
 	// Update Prometheus metrics
@@ -219,7 +222,7 @@ func (s *EventService) JobFinished(ctx context.Context, input JobFinishedInput) 
 	// Get the existing job
 	job, err := s.store.GetJob(ctx, input.JobID)
 	if err != nil {
-		if errors.Is(err, domain.ErrJobNotFound) {
+		if errors.Is(err, storage.ErrNotFound) {
 			return nil, ErrJobNotFound
 		}
 		return nil, ErrInternalError

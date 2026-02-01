@@ -28,7 +28,7 @@ import (
 
 // Server implements the generated ServerInterface.
 type Server struct {
-	store          storage.Storage
+	store          storage.Store
 	exporter       *metrics.Exporter
 	jobService     *service.JobService
 	metricsService *service.MetricsService
@@ -40,7 +40,7 @@ type Server struct {
 var _ server.ServerInterface = (*Server)(nil)
 
 // NewServer creates a new API server with all required services.
-func NewServer(store storage.Storage, exporter *metrics.Exporter) *Server {
+func NewServer(store storage.Store, exporter *metrics.Exporter) *Server {
 	m := mapper.NewMapper()
 	return &Server{
 		store:          store,
@@ -308,6 +308,8 @@ func (s *Server) JobStartedEvent(w http.ResponseWriter, r *http.Request) {
 
 	output, err := s.eventService.JobStarted(r.Context(), input)
 	if err != nil {
+		// Log the actual error for debugging
+		println("JobStartedEvent error:", err.Error())
 		s.handleServiceError(w, err)
 		return
 	}
@@ -436,6 +438,8 @@ func (s *Server) handleServiceError(w http.ResponseWriter, err error) {
 	case service.ErrJobTerminalFrozen:
 		s.writeError(w, http.StatusConflict, "conflict", "Job is in terminal state and cannot be updated")
 	case service.ErrInternalError:
+		// Log the actual error for debugging
+		println("Internal error:", err.Error())
 		s.writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
 	default:
 		// Check for ValidationError
@@ -443,6 +447,8 @@ func (s *Server) handleServiceError(w http.ResponseWriter, err error) {
 			s.writeError(w, http.StatusBadRequest, "validation_error", ve.Message)
 			return
 		}
+		// Log unexpected errors
+		println("Unexpected error:", err.Error())
 		s.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 	}
 }

@@ -6,8 +6,6 @@ server
 !cmd/**/*
 !internal/api/server/
 
-.vscode/
-!.vscode/tasks.json
 
 *.exe
 *.exe~

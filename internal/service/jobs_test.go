@@ -8,6 +8,7 @@ import (
 
 	"github.com/Avicted/hpc-job-observability-service/internal/api/types"
 	"github.com/Avicted/hpc-job-observability-service/internal/domain"
+	"github.com/Avicted/hpc-job-observability-service/internal/storage"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/audit"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/mapper"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
@@ -37,7 +38,7 @@ func (m *mockStorage) CreateJob(ctx context.Context, job *domain.Job) error {
 		return m.createErr
 	}
 	if _, exists := m.jobs[job.ID]; exists {
-		return domain.ErrJobAlreadyExists
+		return storage.ErrConflict
 	}
 	m.jobs[job.ID] = job
 	return nil
@@ -49,7 +50,7 @@ func (m *mockStorage) GetJob(ctx context.Context, id string) (*domain.Job, error
 	}
 	job, exists := m.jobs[id]
 	if !exists {
-		return nil, domain.ErrJobNotFound
+		return nil, storage.ErrNotFound
 	}
 	return job, nil
 }
@@ -72,7 +73,7 @@ func (m *mockStorage) DeleteJob(ctx context.Context, id string) error {
 		return m.deleteErr
 	}
 	if _, exists := m.jobs[id]; !exists {
-		return domain.ErrJobNotFound
+		return storage.ErrNotFound
 	}
 	delete(m.jobs, id)
 	return nil
@@ -138,11 +139,35 @@ func (m *mockStorage) GetLatestMetrics(ctx context.Context, jobID string) (*doma
 	return latest, nil
 }
 
-func (m *mockStorage) DeleteMetricsBefore(cutoff time.Time) error {
+func (m *mockStorage) RecordMetricsBatch(ctx context.Context, samples []*domain.MetricSample) error {
 	return nil
 }
 
-func (m *mockStorage) Migrate() error {
+func (m *mockStorage) DeleteMetricsBefore(ctx context.Context, cutoff time.Time) error {
+	return nil
+}
+
+func (m *mockStorage) RecordAuditEvent(ctx context.Context, event *domain.JobAuditEvent) error {
+	return nil
+}
+
+func (m *mockStorage) WithTx(ctx context.Context, fn func(storage.Tx) error) error {
+	return fn(m)
+}
+
+func (m *mockStorage) Jobs() storage.JobStore {
+	return m
+}
+
+func (m *mockStorage) Metrics() storage.MetricStore {
+	return m
+}
+
+func (m *mockStorage) Audit() storage.AuditStore {
+	return m
+}
+
+func (m *mockStorage) Migrate(ctx context.Context) error {
 	return nil
 }
 
@@ -150,7 +175,7 @@ func (m *mockStorage) Close() error {
 	return nil
 }
 
-func (m *mockStorage) SeedDemoData() error {
+func (m *mockStorage) SeedDemoData(ctx context.Context) error {
 	return nil
 }
 

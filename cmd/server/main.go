@@ -17,11 +17,12 @@ import (
 	"time"
 
 	"github.com/Avicted/hpc-job-observability-service/internal/api"
-	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/storage/postgres"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/collector"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/scheduler"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Config holds application configuration loaded from environment variables and flags.
@@ -72,15 +73,24 @@ func main() {
 	}
 	log.Printf("Scheduler backend: %s", cfg.SchedulerBackend)
 
-	// Initialize storage
-	store, err := storage.New("postgres", cfg.DatabaseURL)
+	// Initialize storage with pgx
+	ctx := context.Background()
+	storeCfg := postgres.DefaultConfig(cfg.DatabaseURL)
+	store, err := postgres.NewStore(ctx, storeCfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
 	defer store.Close()
 
+	// Register storage Prometheus metrics
+	for _, collector := range store.GetMetrics() {
+		if err := prometheus.Register(collector); err != nil {
+			log.Printf("Warning: Failed to register storage metric: %v", err)
+		}
+	}
+
 	// Run migrations
-	if err := store.Migrate(); err != nil {
+	if err := store.Migrate(ctx); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
@@ -88,7 +98,7 @@ func main() {
 	// Demo data is only useful for testing without a real scheduler
 	if cfg.SeedDemo && cfg.SchedulerBackend == "mock" {
 		log.Println("Seeding demo data (mock backend)...")
-		if err := store.SeedDemoData(); err != nil {
+		if err := store.SeedDemoData(ctx); err != nil {
 			log.Fatalf("Failed to seed demo data: %v", err)
 		}
 	} else if cfg.SeedDemo && cfg.SchedulerBackend != "mock" {
@@ -259,13 +269,15 @@ func waitForSlurmReady(baseURL string, timeout time.Duration) error {
 }
 
 // runRetentionCleanup periodically removes old metric samples based on retention policy.
-func runRetentionCleanup(store storage.Storage, retentionDays int) {
+func runRetentionCleanup(store *postgres.Store, retentionDays int) {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		cutoff := time.Now().AddDate(0, 0, -retentionDays)
-		if err := store.DeleteMetricsBefore(cutoff); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := store.DeleteMetricsBefore(ctx, cutoff); err != nil {
+			cancel()
 			log.Printf("Retention cleanup error: %v", err)
 		} else {
 			log.Printf("Retention cleanup completed, removed samples older than %v", cutoff)

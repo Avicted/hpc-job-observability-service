@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/Avicted/hpc-job-observability-service/internal/storage"
+	"github.com/Avicted/hpc-job-observability-service/internal/storage/postgres"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/scheduler"
 	_ "github.com/lib/pq"
 )
@@ -41,7 +42,7 @@ const (
 // testEnv holds shared test environment state.
 type testEnv struct {
 	slurmSource *scheduler.SlurmJobSource
-	store       *storage.PostgresStorage
+	store       storage.Store
 	db          *sql.DB
 }
 
@@ -88,13 +89,15 @@ func setupTestEnv(t *testing.T) (*testEnv, func()) {
 	t.Log("Slurm REST API is ready")
 
 	// Create storage
-	store, err := storage.NewPostgresStorage(dbURL)
+	storeCtx := context.Background()
+	cfg := postgres.DefaultConfig(dbURL)
+	store, err := postgres.NewStore(storeCtx, cfg)
 	if err != nil {
 		t.Fatalf("Failed to create PostgreSQL storage: %v", err)
 	}
 
 	// Run migrations
-	if err := store.Migrate(); err != nil {
+	if err := store.Migrate(storeCtx); err != nil {
 		store.Close()
 		t.Fatalf("Failed to run migrations: %v", err)
 	}

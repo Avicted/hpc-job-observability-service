@@ -507,8 +507,13 @@ func TestEventService_JobStarted_GetJobInternalError(t *testing.T) {
 	}
 
 	_, err := svc.JobStarted(context.Background(), input)
-	if !errors.Is(err, ErrInternalError) {
-		t.Errorf("expected ErrInternalError, got %v", err)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	// Error should be wrapped, not ErrInternalError
+	expectedMsg := "failed to check if job exists: database connection failed"
+	if err.Error() != expectedMsg {
+		t.Errorf("expected error message %q, got %q", expectedMsg, err.Error())
 	}
 }
 
@@ -529,8 +534,13 @@ func TestEventService_JobStarted_CreateJobInternalError(t *testing.T) {
 	}
 
 	_, err := svc.JobStarted(context.Background(), input)
-	if !errors.Is(err, ErrInternalError) {
-		t.Errorf("expected ErrInternalError, got %v", err)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	// Error should be wrapped
+	expectedMsg := "failed to create job: database write failed"
+	if err.Error() != expectedMsg {
+		t.Errorf("expected error message %q, got %q", expectedMsg, err.Error())
 	}
 }
 

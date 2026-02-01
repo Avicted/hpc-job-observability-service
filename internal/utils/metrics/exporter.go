@@ -16,7 +16,7 @@ import (
 
 // Exporter collects and exposes job metrics for Prometheus scraping.
 type Exporter struct {
-	store     storage.Storage
+	store     storage.Store
 	scheduler scheduler.JobSource // Optional: for fetching node info directly
 
 	// Job runtime gauge - shows current runtime of running jobs
@@ -96,13 +96,13 @@ type Exporter struct {
 }
 
 // NewExporter creates a new metrics exporter.
-func NewExporter(store storage.Storage) *Exporter {
+func NewExporter(store storage.Store) *Exporter {
 	return NewExporterWithScheduler(store, nil)
 }
 
 // NewExporterWithScheduler creates a new metrics exporter with scheduler support.
 // When a scheduler is provided, node metrics are fetched directly from it.
-func NewExporterWithScheduler(store storage.Storage, sched scheduler.JobSource) *Exporter {
+func NewExporterWithScheduler(store storage.Store, sched scheduler.JobSource) *Exporter {
 	e := &Exporter{
 		store:     store,
 		scheduler: sched,

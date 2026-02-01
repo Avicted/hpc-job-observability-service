@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Avicted/hpc-job-observability-service/internal/domain"
+	"github.com/Avicted/hpc-job-observability-service/internal/storage"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/mapper"
 )
 
@@ -21,9 +22,6 @@ func TestNewMetricsService(t *testing.T) {
 
 	if svc == nil {
 		t.Fatal("expected non-nil service")
-	}
-	if svc.store != store {
-		t.Error("expected store to be set")
 	}
 	if svc.exporter != exporter {
 		t.Error("expected exporter to be set")
@@ -90,7 +88,7 @@ func TestMetricsService_GetJobMetrics_WithFilters(t *testing.T) {
 
 func TestMetricsService_GetJobMetrics_NotFound(t *testing.T) {
 	store := newMockStorage()
-	store.getErr = domain.ErrJobNotFound
+	store.getErr = storage.ErrNotFound
 	exporter := newMockExporter()
 	m := mapper.NewMapper()
 	svc := NewMetricsService(store, exporter, m)

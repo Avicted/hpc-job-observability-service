@@ -50,7 +50,7 @@ func DefaultConfig() Config {
 // Collector periodically collects and updates job metrics.
 // It can operate in mock mode (for testing) or cgroup mode (for production).
 type Collector struct {
-	store       storage.Storage
+	store       storage.Store
 	exporter    *metrics.Exporter
 	config      Config
 	cgroupRdr   *cgroup.Reader
@@ -65,19 +65,19 @@ type Collector struct {
 }
 
 // New creates a new Collector with default settings.
-func New(store storage.Storage, exporter *metrics.Exporter) *Collector {
+func New(store storage.Store, exporter *metrics.Exporter) *Collector {
 	return NewWithConfig(store, exporter, DefaultConfig())
 }
 
 // NewWithInterval creates a new Collector with a custom collection interval.
-func NewWithInterval(store storage.Storage, exporter *metrics.Exporter, interval time.Duration) *Collector {
+func NewWithInterval(store storage.Store, exporter *metrics.Exporter, interval time.Duration) *Collector {
 	cfg := DefaultConfig()
 	cfg.Interval = interval
 	return NewWithConfig(store, exporter, cfg)
 }
 
 // NewWithConfig creates a new Collector with full configuration.
-func NewWithConfig(store storage.Storage, exporter *metrics.Exporter, config Config) *Collector {
+func NewWithConfig(store storage.Store, exporter *metrics.Exporter, config Config) *Collector {
 	c := &Collector{
 		store:     store,
 		exporter:  exporter,
