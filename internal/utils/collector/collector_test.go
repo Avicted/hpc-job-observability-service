@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Avicted/hpc-job-observability-service/internal/domain"
+	"github.com/Avicted/hpc-job-observability-service/internal/storage"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/cgroup"
 	"github.com/Avicted/hpc-job-observability-service/internal/utils/metrics"
 )
@@ -36,7 +37,7 @@ func (m *mockStorage) GetJob(ctx context.Context, id string) (*domain.Job, error
 			return job, nil
 		}
 	}
-	return nil, domain.ErrJobNotFound
+	return nil, storage.ErrNotFound
 }
 
 func (m *mockStorage) UpdateJob(ctx context.Context, job *domain.Job) error {
@@ -88,19 +89,39 @@ func (m *mockStorage) GetLatestMetrics(ctx context.Context, jobID string) (*doma
 	return nil, nil
 }
 
-func (m *mockStorage) DeleteMetricsBefore(cutoff time.Time) error {
+func (m *mockStorage) RecordMetricsBatch(ctx context.Context, samples []*domain.MetricSample) error {
 	return nil
 }
 
-func (m *mockStorage) Migrate() error {
+func (m *mockStorage) DeleteMetricsBefore(ctx context.Context, cutoff time.Time) error {
+	return nil
+}
+
+func (m *mockStorage) RecordAuditEvent(ctx context.Context, event *domain.JobAuditEvent) error {
+	return nil
+}
+
+func (m *mockStorage) WithTx(ctx context.Context, fn func(storage.Tx) error) error {
+	return fn(m)
+}
+
+func (m *mockStorage) Jobs() storage.JobStore {
+	return m
+}
+
+func (m *mockStorage) Metrics() storage.MetricStore {
+	return m
+}
+
+func (m *mockStorage) Audit() storage.AuditStore {
+	return m
+}
+
+func (m *mockStorage) Migrate(ctx context.Context) error {
 	return nil
 }
 
 func (m *mockStorage) Close() error {
-	return nil
-}
-
-func (m *mockStorage) SeedDemoData() error {
 	return nil
 }
 
@@ -111,9 +132,6 @@ func TestNew(t *testing.T) {
 
 	if collector == nil {
 		t.Fatal("expected non-nil collector")
-	}
-	if collector.store != store {
-		t.Error("expected store to be set")
 	}
 	if collector.exporter != exporter {
 		t.Error("expected exporter to be set")

@@ -56,12 +56,13 @@ func setupLifecycleTestEnv(t *testing.T) (*lifecycleTestEnv, func()) {
 }
 
 // waitForJobInDB polls the database until the job appears or timeout
-func waitForJobInDB(t *testing.T, store *storage.PostgresStorage, jobID string, timeout time.Duration) *domain.Job {
+func waitForJobInDB(t *testing.T, store storage.Store, jobID string, timeout time.Duration) *domain.Job {
 	t.Helper()
 
+	ctx := context.Background()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		job, err := store.GetJob(context.Background(), jobID)
+		job, err := store.GetJob(ctx, jobID)
 		if err == nil && job != nil {
 			return job
 		}
@@ -72,12 +73,13 @@ func waitForJobInDB(t *testing.T, store *storage.PostgresStorage, jobID string, 
 }
 
 // waitForJobState polls the database until the job reaches the expected state or timeout
-func waitForJobState(t *testing.T, store *storage.PostgresStorage, jobID string, expectedState domain.JobState, timeout time.Duration) *domain.Job {
+func waitForJobState(t *testing.T, store storage.Store, jobID string, expectedState domain.JobState, timeout time.Duration) *domain.Job {
 	t.Helper()
 
+	ctx := context.Background()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		job, err := store.GetJob(context.Background(), jobID)
+		job, err := store.GetJob(ctx, jobID)
 		if err == nil && job != nil && job.State == expectedState {
 			return job
 		}
@@ -85,7 +87,7 @@ func waitForJobState(t *testing.T, store *storage.PostgresStorage, jobID string,
 	}
 
 	// Get final state for error message
-	job, _ := store.GetJob(context.Background(), jobID)
+	job, _ := store.GetJob(ctx, jobID)
 	if job != nil {
 		t.Fatalf("Timeout waiting for job %s to reach state %s (current state: %s)", jobID, expectedState, job.State)
 	} else {

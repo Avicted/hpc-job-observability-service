@@ -101,6 +101,12 @@ The project ships with a pre-provisioned Grafana dashboard. Below are example vi
 
 ![Node metrics dashboard detail](docs/grafana_node_metrics_02.png)
 
+**Storage Metrics**
+![Storage metrics dashboard](docs/grafana_storage_metrics.png)
+
+**Go Runtime Metrics**
+![Go runtime metrics dashboard](docs/grafana_go_runtime_metrics.png)
+
 
 ## Configuration
 

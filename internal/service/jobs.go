@@ -39,13 +39,13 @@ func (e *ValidationError) Error() string {
 // JobService handles job-related business logic including CRUD operations,
 // validation, and state management. It does not handle HTTP concerns.
 type JobService struct {
-	store    storage.Storage
+	store    storage.Store
 	exporter *metrics.Exporter
 	mapper   *mapper.Mapper
 }
 
 // NewJobService creates a new JobService with the given dependencies.
-func NewJobService(store storage.Storage, exporter *metrics.Exporter, mapper *mapper.Mapper) *JobService {
+func NewJobService(store storage.Store, exporter *metrics.Exporter, mapper *mapper.Mapper) *JobService {
 	return &JobService{
 		store:    store,
 		exporter: exporter,
@@ -98,7 +98,7 @@ func (s *JobService) CreateJob(ctx context.Context, input CreateJobInput) (*doma
 	}
 
 	if err := s.store.CreateJob(ctx, job); err != nil {
-		if errors.Is(err, domain.ErrJobAlreadyExists) {
+		if errors.Is(err, storage.ErrConflict) {
 			return nil, ErrJobAlreadyExists
 		}
 		return nil, ErrInternalError
@@ -115,7 +115,7 @@ func (s *JobService) CreateJob(ctx context.Context, input CreateJobInput) (*doma
 func (s *JobService) GetJob(ctx context.Context, id string) (*domain.Job, error) {
 	job, err := s.store.GetJob(ctx, id)
 	if err != nil {
-		if errors.Is(err, domain.ErrJobNotFound) {
+		if errors.Is(err, storage.ErrNotFound) {
 			return nil, ErrJobNotFound
 		}
 		return nil, ErrInternalError
@@ -197,7 +197,7 @@ type UpdateJobInput struct {
 func (s *JobService) UpdateJob(ctx context.Context, id string, input UpdateJobInput) (*domain.Job, error) {
 	job, err := s.store.GetJob(ctx, id)
 	if err != nil {
-		if errors.Is(err, domain.ErrJobNotFound) {
+		if errors.Is(err, storage.ErrNotFound) {
 			return nil, ErrJobNotFound
 		}
 		return nil, ErrInternalError
@@ -235,9 +235,9 @@ func (s *JobService) UpdateJob(ctx context.Context, id string, input UpdateJobIn
 // DeleteJob deletes a job by ID.
 // Returns ErrJobNotFound if the job does not exist.
 func (s *JobService) DeleteJob(ctx context.Context, id string, auditCtx *audit.Context) error {
-	ctx = storage.WithAuditInfo(ctx, auditCtx.ToDomainAuditInfo())
+	ctx = domain.WithAuditInfo(ctx, auditCtx.ToDomainAuditInfo())
 	if err := s.store.DeleteJob(ctx, id); err != nil {
-		if errors.Is(err, domain.ErrJobNotFound) {
+		if errors.Is(err, storage.ErrNotFound) {
 			return ErrJobNotFound
 		}
 		return ErrInternalError

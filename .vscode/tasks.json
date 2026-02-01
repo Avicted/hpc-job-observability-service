@@ -41,7 +41,7 @@
         {
             "label": "Test All",
             "type": "shell",
-            "command": "go test ./... -v",
+            "command": "go test ./... -v -timeout=5m",
             "group": {
                 "kind": "test",
                 "isDefault": true

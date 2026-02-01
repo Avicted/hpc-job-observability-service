@@ -15,13 +15,13 @@ import (
 // MetricsService handles metrics-related business logic including recording
 // metrics samples and updating Prometheus gauges.
 type MetricsService struct {
-	store    storage.Storage
+	store    storage.Store
 	exporter *metrics.Exporter
 	mapper   *mapper.Mapper
 }
 
 // NewMetricsService creates a new MetricsService with the given dependencies.
-func NewMetricsService(store storage.Storage, exporter *metrics.Exporter, mapper *mapper.Mapper) *MetricsService {
+func NewMetricsService(store storage.Store, exporter *metrics.Exporter, mapper *mapper.Mapper) *MetricsService {
 	return &MetricsService{
 		store:    store,
 		exporter: exporter,
@@ -66,7 +66,7 @@ func (s *MetricsService) GetJobMetrics(ctx context.Context, input GetMetricsInpu
 
 	samples, total, err := s.store.GetJobMetrics(ctx, input.JobID, filter)
 	if err != nil {
-		if errors.Is(err, domain.ErrJobNotFound) {
+		if errors.Is(err, storage.ErrNotFound) {
 			return nil, ErrJobNotFound
 		}
 		return nil, ErrInternalError
@@ -111,7 +111,7 @@ func (s *MetricsService) RecordJobMetrics(ctx context.Context, input RecordMetri
 	// Check if job exists
 	job, err := s.store.GetJob(ctx, input.JobID)
 	if err != nil {
-		if errors.Is(err, domain.ErrJobNotFound) {
+		if errors.Is(err, storage.ErrNotFound) {
 			return nil, ErrJobNotFound
 		}
 		return nil, ErrInternalError

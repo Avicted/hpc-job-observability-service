@@ -45,7 +45,7 @@ func (m *mockRepository) CreateJob(ctx context.Context, job *domain.Job) error {
 		return m.createErr
 	}
 	if _, exists := m.jobs[job.ID]; exists {
-		return domain.ErrJobAlreadyExists
+		return storage.ErrConflict
 	}
 	job.CreatedAt = time.Now()
 	job.UpdatedAt = time.Now()
@@ -59,7 +59,7 @@ func (m *mockRepository) GetJob(ctx context.Context, id string) (*domain.Job, er
 	}
 	job, exists := m.jobs[id]
 	if !exists {
-		return nil, domain.ErrJobNotFound
+		return nil, storage.ErrNotFound
 	}
 	return job, nil
 }
@@ -69,7 +69,7 @@ func (m *mockRepository) UpdateJob(ctx context.Context, job *domain.Job) error {
 		return m.updateErr
 	}
 	if _, exists := m.jobs[job.ID]; !exists {
-		return domain.ErrJobNotFound
+		return storage.ErrNotFound
 	}
 	job.UpdatedAt = time.Now()
 	m.jobs[job.ID] = job
@@ -90,7 +90,7 @@ func (m *mockRepository) DeleteJob(ctx context.Context, id string) error {
 		return m.deleteErr
 	}
 	if _, exists := m.jobs[id]; !exists {
-		return domain.ErrJobNotFound
+		return storage.ErrNotFound
 	}
 	delete(m.jobs, id)
 	return nil
@@ -134,7 +134,7 @@ func (m *mockRepository) GetJobMetrics(ctx context.Context, jobID string, filter
 		return nil, 0, m.metricsErr
 	}
 	if _, exists := m.jobs[jobID]; !exists {
-		return nil, 0, domain.ErrJobNotFound
+		return nil, 0, storage.ErrNotFound
 	}
 	s := m.samples[jobID]
 	return s, len(s), nil
@@ -148,19 +148,39 @@ func (m *mockRepository) GetLatestMetrics(ctx context.Context, jobID string) (*d
 	return s[len(s)-1], nil
 }
 
-func (m *mockRepository) DeleteMetricsBefore(cutoff time.Time) error {
+func (m *mockRepository) RecordMetricsBatch(ctx context.Context, samples []*domain.MetricSample) error {
 	return nil
 }
 
-func (m *mockRepository) Migrate() error {
+func (m *mockRepository) DeleteMetricsBefore(ctx context.Context, cutoff time.Time) error {
+	return nil
+}
+
+func (m *mockRepository) RecordAuditEvent(ctx context.Context, event *domain.JobAuditEvent) error {
+	return nil
+}
+
+func (m *mockRepository) WithTx(ctx context.Context, fn func(storage.Tx) error) error {
+	return fn(m)
+}
+
+func (m *mockRepository) Jobs() storage.JobStore {
+	return m
+}
+
+func (m *mockRepository) Metrics() storage.MetricStore {
+	return m
+}
+
+func (m *mockRepository) Audit() storage.AuditStore {
+	return m
+}
+
+func (m *mockRepository) Migrate(ctx context.Context) error {
 	return nil
 }
 
 func (m *mockRepository) Close() error {
-	return nil
-}
-
-func (m *mockRepository) SeedDemoData() error {
 	return nil
 }
 
@@ -185,7 +205,7 @@ func (m *mockStorage) CreateJob(ctx context.Context, job *domain.Job) error {
 func (m *mockStorage) GetJob(ctx context.Context, id string) (*domain.Job, error) {
 	job, exists := m.jobs[id]
 	if !exists {
-		return nil, domain.ErrJobNotFound
+		return nil, storage.ErrNotFound
 	}
 	return job, nil
 }
@@ -239,11 +259,35 @@ func (m *mockStorage) GetLatestMetrics(ctx context.Context, jobID string) (*doma
 	return s[len(s)-1], nil
 }
 
-func (m *mockStorage) DeleteMetricsBefore(cutoff time.Time) error {
+func (m *mockStorage) RecordMetricsBatch(ctx context.Context, samples []*domain.MetricSample) error {
 	return nil
 }
 
-func (m *mockStorage) Migrate() error {
+func (m *mockStorage) DeleteMetricsBefore(ctx context.Context, cutoff time.Time) error {
+	return nil
+}
+
+func (m *mockStorage) RecordAuditEvent(ctx context.Context, event *domain.JobAuditEvent) error {
+	return nil
+}
+
+func (m *mockStorage) WithTx(ctx context.Context, fn func(storage.Tx) error) error {
+	return fn(m)
+}
+
+func (m *mockStorage) Jobs() storage.JobStore {
+	return m
+}
+
+func (m *mockStorage) Metrics() storage.MetricStore {
+	return m
+}
+
+func (m *mockStorage) Audit() storage.AuditStore {
+	return m
+}
+
+func (m *mockStorage) Migrate(ctx context.Context) error {
 	return nil
 }
 
@@ -251,11 +295,7 @@ func (m *mockStorage) Close() error {
 	return nil
 }
 
-func (m *mockStorage) SeedDemoData() error {
-	return nil
-}
-
-func setupTestServer(repo storage.Storage) *Server {
+func setupTestServer(repo storage.Store) *Server {
 	store := newMockStorage()
 	exporter := metrics.NewExporter(store)
 	return NewServer(repo, exporter)

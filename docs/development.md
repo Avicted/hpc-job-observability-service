@@ -39,9 +39,16 @@ hpc-job-observability-service/
 │   │   ├── metrics.go                      # MetricsService
 │   │   └── events.go                       # EventService
 │   ├── slurmclient/                        # Generated Slurm REST API client
-│   ├── storage/                            # Database layer (PostgreSQL)
-│   │   ├── storage.go                      # Storage interface using domain types
-│   │   └── postgres.go                     # PostgreSQL implementation
+│   ├── storage/                            # Database layer
+│   │   ├── errors.go                       # Storage error definitions
+│   │   ├── store.go                        # Storage interface using domain types
+│   │   └── postgres/                       # PostgreSQL implementation
+│   │       ├── audit.go                    # Audit event operations
+│   │       ├── jobs.go                     # Job CRUD operations
+│   │       ├── metrics.go                  # Metrics recording operations
+│   │       ├── postgres_test.go            # Integration tests
+│   │       ├── queries.go                  # SQL schema definitions
+│   │       └── store.go                    # Root store with sub-stores
 │   └── utils/                              # Utility packages
 │       ├── audit/                          # Audit context for change tracking
 │       ├── cgroup/                         # Linux cgroups v2 metric collection
@@ -101,6 +108,149 @@ SEED_DEMO=true SCHEDULER_BACKEND=mock docker-compose up --build
 # Stop
 docker-compose down
 ```
+
+
+### Storage Layer Implementation
+
+The storage layer uses **pgx/v5** with a **sub-store pattern** for organized persistence operations:
+
+#### Sub-Store Pattern
+
+Storage functionality is divided into specialized sub-stores:
+
+```go
+// Root store provides access to sub-stores
+store := postgres.NewStore(ctx, config)
+
+// Access sub-stores
+store.Jobs()    // JobStore - Job CRUD
+store.Metrics() // MetricStore - Metrics recording
+store.Audit()   // AuditStore - Audit logging
+
+// Use directly or within transactions
+job, err := store.Jobs().GetJob(ctx, "job-123")
+```
+
+#### DBTX Abstraction
+
+The `DBTX` interface allows storage methods to work with both pooled connections and transactions:
+
+```go
+type DBTX interface {
+    Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+    Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+    QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+    SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
+}
+```
+
+This enables methods to work transparently with:
+- `*pgxpool.Pool` - For single operations
+- `pgx.Tx` - For transactional operations
+
+#### Transaction-Scoped Operations
+
+Use `WithTx()` for atomic multi-step operations:
+
+```go
+err := store.WithTx(ctx, func(tx storage.Tx) error {
+    // All operations share the same transaction
+    if err := tx.Jobs().CreateJob(ctx, job); err != nil {
+        return err  // Automatic rollback on error
+    }
+    if err := tx.Audit().RecordAuditEvent(ctx, event); err != nil {
+        return err  // Automatic rollback
+    }
+    return nil  // Commit if no errors
+})
+```
+
+The transaction automatically rolls back on:
+- Any returned error
+- Panic (with panic re-thrown after rollback)
+
+#### Connection Pool Configuration
+
+Connection pooling is managed by `pgxpool` with explicit configuration:
+
+```go
+config := &postgres.Config{
+    DSN:             "postgres://user:pass@host/db",
+    MaxConns:        25,              // Maximum concurrent connections
+    MinConns:        5,               // Minimum idle connections
+    MaxConnLifetime: 5 * time.Minute, // Connection reuse limit
+    MaxConnIdleTime: 30 * time.Second,// Idle connection timeout
+}
+
+store, err := postgres.NewStore(ctx, config)
+```
+
+**Pool Sizing Recommendations:**
+- **MaxConns**: Set to 2-3x expected concurrent requests
+- **MinConns**: Set to average baseline load
+- **MaxConnLifetime**: 5-15 minutes for production
+- **MaxConnIdleTime**: 30-60 seconds
+
+#### Batch Operations
+
+For high-throughput scenarios, use batch operations:
+
+```go
+samples := []*domain.MetricSample{sample1, sample2, sample3}
+err := store.RecordMetricsBatch(ctx, samples)  // Single round-trip
+```
+
+Batch operations use `pgx.Batch` for efficient bulk inserts.
+
+#### Error Classification
+
+Storage errors are classified for monitoring and debugging:
+
+```go
+// Check specific error types
+if errors.Is(err, storage.ErrNotFound) {
+    // Handle not found
+}
+if errors.Is(err, storage.ErrConflict) {
+    // Handle unique constraint violation
+}
+if errors.Is(err, storage.ErrJobTerminal) {
+    // Handle attempt to modify completed job
+}
+```
+
+Classified error types:
+- `ErrNotFound` - Entity not found
+- `ErrConflict` - Unique constraint violation
+- `ErrJobTerminal` - Attempt to modify terminal job state
+- `ErrInvalidInput` - Validation error
+
+#### Storage Observability
+
+All storage operations are instrumented with Prometheus metrics:
+
+```
+# Duration histogram (by operation and success/failure)
+storage_operation_duration_seconds{operation="get_job",success="true"}
+
+# Error counter (by operation and error type)
+storage_operation_errors_total{operation="create_job",error_type="conflict"}
+```
+
+**Available Operations:**
+- `create_job`, `get_job`, `update_job`, `upsert_job`, `delete_job`, `list_jobs`
+- `record_metrics`, `record_metrics_batch`, `get_job_metrics`
+- `record_audit_event`
+- `with_tx` (transaction operations)
+
+**Error Types in Metrics:**
+- `not_found`, `conflict`, `job_terminal`, `invalid_input`
+- `context_canceled`, `context_deadline`
+- `unknown`
+
+
+
+### Troubleshooting
 
 #### Troubleshooting: demo data persists
 
@@ -617,9 +767,35 @@ func TestJobOperations(t *testing.T) {
 
 ## Database Migrations
 
-Migrations run automatically on startup. The storage layer handles schema creation.
+Migrations run automatically on startup. The storage layer handles schema creation using pgx.
 
-Tables are created in `internal/storage/postgres.go`.
+**Migration Implementation:**
+- Schema definitions are in `internal/storage/postgres/queries.go`
+- Migrations execute in `Store.Migrate()` method in `internal/storage/postgres/store.go`
+- Migrations run sequentially: jobs table → indexes → metrics table → indexes → audit table → indexes
+
+**pgx-Specific Considerations:**
+
+1. **Connection Pooling**: Migrations use the same connection pool as runtime operations. Pool configuration affects migration performance.
+
+2. **Error Handling**: Migration failures use pgx-specific error types. Check for `pgconn.PgError` for detailed PostgreSQL error information:
+   ```go
+   var pgErr *pgconn.PgError
+   if errors.As(err, &pgErr) {
+       log.Printf("PostgreSQL Error: %s (code: %s)", pgErr.Message, pgErr.Code)
+   }
+   ```
+
+3. **Performance**: For large datasets, consider:
+   - Index creation happens after data migration
+   - Use `CONCURRENTLY` for index creation in production (requires manual migration)
+   - Monitor `storage_operation_duration_seconds{operation="migrate"}` metric
+
+4. **Testing**: When writing tests, use `pgxpool.Pool` for test database connections:
+   ```go
+   pool, err := pgxpool.New(ctx, testDSN)
+   defer pool.Close()
+   ```
 
 ## Adding New Features
 
