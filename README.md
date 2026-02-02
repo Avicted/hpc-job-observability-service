@@ -173,6 +173,11 @@ For detailed setup instructions, see:
 - [Slurm Integration Guide](docs/slurm-integration.md)
 - [Architecture](docs/architecture.md#scheduler-integration)
 
+## Further development
+- Run collector on compute nodes:
+    - Deploy a collector agent on each Slurm compute node that pushes metrics to the central service via API.
+    - Development has been done on one machine; further work is needed to containerize and deploy across nodes.
+
 ## Documentation
 
 - [Architecture](docs/architecture.md) - System design and component overview
